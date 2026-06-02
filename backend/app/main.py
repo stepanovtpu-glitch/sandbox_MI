@@ -4,7 +4,14 @@ from fastapi.responses import FileResponse
 
 from app.calculation import calculate
 from app.document_storage import get_method_document, save_method_document
-from app.method_library import bootstrap_method_library, create_method_version, list_current_methods, list_method_versions
+from app.method_library import (
+    add_method_test_case,
+    bootstrap_method_library,
+    create_method_version,
+    get_method_version,
+    list_current_methods,
+    list_method_versions,
+)
 from app.schemas import (
     CalculationRequest,
     CalculationResult,
@@ -12,9 +19,12 @@ from app.schemas import (
     MeasurementMethodVersion,
     MethodCompatibility,
     MethodScoringRequest,
+    MethodTestCaseCreateRequest,
+    MethodTestResult,
     MethodVersionCreateRequest,
 )
 from app.scoring import score_methods
+from app.test_runner import run_method_test_cases
 
 app = FastAPI(title='GasMeter Pro', version='0.1.0')
 
@@ -62,9 +72,25 @@ def add_method_version(mi_id: str, request: MethodVersionCreateRequest):
     )
 
 
+@app.post('/api/methods/{mi_id}/versions/{version_id}/test-cases', response_model=MeasurementMethodVersion)
+def add_test_case(mi_id: str, version_id: str, request: MethodTestCaseCreateRequest):
+    version = add_method_test_case(mi_id, version_id, request.test_case)
+    if not version:
+        raise HTTPException(status_code=404, detail='Measurement method version not found')
+    return version
+
+
+@app.post('/api/methods/{mi_id}/versions/{version_id}/test-cases/run', response_model=list[MethodTestResult])
+def run_test_cases(mi_id: str, version_id: str):
+    version = get_method_version(mi_id, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail='Measurement method version not found')
+    return run_method_test_cases(version['test_cases'])
+
+
 @app.post('/api/methods/{mi_id}/versions/{version_id}/document')
 def upload_method_document(mi_id: str, version_id: str, file: UploadFile = File(...)):
-    if not file.filename.lower().endswith('.pdf'):
+    if not file.filename or not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail='Only PDF files are supported for method documents')
     try:
         return save_method_document(mi_id, version_id, file)
