@@ -177,6 +177,8 @@ class CalculationRequest(BaseModel):
     errors: ErrorContributions
     gas_composition: GasComposition | None = None
     method: MeasurementMethod | None = None
+    calculation_template: CalculationTemplate | None = None
+    context: dict = Field(default_factory=dict)
 
 
 class MethodScoringRequest(BaseModel):
