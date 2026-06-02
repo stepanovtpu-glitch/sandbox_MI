@@ -3,7 +3,7 @@ from typing import Any
 
 from app.database import execute, fetch_all, fetch_one, init_db, json_dump, json_load
 from app.seed_methods import MEASUREMENT_METHODS
-from app.schemas import MeasurementMethod
+from app.schemas import MeasurementMethod, MethodTestCase
 
 
 def _now_iso() -> str:
@@ -81,6 +81,15 @@ def list_method_versions(mi_id: str) -> list[dict[str, Any]]:
     return [_version_to_api(row) for row in rows]
 
 
+def get_method_version(mi_id: str, version_id: str) -> dict[str, Any] | None:
+    bootstrap_method_library()
+    row = fetch_one(
+        'SELECT * FROM measurement_method_versions WHERE mi_id = ? AND version_id = ?',
+        (mi_id, version_id),
+    )
+    return _version_to_api(row) if row else None
+
+
 def create_method_version(mi_id: str, method: MeasurementMethod, calculation_template: str, change_comment: str) -> dict[str, Any]:
     bootstrap_method_library()
     now = _now_iso()
@@ -120,6 +129,20 @@ def create_method_version(mi_id: str, method: MeasurementMethod, calculation_tem
     )
     row = fetch_one('SELECT * FROM measurement_method_versions WHERE version_id = ?', (version_id,))
     return _version_to_api(row)
+
+
+def add_method_test_case(mi_id: str, version_id: str, test_case: MethodTestCase) -> dict[str, Any] | None:
+    bootstrap_method_library()
+    version = get_method_version(mi_id, version_id)
+    if not version:
+        return None
+    test_cases = version['test_cases']
+    test_cases.append(test_case.model_dump())
+    execute(
+        'UPDATE measurement_method_versions SET test_cases_json = ? WHERE mi_id = ? AND version_id = ?',
+        (json_dump(test_cases), mi_id, version_id),
+    )
+    return get_method_version(mi_id, version_id)
 
 
 def archive_method_version(mi_id: str, version_id: str) -> bool:
