@@ -2,7 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.calculation import calculate
-from app.schemas import CalculationRequest, CalculationResult, MeasurementMethod
+from app.schemas import (
+    CalculationRequest,
+    CalculationResult,
+    MeasurementMethod,
+    MethodCompatibility,
+    MethodScoringRequest,
+)
+from app.scoring import score_methods
 from app.seed_methods import MEASUREMENT_METHODS
 
 app = FastAPI(title='GasMeter Pro', version='0.1.0')
@@ -24,6 +31,11 @@ def health():
 @app.get('/api/methods', response_model=list[MeasurementMethod])
 def methods():
     return MEASUREMENT_METHODS
+
+
+@app.post('/api/methods/score', response_model=list[MethodCompatibility])
+def score_methods_endpoint(request: MethodScoringRequest):
+    return score_methods(MEASUREMENT_METHODS, request.line, request.calculation)
 
 
 @app.post('/api/calculate', response_model=CalculationResult)
