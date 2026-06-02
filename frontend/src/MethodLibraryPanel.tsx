@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { createMethodVersion, getMethodVersions, type MeasurementMethod, type MeasurementMethodVersion } from './api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createMethodVersion,
+  getMethodDocumentUrl,
+  getMethodVersions,
+  uploadMethodDocument,
+  type MeasurementMethod,
+  type MeasurementMethodVersion,
+} from './api';
 
 type Props = {
   methods: MeasurementMethod[];
@@ -14,19 +21,27 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
   const [draft, setDraft] = useState<MeasurementMethod | null>(null);
   const [changeComment, setChangeComment] = useState('Новая версия МИ / обновление диапазонов и требований');
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadingVersionId, setUploadingVersionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [targetVersionId, setTargetVersionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedMethod) return;
     setDraft({ ...selectedMethod });
-    getMethodVersions(selectedMethod.mi_id)
-      .then(setVersions)
-      .catch((err: Error) => setError(err.message));
+    reloadVersions(selectedMethod.mi_id);
   }, [selectedMethod]);
 
   const hasChanges = useMemo(() => JSON.stringify(draft) !== JSON.stringify(selectedMethod), [draft, selectedMethod]);
+  const activeVersion = versions.find((version) => version.status === 'active') ?? versions[0];
 
   if (!selectedMethod || !draft) return null;
+
+  function reloadVersions(miId: string) {
+    getMethodVersions(miId)
+      .then(setVersions)
+      .catch((err: Error) => setError(err.message));
+  }
 
   const setDraftField = <K extends keyof MeasurementMethod>(field: K, value: MeasurementMethod[K]) => {
     setDraft({ ...draft, [field]: value });
@@ -39,7 +54,7 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
       await createMethodVersion(draft.mi_id, draft, changeComment);
       const nextVersions = await getMethodVersions(draft.mi_id);
       setVersions(nextVersions);
-      onRefreshMethods();
+      await onRefreshMethods();
       onSelectMethod(draft.mi_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка создания версии');
@@ -49,6 +64,38 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
   };
 
   const resetDraft = () => setDraft({ ...selectedMethod });
+
+  const beginUpload = (versionId: string) => {
+    setTargetVersionId(versionId);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (file: File | undefined) => {
+    if (!file || !targetVersionId) return;
+    setUploadingVersionId(targetVersionId);
+    setError(null);
+    try {
+      await uploadMethodDocument(selectedMethod.mi_id, targetVersionId, file);
+      reloadVersions(selectedMethod.mi_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка загрузки PDF');
+    } finally {
+      setUploadingVersionId(null);
+      setTargetVersionId(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const openPdf = (versionId: string) => {
+    window.open(getMethodDocumentUrl(selectedMethod.mi_id, versionId), '_blank', 'noopener,noreferrer');
+  };
+
+  const printPdf = (versionId: string) => {
+    const printWindow = window.open(getMethodDocumentUrl(selectedMethod.mi_id, versionId), '_blank', 'noopener,noreferrer');
+    if (printWindow) {
+      printWindow.addEventListener('load', () => printWindow.print());
+    }
+  };
 
   return (
     <div className="library-panel">
@@ -62,6 +109,14 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
 
       {isExpanded && (
         <>
+          <input
+            ref={fileInputRef}
+            className="hidden-file-input"
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(event) => handleFileSelected(event.target.files?.[0])}
+          />
+
           <div className="method-selector-grid">
             {methods.map((method) => (
               <button
@@ -107,6 +162,18 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
           </div>
 
           <div className="library-card">
+            <div className="library-card-title">Документ активной версии</div>
+            <DocumentInfo version={activeVersion} />
+            <div className="library-actions three">
+              <button className="ghost-button" onClick={() => activeVersion && beginUpload(activeVersion.version_id)} disabled={!activeVersion || !!uploadingVersionId}>
+                {uploadingVersionId === activeVersion?.version_id ? 'Загрузка...' : 'Загрузить PDF'}
+              </button>
+              <button className="ghost-button" onClick={() => activeVersion && openPdf(activeVersion.version_id)} disabled={!activeVersion?.document?.file_name}>Открыть PDF</button>
+              <button className="secondary-button" onClick={() => activeVersion && printPdf(activeVersion.version_id)} disabled={!activeVersion?.document?.file_name}>Печать</button>
+            </div>
+          </div>
+
+          <div className="library-card">
             <div className="library-card-title">Создать новую версию</div>
             <label className="field">
               <span>Комментарий к версии</span>
@@ -129,10 +196,13 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
                     <strong>v{version.version_number}</strong>
                     <span>{version.calculation_template}</span>
                     <small>{version.change_comment}</small>
+                    <small>{version.document?.file_name ? `PDF: ${version.document.file_name}` : 'PDF не загружен'}</small>
                   </div>
-                  <div>
+                  <div className="version-actions">
                     <span>{version.status}</span>
                     <small>{new Date(version.created_at).toLocaleString('ru-RU')}</small>
+                    <button className="mini-button" onClick={() => beginUpload(version.version_id)}>PDF</button>
+                    <button className="mini-button" disabled={!version.document?.file_name} onClick={() => openPdf(version.version_id)}>Открыть</button>
                   </div>
                 </div>
               ))}
@@ -146,20 +216,21 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
   );
 }
 
-function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function DocumentInfo({ version }: { version?: MeasurementMethodVersion }) {
+  if (!version) return <div className="document-empty">Версия не выбрана</div>;
+  if (!version.document?.file_name) return <div className="document-empty">PDF к версии не загружен</div>;
   return (
-    <label className="field">
-      <span>{label}</span>
-      <input value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
+    <div className="document-info">
+      <div><span>Файл</span><b>{version.document.file_name}</b></div>
+      <div><span>SHA-256</span><b>{version.document.sha256 ?? 'не рассчитан'}</b></div>
+    </div>
   );
 }
 
+function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="field"><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <input type="number" step="any" value={value} onChange={(event) => onChange(Number(event.target.value))} />
-    </label>
-  );
+  return <label className="field"><span>{label}</span><input type="number" step="any" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
 }
