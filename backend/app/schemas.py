@@ -19,6 +19,18 @@ class InstrumentStatus(str, Enum):
     DECOMMISSIONED = 'decommissioned'
 
 
+class CalculationTemplate(str, Enum):
+    DRG_SERIES = 'DRG_SERIES'
+    MANUAL_QUADRATURE = 'MANUAL_QUADRATURE'
+    CUSTOM = 'CUSTOM'
+
+
+class MethodVersionStatus(str, Enum):
+    DRAFT = 'draft'
+    ACTIVE = 'active'
+    ARCHIVED = 'archived'
+
+
 class Instrument(BaseModel):
     id: str
     type: InstrumentType
@@ -104,6 +116,37 @@ class MeasurementMethod(BaseModel):
     valid_until: str | None = None
     attestation_body: str | None = None
     source_document: str | None = None
+
+
+class MethodDocument(BaseModel):
+    file_name: str | None = None
+    storage_path: str | None = None
+    sha256: str | None = None
+
+
+class MethodTestCase(BaseModel):
+    name: str
+    input_data: dict
+    expected_result: dict
+    tolerance: float = 0.005
+
+
+class MeasurementMethodVersion(BaseModel):
+    version_id: str
+    version_number: int
+    status: MethodVersionStatus
+    calculation_template: CalculationTemplate
+    created_at: str
+    method: MeasurementMethod
+    change_comment: str | None = None
+    test_cases: list[MethodTestCase] = Field(default_factory=list)
+    document: MethodDocument | None = None
+
+
+class MethodVersionCreateRequest(BaseModel):
+    method: MeasurementMethod
+    calculation_template: CalculationTemplate = CalculationTemplate.DRG_SERIES
+    change_comment: str
 
 
 class ErrorContributions(BaseModel):
