@@ -22,6 +22,21 @@ export type MeasurementMethod = {
 
 export type MethodDocument = { file_name?: string | null; storage_path?: string | null; sha256?: string | null };
 
+export type MethodTestCase = {
+  name: string;
+  input_data: Record<string, unknown>;
+  expected_result: Record<string, unknown>;
+  tolerance: number;
+};
+
+export type MethodTestResult = {
+  name: string;
+  status: 'pass' | 'fail' | 'not_implemented';
+  expected_result: Record<string, unknown>;
+  actual_result: Record<string, unknown> | null;
+  message: string;
+};
+
 export type MeasurementMethodVersion = {
   version_id: string;
   version_number: number;
@@ -30,7 +45,7 @@ export type MeasurementMethodVersion = {
   created_at: string;
   method: MeasurementMethod;
   change_comment?: string | null;
-  test_cases: Array<{ name: string; input_data: Record<string, unknown>; expected_result: Record<string, unknown>; tolerance: number }>;
+  test_cases: MethodTestCase[];
   document?: MethodDocument | null;
 };
 
@@ -111,6 +126,19 @@ export function createMethodVersion(miId: string, method: MeasurementMethod, cha
   return request<MeasurementMethodVersion>(`/api/methods/${miId}/versions`, {
     method: 'POST',
     body: JSON.stringify({ method, change_comment: changeComment, calculation_template: calculationTemplate }),
+  });
+}
+
+export function addMethodTestCase(miId: string, versionId: string, testCase: MethodTestCase) {
+  return request<MeasurementMethodVersion>(`/api/methods/${miId}/versions/${versionId}/test-cases`, {
+    method: 'POST',
+    body: JSON.stringify({ test_case: testCase }),
+  });
+}
+
+export function runMethodTestCases(miId: string, versionId: string) {
+  return request<MethodTestResult[]>(`/api/methods/${miId}/versions/${versionId}/test-cases/run`, {
+    method: 'POST',
   });
 }
 
