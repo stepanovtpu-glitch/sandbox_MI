@@ -117,4 +117,8 @@ def score_methods_endpoint(request: MethodScoringRequest):
 
 @app.post('/api/calculate', response_model=CalculationResult)
 def calculate_endpoint(request: CalculationRequest):
-    return calculate(request)
+    return calculate(
+        request,
+        template=request.calculation_template.value if request.calculation_template else None,
+        context=request.context,
+    )
