@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class InstrumentType(str, Enum):
@@ -56,6 +56,16 @@ class LineParameters(BaseModel):
         if value <= 0:
             raise ValueError('q_max must be greater than zero')
         return value
+
+    @model_validator(mode='after')
+    def ranges_must_be_ordered(self):
+        if self.q_min > self.q_max:
+            raise ValueError('q_min must be less than or equal to q_max')
+        if self.p_min_mpa > self.p_max_mpa:
+            raise ValueError('p_min_mpa must be less than or equal to p_max_mpa')
+        if self.t_min_c > self.t_max_c:
+            raise ValueError('t_min_c must be less than or equal to t_max_c')
+        return self
 
 
 class GasComposition(BaseModel):
@@ -112,6 +122,11 @@ class CalculationRequest(BaseModel):
     errors: ErrorContributions
     gas_composition: GasComposition | None = None
     method: MeasurementMethod | None = None
+
+
+class MethodScoringRequest(BaseModel):
+    line: LineParameters
+    calculation: 'CalculationResult | None' = None
 
 
 class ContributionResult(BaseModel):
