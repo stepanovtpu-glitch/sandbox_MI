@@ -1,5 +1,7 @@
 from math import sqrt
+from typing import Any
 
+from app.calculation_templates import calculate_drg_series
 from app.schemas import CalculationRequest, CalculationResult, ContributionResult
 
 
@@ -13,7 +15,13 @@ def calculate_total_error(delta_q, delta_p, delta_t, delta_vc, delta_c, kp=1.0, 
     )
 
 
-def calculate(request: CalculationRequest) -> CalculationResult:
+def calculate(request: CalculationRequest, template: str | None = None, context: dict[str, Any] | None = None) -> CalculationResult:
+    if template == 'DRG_SERIES':
+        return calculate_drg_series(request, context=context)
+    return calculate_manual_quadrature(request)
+
+
+def calculate_manual_quadrature(request: CalculationRequest) -> CalculationResult:
     errors = request.errors
     weighted = {
         'delta_q': errors.delta_q,
