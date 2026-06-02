@@ -1,7 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.calculation import calculate
+from app.document_storage import get_method_document, save_method_document
 from app.method_library import bootstrap_method_library, create_method_version, list_current_methods, list_method_versions
 from app.schemas import (
     CalculationRequest,
@@ -57,6 +59,28 @@ def add_method_version(mi_id: str, request: MethodVersionCreateRequest):
         method=request.method,
         calculation_template=request.calculation_template.value,
         change_comment=request.change_comment,
+    )
+
+
+@app.post('/api/methods/{mi_id}/versions/{version_id}/document')
+def upload_method_document(mi_id: str, version_id: str, file: UploadFile = File(...)):
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail='Only PDF files are supported for method documents')
+    try:
+        return save_method_document(mi_id, version_id, file)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail='Measurement method version not found') from None
+
+
+@app.get('/api/methods/{mi_id}/versions/{version_id}/document')
+def download_method_document(mi_id: str, version_id: str):
+    document = get_method_document(mi_id, version_id)
+    if not document:
+        raise HTTPException(status_code=404, detail='Document not found')
+    return FileResponse(
+        document['path'],
+        media_type='application/pdf',
+        filename=document.get('file_name') or 'method_document.pdf',
     )
 
 
