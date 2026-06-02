@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Database, FileText, Gauge, History, Settings, ShieldCheck } from 'lucide-react';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
-import { calculate, getMethods, scoreMethods, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
+import { calculate, getMethods, scoreMethods, type CalculationContext, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = {
   pipe_dn_mm: 100,
@@ -28,9 +28,24 @@ const initialErrors: ErrorContributions = {
   kc: 1,
 };
 
+const initialContext: CalculationContext = {
+  working_flow_rate: 100,
+  gauge_pressure_mpa: 0.398675,
+  temperature_c: 25,
+  atmospheric_pressure_mpa: 0.101325,
+  z_working: 0.990393,
+  z_standard: 0.996372,
+};
+
+function auditValue(audit: string[] | undefined, key: string, fallback = '—') {
+  const row = audit?.find((item) => item.startsWith(`${key}=`));
+  return row ? row.split('=').slice(1).join('=') : fallback;
+}
+
 function App() {
   const [line, setLine] = useState<LineParameters>(initialLine);
   const [errors] = useState<ErrorContributions>(initialErrors);
+  const [context, setContext] = useState<CalculationContext>(initialContext);
   const [methods, setMethods] = useState<MeasurementMethod[]>([]);
   const [selectedMethodId, setSelectedMethodId] = useState('drg-m-1600-0169');
   const [calculation, setCalculation] = useState<CalculationResult | null>(null);
@@ -47,22 +62,18 @@ function App() {
     return getMethods()
       .then((loadedMethods) => {
         setMethods(loadedMethods);
-        if (!loadedMethods.some((method) => method.mi_id === selectedMethodId)) {
-          setSelectedMethodId(loadedMethods[0]?.mi_id ?? '');
-        }
+        if (!loadedMethods.some((method) => method.mi_id === selectedMethodId)) setSelectedMethodId(loadedMethods[0]?.mi_id ?? '');
       })
       .catch((error: Error) => setApiError(error.message));
   }, [selectedMethodId]);
 
-  useEffect(() => {
-    refreshMethods();
-  }, [refreshMethods]);
+  useEffect(() => { refreshMethods(); }, [refreshMethods]);
 
   useEffect(() => {
     if (!selectedMethod) return;
     setIsLoading(true);
     setApiError(null);
-    calculate(line, errors, selectedMethod)
+    calculate(line, errors, selectedMethod, 'DRG_SERIES', context)
       .then((result) => {
         setCalculation(result);
         return scoreMethods(line, result);
@@ -70,24 +81,23 @@ function App() {
       .then(setCompatibility)
       .catch((error: Error) => setApiError(error.message))
       .finally(() => setIsLoading(false));
-  }, [line, errors, selectedMethod]);
+  }, [line, errors, selectedMethod, context]);
 
   const flowmeterName = selectedMethod?.title.split('. ').at(-1) ?? 'ДРГ.М';
   const deltaTotal = calculation?.delta_total ?? 0;
   const limit = calculation?.limit ?? selectedMethod?.delta_total_max ?? 5;
   const donutPercent = Math.min(Math.max((deltaTotal / limit) * 100, 0), 100);
   const totalStatus = calculation?.status === 'fail' ? 'Не соответствует' : calculation?.status === 'pass' ? 'Соответствует' : 'Требует проверки';
+  const audit = calculation?.audit_log;
+  const qStandard = auditValue(audit, 'Q_standard');
+  const kValue = auditValue(audit, 'K');
+  const pAbs = auditValue(audit, 'p_abs');
+  const temperatureK = auditValue(audit, 'T');
 
   return (
     <div className="app-shell">
       <aside className="side-nav">
-        <div className="brand">
-          <div className="brand-mark">GP</div>
-          <div>
-            <div className="brand-title">GasMeter Pro</div>
-            <div className="brand-subtitle">Industrial Precision</div>
-          </div>
-        </div>
+        <div className="brand"><div className="brand-mark">GP</div><div><div className="brand-title">GasMeter Pro</div><div className="brand-subtitle">Industrial Precision</div></div></div>
         <nav className="nav-list">
           <a className="nav-item active"><Gauge size={18} /> Конструктор УУГ</a>
           <a className="nav-item"><Database size={18} /> База СИ</a>
@@ -100,10 +110,7 @@ function App() {
 
       <main className="workspace">
         <header className="topbar">
-          <div>
-            <div className="breadcrumbs">Главная / Конструктор УУГ / Средства измерений</div>
-            <h1>Конструктор измерительной линии</h1>
-          </div>
+          <div><div className="breadcrumbs">Главная / Конструктор УУГ / Средства измерений</div><h1>Конструктор измерительной линии</h1></div>
           <div className="top-actions">
             <span className={`calc-status ${apiError ? 'error' : ''}`}><Activity size={16} /> {apiError ? 'Ошибка API' : isLoading ? 'Расчёт...' : 'Расчёт актуален'}</span>
             <button className="ghost-button">Сохранить</button>
@@ -113,14 +120,8 @@ function App() {
 
         <section className="three-column-layout">
           <aside className="left-panel panel">
-            <div className="panel-header">
-              <span>Шаг 1–2</span>
-              <strong>Параметры ИЛ и СИ</strong>
-            </div>
-
-            <div className="stepper">
-              <span className="step done">1</span><span className="step-line"></span><span className="step active">2</span><span className="step-line"></span><span className="step">3</span><span className="step-line"></span><span className="step">4</span>
-            </div>
+            <div className="panel-header"><span>Шаг 1–2</span><strong>Параметры ИЛ и СИ</strong></div>
+            <div className="stepper"><span className="step done">1</span><span className="step-line"></span><span className="step active">2</span><span className="step-line"></span><span className="step">3</span><span className="step-line"></span><span className="step">4</span></div>
 
             <FormGroup title="Трубопровод">
               <NumberField label="Dn трубы, мм" value={line.pipe_dn_mm} onChange={(value) => setLine({ ...line, pipe_dn_mm: value })} />
@@ -129,7 +130,7 @@ function App() {
               <NumberField label="Прямой участок после, Dn" value={line.straight_after_dn} onChange={(value) => setLine({ ...line, straight_after_dn: value })} />
             </FormGroup>
 
-            <FormGroup title="Рабочие условия">
+            <FormGroup title="Рабочие условия / область МИ">
               <NumberField label="Q min, м³/ч" value={line.q_min} onChange={(value) => setLine({ ...line, q_min: value })} />
               <NumberField label="Q max, м³/ч" value={line.q_max} onChange={(value) => setLine({ ...line, q_max: value })} />
               <NumberField label="P min, МПа" value={line.p_min_mpa} onChange={(value) => setLine({ ...line, p_min_mpa: value })} />
@@ -138,13 +139,17 @@ function App() {
               <NumberField label="T max, °C" value={line.t_max_c} onChange={(value) => setLine({ ...line, t_max_c: value })} />
             </FormGroup>
 
+            <FormGroup title="Точка расчёта DRG/PTZ">
+              <NumberField label="Q рабочий, м³/ч" value={context.working_flow_rate ?? 0} onChange={(value) => setContext({ ...context, working_flow_rate: value })} />
+              <NumberField label="P избыточное, МПа" value={context.gauge_pressure_mpa ?? 0} onChange={(value) => setContext({ ...context, gauge_pressure_mpa: value })} />
+              <NumberField label="Температура, °C" value={context.temperature_c ?? 0} onChange={(value) => setContext({ ...context, temperature_c: value })} />
+              <NumberField label="P атм., МПа" value={context.atmospheric_pressure_mpa ?? 0.101325} onChange={(value) => setContext({ ...context, atmospheric_pressure_mpa: value })} />
+              <NumberField label="Z рабоч." value={context.z_working ?? 1} onChange={(value) => setContext({ ...context, z_working: value })} />
+              <NumberField label="Z станд." value={context.z_standard ?? 1} onChange={(value) => setContext({ ...context, z_standard: value })} />
+            </FormGroup>
+
             <FormGroup title="Выбранная МИ">
-              <label className="field">
-                <span>Методика</span>
-                <select value={selectedMethodId} onChange={(event) => setSelectedMethodId(event.target.value)}>
-                  {methods.map((method) => <option key={method.mi_id} value={method.mi_id}>{method.registration_number}</option>)}
-                </select>
-              </label>
+              <label className="field"><span>Методика</span><select value={selectedMethodId} onChange={(event) => setSelectedMethodId(event.target.value)}>{methods.map((method) => <option key={method.mi_id} value={method.mi_id}>{method.registration_number}</option>)}</select></label>
             </FormGroup>
 
             <InstrumentCard title="Расходомер" name={flowmeterName} meta={`δQ ${errors.delta_q}% · ${selectedMethod?.q_min ?? 0}–${selectedMethod?.q_max ?? 0} м³/ч`} status="✓" />
@@ -154,26 +159,15 @@ function App() {
           </aside>
 
           <section className="center-panel panel">
-            <div className="panel-header row">
-              <div><span>Шаг 3</span><strong>Схема ИЛ и структура погрешности</strong></div>
-              <span className="tag info">PTZ-пересчёт</span>
-            </div>
-
+            <div className="panel-header row"><div><span>Шаг 3</span><strong>Схема ИЛ и структура погрешности</strong></div><span className="tag info">DRG_SERIES / PTZ</span></div>
             <div className="pipeline-card">
               <svg viewBox="0 0 820 220" className="pipeline-svg" role="img" aria-label="Схема измерительной линии">
-                <defs>
-                  <linearGradient id="pipe" x1="0" x2="1"><stop offset="0%" stopColor="#1f3a4a" /><stop offset="50%" stopColor="#32576c" /><stop offset="100%" stopColor="#1f3a4a" /></linearGradient>
-                  <filter id="glow"><feGaussianBlur stdDeviation="3.5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-                </defs>
+                <defs><linearGradient id="pipe" x1="0" x2="1"><stop offset="0%" stopColor="#1f3a4a" /><stop offset="50%" stopColor="#32576c" /><stop offset="100%" stopColor="#1f3a4a" /></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3.5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
                 <line x1="50" y1="110" x2="770" y2="110" stroke="url(#pipe)" strokeWidth="34" strokeLinecap="round" />
                 <line x1="50" y1="110" x2="770" y2="110" stroke="#00c8b4" strokeWidth="2" strokeDasharray="10 12" opacity="0.55" />
-                <text x="130" y="72" className="svg-label">{line.straight_before_dn} Dn</text>
-                <text x="620" y="72" className="svg-label">{line.straight_after_dn} Dn</text>
-                <rect x="340" y="62" width="142" height="96" rx="16" className="flowmeter" filter="url(#glow)" />
-                <text x="365" y="105" className="svg-title">{flowmeterName}</text>
-                <text x="371" y="130" className="svg-caption">Q {selectedMethod?.q_min ?? 0}–{selectedMethod?.q_max ?? 0}</text>
-                <circle cx="252" cy="76" r="22" className="sensor ok" /><text x="228" y="42" className="svg-caption">P</text>
-                <circle cx="558" cy="76" r="22" className="sensor ok" /><text x="534" y="42" className="svg-caption">T</text>
+                <text x="130" y="72" className="svg-label">{line.straight_before_dn} Dn</text><text x="620" y="72" className="svg-label">{line.straight_after_dn} Dn</text>
+                <rect x="340" y="62" width="142" height="96" rx="16" className="flowmeter" filter="url(#glow)" /><text x="365" y="105" className="svg-title">{flowmeterName}</text><text x="371" y="130" className="svg-caption">Q {selectedMethod?.q_min ?? 0}–{selectedMethod?.q_max ?? 0}</text>
+                <circle cx="252" cy="76" r="22" className="sensor ok" /><text x="228" y="42" className="svg-caption">P</text><circle cx="558" cy="76" r="22" className="sensor ok" /><text x="534" y="42" className="svg-caption">T</text>
                 <rect x="345" y="174" width="132" height="34" rx="8" className="computer" /><text x="379" y="196" className="svg-caption">СПГ-742</text>
                 <line x1="252" y1="98" x2="360" y2="174" className="signal-line" /><line x1="558" y1="98" x2="462" y2="174" className="signal-line" /><line x1="410" y1="158" x2="410" y2="174" className="signal-line" />
               </svg>
@@ -181,50 +175,28 @@ function App() {
 
             <div className="kpi-grid">
               <Kpi title="U / δΣ" value={`${deltaTotal.toFixed(3)}%`} status={calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'} />
-              <Kpi title="Предел МИ" value={`${limit.toFixed(3)}%`} status="ok" />
-              <Kpi title="Q рабочий" value={`${line.q_min}–${line.q_max}`} status="info" />
-              <Kpi title="P рабочее" value={`${line.p_min_mpa}–${line.p_max_mpa}`} status="info" />
+              <Kpi title="Qc стандарт." value={qStandard} status="info" />
+              <Kpi title="K" value={kValue} status="info" />
+              <Kpi title="P abs / T" value={`${pAbs} / ${temperatureK}`} status="info" />
             </div>
 
             <div className="chart-card">
               <div className="chart-title">Структура погрешности / неопределённости</div>
-              {(calculation?.contributions ?? []).map((item) => (
-                <div className="bar-row" key={item.code}>
-                  <div className="bar-label">{item.label}</div>
-                  <div className="bar-track"><span className={`bar-fill ${item.share_percent > 50 ? 'warn' : 'ok'}`} style={{ width: `${Math.max(item.share_percent, 2)}%` }} /></div>
-                  <div className="bar-value">{item.weighted_value.toFixed(3)}%</div>
-                </div>
-              ))}
+              {(calculation?.contributions ?? []).map((item) => <div className="bar-row" key={item.code}><div className="bar-label">{item.label}</div><div className="bar-track"><span className={`bar-fill ${item.share_percent > 50 ? 'warn' : 'ok'}`} style={{ width: `${Math.max(item.share_percent, 2)}%` }} /></div><div className="bar-value">{item.weighted_value.toFixed(3)}%</div></div>)}
+            </div>
+
+            <div className="chart-card audit-card">
+              <div className="chart-title">Аудит расчёта DRG_SERIES</div>
+              {(calculation?.audit_log ?? []).map((row) => <code key={row}>{row}</code>)}
             </div>
           </section>
 
           <aside className="right-panel panel">
             <div className="panel-header"><span>Шаг 4</span><strong>Результаты и подбор МИ</strong></div>
-
-            <div className="donut-card">
-              <div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(255,255,255,0.08) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div>
-              <div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div>
-            </div>
-
+            <div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(255,255,255,0.08) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>
             {apiError && <div className="api-error">{apiError}</div>}
-
-            <div className="method-list">
-              {compatibility.map((method) => (
-                <div className={`method-card ${method.status}`} key={method.mi_id} onClick={() => setSelectedMethodId(method.mi_id)}>
-                  <div className="method-top"><strong>{method.title.split('. ').at(-1)}</strong><span className="score">{method.score}</span></div>
-                  <div className="method-range">{method.registration_number}</div>
-                  <div className="method-status">{method.status === 'full_match' ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div>
-                  <p>{method.reasons[0]}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="recommendation">
-              <div className="rec-label">→ Рекомендация</div>
-              <p>{calculation?.status === 'fail' ? 'Требуется замена СИ или выбор другой МИ: расчётная величина выше предела.' : 'Текущая конфигурация проходит по диапазону Q/P/T и укладывается в предел расширенной неопределённости.'}</p>
-              <button className="secondary-button">Открыть аудит расчёта</button>
-            </div>
-
+            <div className="method-list">{compatibility.map((method) => <div className={`method-card ${method.status}`} key={method.mi_id} onClick={() => setSelectedMethodId(method.mi_id)}><div className="method-top"><strong>{method.title.split('. ').at(-1)}</strong><span className="score">{method.score}</span></div><div className="method-range">{method.registration_number}</div><div className="method-status">{method.status === 'full_match' ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div><p>{method.reasons[0]}</p></div>)}</div>
+            <div className="recommendation"><div className="rec-label">→ Рекомендация</div><p>{calculation?.status === 'fail' ? 'Требуется замена СИ или выбор другой МИ: расчётная величина выше предела.' : 'Текущая конфигурация проходит по диапазону Q/P/T и укладывается в предел расширенной неопределённости.'}</p><button className="secondary-button">Открыть аудит расчёта</button></div>
             <MethodLibraryPanel methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} />
           </aside>
         </section>
@@ -236,17 +208,8 @@ function App() {
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
   return <label className="field"><span>{label}</span><input type="number" step="any" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
 }
-
-function FormGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="form-group"><h3>{title}</h3>{children}</section>;
-}
-
-function InstrumentCard({ title, name, meta, status }: { title: string; name: string; meta: string; status: string }) {
-  return <div className="instrument-card"><div><div className="instrument-title">{title}</div><strong>{name}</strong><p>{meta}</p></div><span className="status-ok">{status}</span></div>;
-}
-
-function Kpi({ title, value, status }: { title: string; value: string; status: 'ok' | 'warn' | 'info' | 'danger' }) {
-  return <div className={`kpi ${status}`}><span>{title}</span><strong>{value}</strong></div>;
-}
+function FormGroup({ title, children }: { title: string; children: React.ReactNode }) { return <section className="form-group"><h3>{title}</h3>{children}</section>; }
+function InstrumentCard({ title, name, meta, status }: { title: string; name: string; meta: string; status: string }) { return <div className="instrument-card"><div><div className="instrument-title">{title}</div><strong>{name}</strong><p>{meta}</p></div><span className="status-ok">{status}</span></div>; }
+function Kpi({ title, value, status }: { title: string; value: string; status: 'ok' | 'warn' | 'info' | 'danger' }) { return <div className={`kpi ${status}`}><span>{title}</span><strong>{value}</strong></div>; }
 
 export default App;
