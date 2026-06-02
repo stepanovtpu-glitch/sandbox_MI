@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Database, FileText, Gauge, History, Settings, ShieldCheck } from 'lucide-react';
+import { MethodLibraryPanel } from './MethodLibraryPanel';
 import { calculate, getMethods, scoreMethods, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = {
@@ -29,7 +30,7 @@ const initialErrors: ErrorContributions = {
 
 function App() {
   const [line, setLine] = useState<LineParameters>(initialLine);
-  const [errors, setErrors] = useState<ErrorContributions>(initialErrors);
+  const [errors] = useState<ErrorContributions>(initialErrors);
   const [methods, setMethods] = useState<MeasurementMethod[]>([]);
   const [selectedMethodId, setSelectedMethodId] = useState('drg-m-1600-0169');
   const [calculation, setCalculation] = useState<CalculationResult | null>(null);
@@ -42,8 +43,8 @@ function App() {
     [methods, selectedMethodId],
   );
 
-  useEffect(() => {
-    getMethods()
+  const refreshMethods = useCallback(() => {
+    return getMethods()
       .then((loadedMethods) => {
         setMethods(loadedMethods);
         if (!loadedMethods.some((method) => method.mi_id === selectedMethodId)) {
@@ -52,6 +53,10 @@ function App() {
       })
       .catch((error: Error) => setApiError(error.message));
   }, [selectedMethodId]);
+
+  useEffect(() => {
+    refreshMethods();
+  }, [refreshMethods]);
 
   useEffect(() => {
     if (!selectedMethod) return;
@@ -67,7 +72,7 @@ function App() {
       .finally(() => setIsLoading(false));
   }, [line, errors, selectedMethod]);
 
-  const flowmeterName = selectedMethod?.title.split('. ').at(-1)?.replace('ДРГ.', 'ДРГ.') ?? 'ДРГ.М';
+  const flowmeterName = selectedMethod?.title.split('. ').at(-1) ?? 'ДРГ.М';
   const deltaTotal = calculation?.delta_total ?? 0;
   const limit = calculation?.limit ?? selectedMethod?.delta_total_max ?? 5;
   const donutPercent = Math.min(Math.max((deltaTotal / limit) * 100, 0), 100);
@@ -114,13 +119,7 @@ function App() {
             </div>
 
             <div className="stepper">
-              <span className="step done">1</span>
-              <span className="step-line"></span>
-              <span className="step active">2</span>
-              <span className="step-line"></span>
-              <span className="step">3</span>
-              <span className="step-line"></span>
-              <span className="step">4</span>
+              <span className="step done">1</span><span className="step-line"></span><span className="step active">2</span><span className="step-line"></span><span className="step">3</span><span className="step-line"></span><span className="step">4</span>
             </div>
 
             <FormGroup title="Трубопровод">
@@ -143,9 +142,7 @@ function App() {
               <label className="field">
                 <span>Методика</span>
                 <select value={selectedMethodId} onChange={(event) => setSelectedMethodId(event.target.value)}>
-                  {methods.map((method) => (
-                    <option key={method.mi_id} value={method.mi_id}>{method.registration_number}</option>
-                  ))}
+                  {methods.map((method) => <option key={method.mi_id} value={method.mi_id}>{method.registration_number}</option>)}
                 </select>
               </label>
             </FormGroup>
@@ -158,21 +155,14 @@ function App() {
 
           <section className="center-panel panel">
             <div className="panel-header row">
-              <div>
-                <span>Шаг 3</span>
-                <strong>Схема ИЛ и структура погрешности</strong>
-              </div>
+              <div><span>Шаг 3</span><strong>Схема ИЛ и структура погрешности</strong></div>
               <span className="tag info">PTZ-пересчёт</span>
             </div>
 
             <div className="pipeline-card">
               <svg viewBox="0 0 820 220" className="pipeline-svg" role="img" aria-label="Схема измерительной линии">
                 <defs>
-                  <linearGradient id="pipe" x1="0" x2="1">
-                    <stop offset="0%" stopColor="#1f3a4a" />
-                    <stop offset="50%" stopColor="#32576c" />
-                    <stop offset="100%" stopColor="#1f3a4a" />
-                  </linearGradient>
+                  <linearGradient id="pipe" x1="0" x2="1"><stop offset="0%" stopColor="#1f3a4a" /><stop offset="50%" stopColor="#32576c" /><stop offset="100%" stopColor="#1f3a4a" /></linearGradient>
                   <filter id="glow"><feGaussianBlur stdDeviation="3.5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
                 </defs>
                 <line x1="50" y1="110" x2="770" y2="110" stroke="url(#pipe)" strokeWidth="34" strokeLinecap="round" />
@@ -182,15 +172,10 @@ function App() {
                 <rect x="340" y="62" width="142" height="96" rx="16" className="flowmeter" filter="url(#glow)" />
                 <text x="365" y="105" className="svg-title">{flowmeterName}</text>
                 <text x="371" y="130" className="svg-caption">Q {selectedMethod?.q_min ?? 0}–{selectedMethod?.q_max ?? 0}</text>
-                <circle cx="252" cy="76" r="22" className="sensor ok" />
-                <text x="228" y="42" className="svg-caption">P</text>
-                <circle cx="558" cy="76" r="22" className="sensor ok" />
-                <text x="534" y="42" className="svg-caption">T</text>
-                <rect x="345" y="174" width="132" height="34" rx="8" className="computer" />
-                <text x="379" y="196" className="svg-caption">СПГ-742</text>
-                <line x1="252" y1="98" x2="360" y2="174" className="signal-line" />
-                <line x1="558" y1="98" x2="462" y2="174" className="signal-line" />
-                <line x1="410" y1="158" x2="410" y2="174" className="signal-line" />
+                <circle cx="252" cy="76" r="22" className="sensor ok" /><text x="228" y="42" className="svg-caption">P</text>
+                <circle cx="558" cy="76" r="22" className="sensor ok" /><text x="534" y="42" className="svg-caption">T</text>
+                <rect x="345" y="174" width="132" height="34" rx="8" className="computer" /><text x="379" y="196" className="svg-caption">СПГ-742</text>
+                <line x1="252" y1="98" x2="360" y2="174" className="signal-line" /><line x1="558" y1="98" x2="462" y2="174" className="signal-line" /><line x1="410" y1="158" x2="410" y2="174" className="signal-line" />
               </svg>
             </div>
 
@@ -214,17 +199,11 @@ function App() {
           </section>
 
           <aside className="right-panel panel">
-            <div className="panel-header">
-              <span>Шаг 4</span>
-              <strong>Результаты и подбор МИ</strong>
-            </div>
+            <div className="panel-header"><span>Шаг 4</span><strong>Результаты и подбор МИ</strong></div>
 
             <div className="donut-card">
               <div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(255,255,255,0.08) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div>
-              <div>
-                <div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div>
-                <div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div>
-              </div>
+              <div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div>
             </div>
 
             {apiError && <div className="api-error">{apiError}</div>}
@@ -232,10 +211,7 @@ function App() {
             <div className="method-list">
               {compatibility.map((method) => (
                 <div className={`method-card ${method.status}`} key={method.mi_id} onClick={() => setSelectedMethodId(method.mi_id)}>
-                  <div className="method-top">
-                    <strong>{method.title.split('. ').at(-1)}</strong>
-                    <span className="score">{method.score}</span>
-                  </div>
+                  <div className="method-top"><strong>{method.title.split('. ').at(-1)}</strong><span className="score">{method.score}</span></div>
                   <div className="method-range">{method.registration_number}</div>
                   <div className="method-status">{method.status === 'full_match' ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div>
                   <p>{method.reasons[0]}</p>
@@ -248,6 +224,8 @@ function App() {
               <p>{calculation?.status === 'fail' ? 'Требуется замена СИ или выбор другой МИ: расчётная величина выше предела.' : 'Текущая конфигурация проходит по диапазону Q/P/T и укладывается в предел расширенной неопределённости.'}</p>
               <button className="secondary-button">Открыть аудит расчёта</button>
             </div>
+
+            <MethodLibraryPanel methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} />
           </aside>
         </section>
       </main>
@@ -256,43 +234,19 @@ function App() {
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <input type="number" step="any" value={value} onChange={(event) => onChange(Number(event.target.value))} />
-    </label>
-  );
+  return <label className="field"><span>{label}</span><input type="number" step="any" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
 }
 
 function FormGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="form-group">
-      <h3>{title}</h3>
-      {children}
-    </section>
-  );
+  return <section className="form-group"><h3>{title}</h3>{children}</section>;
 }
 
 function InstrumentCard({ title, name, meta, status }: { title: string; name: string; meta: string; status: string }) {
-  return (
-    <div className="instrument-card">
-      <div>
-        <div className="instrument-title">{title}</div>
-        <strong>{name}</strong>
-        <p>{meta}</p>
-      </div>
-      <span className="status-ok">{status}</span>
-    </div>
-  );
+  return <div className="instrument-card"><div><div className="instrument-title">{title}</div><strong>{name}</strong><p>{meta}</p></div><span className="status-ok">{status}</span></div>;
 }
 
 function Kpi({ title, value, status }: { title: string; value: string; status: 'ok' | 'warn' | 'info' | 'danger' }) {
-  return (
-    <div className={`kpi ${status}`}>
-      <span>{title}</span>
-      <strong>{value}</strong>
-    </div>
-  );
+  return <div className={`kpi ${status}`}><span>{title}</span><strong>{value}</strong></div>;
 }
 
 export default App;
