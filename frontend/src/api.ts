@@ -2,6 +2,7 @@ export type MeasurementMethod = {
   mi_id: string;
   registration_number: string;
   title: string;
+  flowmeter_type?: string | null;
   q_min: number;
   q_max: number;
   q_unit: string;
@@ -10,7 +11,25 @@ export type MeasurementMethod = {
   t_min_c: number;
   t_max_c: number;
   delta_total_max: number;
+  delta_q_max?: number | null;
+  delta_p_max?: number | null;
+  delta_t_max?: number | null;
+  delta_vc_max?: number | null;
+  valid_from?: string | null;
+  valid_until?: string | null;
   source_document?: string | null;
+};
+
+export type MeasurementMethodVersion = {
+  version_id: string;
+  version_number: number;
+  status: 'draft' | 'active' | 'archived';
+  calculation_template: 'DRG_SERIES' | 'MANUAL_QUADRATURE' | 'CUSTOM';
+  created_at: string;
+  method: MeasurementMethod;
+  change_comment?: string | null;
+  test_cases: Array<{ name: string; input_data: Record<string, unknown>; expected_result: Record<string, unknown>; tolerance: number }>;
+  document?: { file_name?: string | null; storage_path?: string | null; sha256?: string | null } | null;
 };
 
 export type LineParameters = {
@@ -80,6 +99,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getMethods() {
   return request<MeasurementMethod[]>('/api/methods');
+}
+
+export function getMethodVersions(miId: string) {
+  return request<MeasurementMethodVersion[]>(`/api/methods/${miId}/versions`);
+}
+
+export function createMethodVersion(miId: string, method: MeasurementMethod, changeComment: string, calculationTemplate = 'DRG_SERIES') {
+  return request<MeasurementMethodVersion>(`/api/methods/${miId}/versions`, {
+    method: 'POST',
+    body: JSON.stringify({ method, change_comment: changeComment, calculation_template: calculationTemplate }),
+  });
 }
 
 export function calculate(line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null) {
