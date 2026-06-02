@@ -12,6 +12,7 @@ from app.method_library import (
     list_current_methods,
     list_method_versions,
 )
+from app.reporting import generate_docx_report, generate_pdf_report
 from app.schemas import (
     CalculationRequest,
     CalculationResult,
@@ -35,6 +36,14 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+
+def _calculate_with_request_template(request: CalculationRequest) -> CalculationResult:
+    return calculate(
+        request,
+        template=request.calculation_template.value if request.calculation_template else None,
+        context=request.context,
+    )
 
 
 @app.on_event('startup')
@@ -110,6 +119,24 @@ def download_method_document(mi_id: str, version_id: str):
     )
 
 
+@app.post('/api/reports/pdf')
+def export_pdf_report(request: CalculationRequest):
+    result = _calculate_with_request_template(request)
+    report_path = generate_pdf_report(request, result)
+    return FileResponse(report_path, media_type='application/pdf', filename=report_path.name)
+
+
+@app.post('/api/reports/docx')
+def export_docx_report(request: CalculationRequest):
+    result = _calculate_with_request_template(request)
+    report_path = generate_docx_report(request, result)
+    return FileResponse(
+        report_path,
+        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        filename=report_path.name,
+    )
+
+
 @app.post('/api/methods/score', response_model=list[MethodCompatibility])
 def score_methods_endpoint(request: MethodScoringRequest):
     return score_methods(list_current_methods(), request.line, request.calculation)
@@ -117,8 +144,4 @@ def score_methods_endpoint(request: MethodScoringRequest):
 
 @app.post('/api/calculate', response_model=CalculationResult)
 def calculate_endpoint(request: CalculationRequest):
-    return calculate(
-        request,
-        template=request.calculation_template.value if request.calculation_template else None,
-        context=request.context,
-    )
+    return _calculate_with_request_template(request)
