@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createMethodVersion, getMethodVersions, type MeasurementMethod, type MeasurementMethodVersion } from './api';
 
 type Props = {
@@ -11,33 +11,44 @@ type Props = {
 export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, onRefreshMethods }: Props) {
   const [versions, setVersions] = useState<MeasurementMethodVersion[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [draft, setDraft] = useState<MeasurementMethod | null>(null);
   const [changeComment, setChangeComment] = useState('Новая версия МИ / обновление диапазонов и требований');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedMethod) return;
+    setDraft({ ...selectedMethod });
     getMethodVersions(selectedMethod.mi_id)
       .then(setVersions)
       .catch((err: Error) => setError(err.message));
   }, [selectedMethod]);
 
-  if (!selectedMethod) return null;
+  const hasChanges = useMemo(() => JSON.stringify(draft) !== JSON.stringify(selectedMethod), [draft, selectedMethod]);
+
+  if (!selectedMethod || !draft) return null;
+
+  const setDraftField = <K extends keyof MeasurementMethod>(field: K, value: MeasurementMethod[K]) => {
+    setDraft({ ...draft, [field]: value });
+  };
 
   const handleCreateVersion = async () => {
     setIsSaving(true);
     setError(null);
     try {
-      await createMethodVersion(selectedMethod.mi_id, selectedMethod, changeComment);
-      const nextVersions = await getMethodVersions(selectedMethod.mi_id);
+      await createMethodVersion(draft.mi_id, draft, changeComment);
+      const nextVersions = await getMethodVersions(draft.mi_id);
       setVersions(nextVersions);
       onRefreshMethods();
+      onSelectMethod(draft.mi_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка создания версии');
     } finally {
       setIsSaving(false);
     }
   };
+
+  const resetDraft = () => setDraft({ ...selectedMethod });
 
   return (
     <div className="library-panel">
@@ -64,13 +75,35 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
           </div>
 
           <div className="library-card">
-            <div className="library-card-title">Активная методика</div>
-            <div className="library-line"><span>Наименование</span><b>{selectedMethod.title}</b></div>
-            <div className="library-line"><span>Q</span><b>{selectedMethod.q_min}–{selectedMethod.q_max} {selectedMethod.q_unit}</b></div>
-            <div className="library-line"><span>P</span><b>{selectedMethod.p_min_mpa}–{selectedMethod.p_max_mpa} МПа</b></div>
-            <div className="library-line"><span>T</span><b>{selectedMethod.t_min_c}…{selectedMethod.t_max_c} °C</b></div>
-            <div className="library-line"><span>Предел</span><b>{selectedMethod.delta_total_max}%</b></div>
-            <div className="library-line"><span>PDF</span><b>{selectedMethod.source_document ?? 'не указан'}</b></div>
+            <div className="library-card-title">Карточка МИ</div>
+            <TextField label="ID методики" value={draft.mi_id} onChange={(value) => setDraftField('mi_id', value)} />
+            <TextField label="Регистрационный номер" value={draft.registration_number} onChange={(value) => setDraftField('registration_number', value)} />
+            <TextField label="Наименование" value={draft.title} onChange={(value) => setDraftField('title', value)} />
+            <TextField label="Тип расходомера" value={draft.flowmeter_type ?? ''} onChange={(value) => setDraftField('flowmeter_type', value)} />
+          </div>
+
+          <div className="library-card">
+            <div className="library-card-title">Область применения</div>
+            <div className="library-form-grid">
+              <NumberField label="Q min" value={draft.q_min} onChange={(value) => setDraftField('q_min', value)} />
+              <NumberField label="Q max" value={draft.q_max} onChange={(value) => setDraftField('q_max', value)} />
+              <NumberField label="P min, МПа" value={draft.p_min_mpa} onChange={(value) => setDraftField('p_min_mpa', value)} />
+              <NumberField label="P max, МПа" value={draft.p_max_mpa} onChange={(value) => setDraftField('p_max_mpa', value)} />
+              <NumberField label="T min, °C" value={draft.t_min_c} onChange={(value) => setDraftField('t_min_c', value)} />
+              <NumberField label="T max, °C" value={draft.t_max_c} onChange={(value) => setDraftField('t_max_c', value)} />
+            </div>
+          </div>
+
+          <div className="library-card">
+            <div className="library-card-title">Требования точности</div>
+            <div className="library-form-grid">
+              <NumberField label="U/δΣ max, %" value={draft.delta_total_max} onChange={(value) => setDraftField('delta_total_max', value)} />
+              <NumberField label="δQ max, %" value={draft.delta_q_max ?? 0} onChange={(value) => setDraftField('delta_q_max', value)} />
+              <NumberField label="δP max, %" value={draft.delta_p_max ?? 0} onChange={(value) => setDraftField('delta_p_max', value)} />
+              <NumberField label="δT max, %" value={draft.delta_t_max ?? 0} onChange={(value) => setDraftField('delta_t_max', value)} />
+              <NumberField label="δVC max, %" value={draft.delta_vc_max ?? 0} onChange={(value) => setDraftField('delta_vc_max', value)} />
+            </div>
+            <TextField label="PDF / источник" value={draft.source_document ?? ''} onChange={(value) => setDraftField('source_document', value)} />
           </div>
 
           <div className="library-card">
@@ -79,9 +112,12 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
               <span>Комментарий к версии</span>
               <input value={changeComment} onChange={(event) => setChangeComment(event.target.value)} />
             </label>
-            <button className="primary-button full-width" onClick={handleCreateVersion} disabled={isSaving}>
-              {isSaving ? 'Сохранение...' : 'Создать версию из текущей карточки'}
-            </button>
+            <div className="library-actions">
+              <button className="ghost-button" onClick={resetDraft} disabled={!hasChanges || isSaving}>Сбросить</button>
+              <button className="primary-button" onClick={handleCreateVersion} disabled={isSaving || !changeComment.trim()}>
+                {isSaving ? 'Сохранение...' : hasChanges ? 'Сохранить новую версию' : 'Создать копию версии'}
+              </button>
+            </div>
           </div>
 
           <div className="library-card">
@@ -92,6 +128,7 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
                   <div>
                     <strong>v{version.version_number}</strong>
                     <span>{version.calculation_template}</span>
+                    <small>{version.change_comment}</small>
                   </div>
                   <div>
                     <span>{version.status}</span>
@@ -106,5 +143,23 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
         </>
       )}
     </div>
+  );
+}
+
+function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input type="number" step="any" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
   );
 }
