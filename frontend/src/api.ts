@@ -74,6 +74,16 @@ export type ErrorContributions = {
   kc: number;
 };
 
+export type CalculationContext = {
+  working_flow_rate?: number;
+  gauge_pressure_mpa?: number;
+  temperature_c?: number;
+  atmospheric_pressure_mpa?: number;
+  z_working?: number;
+  z_standard?: number;
+  compressibility_ratio?: number;
+};
+
 export type CalculationResult = {
   delta_total: number;
   status: 'pass' | 'warn' | 'fail';
@@ -160,10 +170,16 @@ export function getMethodDocumentUrl(miId: string, versionId: string) {
   return `${API_BASE}/api/methods/${miId}/versions/${versionId}/document`;
 }
 
-export function calculate(line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null) {
+export function calculate(
+  line: LineParameters,
+  errors: ErrorContributions,
+  method: MeasurementMethod | null,
+  calculationTemplate = 'DRG_SERIES',
+  context: CalculationContext = {},
+) {
   return request<CalculationResult>('/api/calculate', {
     method: 'POST',
-    body: JSON.stringify({ line, errors, method }),
+    body: JSON.stringify({ line, errors, method, calculation_template: calculationTemplate, context }),
   });
 }
 
