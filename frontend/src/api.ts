@@ -20,6 +20,8 @@ export type MeasurementMethod = {
   source_document?: string | null;
 };
 
+export type MethodDocument = { file_name?: string | null; storage_path?: string | null; sha256?: string | null };
+
 export type MeasurementMethodVersion = {
   version_id: string;
   version_number: number;
@@ -29,7 +31,7 @@ export type MeasurementMethodVersion = {
   method: MeasurementMethod;
   change_comment?: string | null;
   test_cases: Array<{ name: string; input_data: Record<string, unknown>; expected_result: Record<string, unknown>; tolerance: number }>;
-  document?: { file_name?: string | null; storage_path?: string | null; sha256?: string | null } | null;
+  document?: MethodDocument | null;
 };
 
 export type LineParameters = {
@@ -110,6 +112,24 @@ export function createMethodVersion(miId: string, method: MeasurementMethod, cha
     method: 'POST',
     body: JSON.stringify({ method, change_comment: changeComment, calculation_template: calculationTemplate }),
   });
+}
+
+export async function uploadMethodDocument(miId: string, versionId: string, file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE}/api/methods/${miId}/versions/${versionId}/document`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`API ${response.status}: ${text}`);
+  }
+  return response.json() as Promise<MethodDocument>;
+}
+
+export function getMethodDocumentUrl(miId: string, versionId: string) {
+  return `${API_BASE}/api/methods/${miId}/versions/${versionId}/document`;
 }
 
 export function calculate(line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null) {
