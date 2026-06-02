@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { TestCasePanel } from './TestCasePanel';
 import {
   createMethodVersion,
   getMethodDocumentUrl,
@@ -92,38 +93,27 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
 
   const printPdf = (versionId: string) => {
     const printWindow = window.open(getMethodDocumentUrl(selectedMethod.mi_id, versionId), '_blank', 'noopener,noreferrer');
-    if (printWindow) {
-      printWindow.addEventListener('load', () => printWindow.print());
-    }
+    if (printWindow) printWindow.addEventListener('load', () => printWindow.print());
+  };
+
+  const handleVersionUpdated = (updatedVersion: MeasurementMethodVersion) => {
+    setVersions((current) => current.map((version) => version.version_id === updatedVersion.version_id ? updatedVersion : version));
   };
 
   return (
     <div className="library-panel">
       <div className="library-header">
-        <div>
-          <div className="rec-label">Библиотека МИ</div>
-          <strong>Версионирование и добавление методик</strong>
-        </div>
+        <div><div className="rec-label">Библиотека МИ</div><strong>Версионирование и добавление методик</strong></div>
         <button className="ghost-button" onClick={() => setIsExpanded(!isExpanded)}>{isExpanded ? 'Свернуть' : 'Открыть'}</button>
       </div>
 
       {isExpanded && (
         <>
-          <input
-            ref={fileInputRef}
-            className="hidden-file-input"
-            type="file"
-            accept="application/pdf,.pdf"
-            onChange={(event) => handleFileSelected(event.target.files?.[0])}
-          />
+          <input ref={fileInputRef} className="hidden-file-input" type="file" accept="application/pdf,.pdf" onChange={(event) => handleFileSelected(event.target.files?.[0])} />
 
           <div className="method-selector-grid">
             {methods.map((method) => (
-              <button
-                key={method.mi_id}
-                className={`method-pill ${selectedMethod.mi_id === method.mi_id ? 'active' : ''}`}
-                onClick={() => onSelectMethod(method.mi_id)}
-              >
+              <button key={method.mi_id} className={`method-pill ${selectedMethod.mi_id === method.mi_id ? 'active' : ''}`} onClick={() => onSelectMethod(method.mi_id)}>
                 {method.registration_number}
               </button>
             ))}
@@ -165,9 +155,7 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
             <div className="library-card-title">Документ активной версии</div>
             <DocumentInfo version={activeVersion} />
             <div className="library-actions three">
-              <button className="ghost-button" onClick={() => activeVersion && beginUpload(activeVersion.version_id)} disabled={!activeVersion || !!uploadingVersionId}>
-                {uploadingVersionId === activeVersion?.version_id ? 'Загрузка...' : 'Загрузить PDF'}
-              </button>
+              <button className="ghost-button" onClick={() => activeVersion && beginUpload(activeVersion.version_id)} disabled={!activeVersion || !!uploadingVersionId}>{uploadingVersionId === activeVersion?.version_id ? 'Загрузка...' : 'Загрузить PDF'}</button>
               <button className="ghost-button" onClick={() => activeVersion && openPdf(activeVersion.version_id)} disabled={!activeVersion?.document?.file_name}>Открыть PDF</button>
               <button className="secondary-button" onClick={() => activeVersion && printPdf(activeVersion.version_id)} disabled={!activeVersion?.document?.file_name}>Печать</button>
             </div>
@@ -175,17 +163,14 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
 
           <div className="library-card">
             <div className="library-card-title">Создать новую версию</div>
-            <label className="field">
-              <span>Комментарий к версии</span>
-              <input value={changeComment} onChange={(event) => setChangeComment(event.target.value)} />
-            </label>
+            <label className="field"><span>Комментарий к версии</span><input value={changeComment} onChange={(event) => setChangeComment(event.target.value)} /></label>
             <div className="library-actions">
               <button className="ghost-button" onClick={resetDraft} disabled={!hasChanges || isSaving}>Сбросить</button>
-              <button className="primary-button" onClick={handleCreateVersion} disabled={isSaving || !changeComment.trim()}>
-                {isSaving ? 'Сохранение...' : hasChanges ? 'Сохранить новую версию' : 'Создать копию версии'}
-              </button>
+              <button className="primary-button" onClick={handleCreateVersion} disabled={isSaving || !changeComment.trim()}>{isSaving ? 'Сохранение...' : hasChanges ? 'Сохранить новую версию' : 'Создать копию версии'}</button>
             </div>
           </div>
+
+          <TestCasePanel selectedMethod={selectedMethod} version={activeVersion} onVersionUpdated={handleVersionUpdated} />
 
           <div className="library-card">
             <div className="library-card-title">История версий</div>
@@ -197,6 +182,7 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
                     <span>{version.calculation_template}</span>
                     <small>{version.change_comment}</small>
                     <small>{version.document?.file_name ? `PDF: ${version.document.file_name}` : 'PDF не загружен'}</small>
+                    <small>Контрольных примеров: {version.test_cases.length}</small>
                   </div>
                   <div className="version-actions">
                     <span>{version.status}</span>
@@ -219,12 +205,7 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
 function DocumentInfo({ version }: { version?: MeasurementMethodVersion }) {
   if (!version) return <div className="document-empty">Версия не выбрана</div>;
   if (!version.document?.file_name) return <div className="document-empty">PDF к версии не загружен</div>;
-  return (
-    <div className="document-info">
-      <div><span>Файл</span><b>{version.document.file_name}</b></div>
-      <div><span>SHA-256</span><b>{version.document.sha256 ?? 'не рассчитан'}</b></div>
-    </div>
-  );
+  return <div className="document-info"><div><span>Файл</span><b>{version.document.file_name}</b></div><div><span>SHA-256</span><b>{version.document.sha256 ?? 'не рассчитан'}</b></div></div>;
 }
 
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
