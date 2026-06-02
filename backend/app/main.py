@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.calculation import calculate
-from app.method_library import create_method_version, list_current_methods, list_method_versions
+from app.method_library import bootstrap_method_library, create_method_version, list_current_methods, list_method_versions
 from app.schemas import (
     CalculationRequest,
     CalculationResult,
@@ -23,6 +23,11 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+
+@app.on_event('startup')
+def startup() -> None:
+    bootstrap_method_library()
 
 
 @app.get('/health')
