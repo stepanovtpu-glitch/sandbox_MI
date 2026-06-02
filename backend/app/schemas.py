@@ -131,6 +131,18 @@ class MethodTestCase(BaseModel):
     tolerance: float = 0.005
 
 
+class MethodTestCaseCreateRequest(BaseModel):
+    test_case: MethodTestCase
+
+
+class MethodTestResult(BaseModel):
+    name: str
+    status: Literal['pass', 'fail', 'not_implemented']
+    expected_result: dict
+    actual_result: dict | None = None
+    message: str
+
+
 class MeasurementMethodVersion(BaseModel):
     version_id: str
     version_number: int
