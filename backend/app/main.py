@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 
 from app.calculation import calculate
 from app.calculation_history import get_calculation_record, list_calculation_records, save_calculation_record
+from app.database import DB_PATH, SCHEMA_VERSION, get_schema_version
 from app.document_storage import get_method_document, save_method_document, verify_method_document
 from app.method_library import (
     add_method_test_case,
@@ -29,7 +30,8 @@ from app.schemas import (
 from app.scoring import score_methods
 from app.test_runner import run_method_test_cases
 
-app = FastAPI(title='GasMeter Pro', version='0.1.0')
+APP_VERSION = '0.1.0'
+app = FastAPI(title='GasMeter Pro', version=APP_VERSION)
 
 
 class SaveCalculationPayload(BaseModel):
@@ -62,6 +64,19 @@ def startup() -> None:
 @app.get('/health')
 def health():
     return {'status': 'ok', 'application': 'GasMeter Pro'}
+
+
+@app.get('/api/system/info')
+def system_info():
+    return {
+        'status': 'ok',
+        'application': 'GasMeter Pro',
+        'version': APP_VERSION,
+        'schema_version': get_schema_version(),
+        'expected_schema_version': SCHEMA_VERSION,
+        'database_path': str(DB_PATH),
+        'database_exists': DB_PATH.exists(),
+    }
 
 
 @app.get('/api/methods', response_model=list[MeasurementMethod])
