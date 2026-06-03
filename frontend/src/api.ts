@@ -49,6 +49,22 @@ export type CalculationResult = {
   audit_log: string[];
 };
 
+export type CalculationRecord = {
+  record_id: string;
+  created_at: string;
+  project_name?: string | null;
+  mi_id?: string | null;
+  method_version_id?: string | null;
+  document_sha256?: string | null;
+  status: 'pass' | 'warn' | 'fail' | string;
+  delta_total: number;
+  limit_value?: number | null;
+  calculation_template: string;
+  request: Record<string, unknown>;
+  result: Record<string, unknown>;
+  conclusion: string;
+};
+
 export type MethodCompatibility = { mi_id: string; registration_number: string; title: string; status: 'full_match' | 'partial_match' | 'not_applicable'; score: number; reasons: string[]; };
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
@@ -60,11 +76,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function downloadRequest(path: string, body: unknown, fallbackName: string) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const response = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
   const blob = await response.blob();
   const disposition = response.headers.get('content-disposition') ?? '';
@@ -103,6 +115,13 @@ export function makeCalculationRequest(line: LineParameters, errors: ErrorContri
 export function calculate(line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate = 'DRG_SERIES', context: CalculationContext = {}) {
   return request<CalculationResult>('/api/calculate', { method: 'POST', body: JSON.stringify(makeCalculationRequest(line, errors, method, calculationTemplate, context)) });
 }
+
+export function saveCalculation(projectName: string, line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate = 'DRG_SERIES', context: CalculationContext = {}) {
+  return request<CalculationRecord>('/api/calculations', { method: 'POST', body: JSON.stringify({ project_name: projectName, calculation: makeCalculationRequest(line, errors, method, calculationTemplate, context) }) });
+}
+
+export function getCalculationHistory(limit = 20) { return request<CalculationRecord[]>(`/api/calculations?limit=${limit}`); }
+export function getCalculationRecord(recordId: string) { return request<CalculationRecord>(`/api/calculations/${recordId}`); }
 
 export function downloadReport(format: 'pdf' | 'docx', line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate = 'DRG_SERIES', context: CalculationContext = {}) {
   const fallbackName = `gasmeter_protocol.${format}`;
