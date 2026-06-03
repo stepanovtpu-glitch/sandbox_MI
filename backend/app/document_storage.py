@@ -76,3 +76,25 @@ def get_method_document(mi_id: str, version_id: str) -> dict | None:
     if not path.exists():
         return None
     return {**document, 'path': path}
+
+
+def verify_method_document(mi_id: str, version_id: str) -> dict:
+    document = get_method_document(mi_id, version_id)
+    if not document:
+        return {
+            'status': 'missing',
+            'message': 'Скан-копия МИ не найдена или не загружена.',
+            'stored_sha256': None,
+            'actual_sha256': None,
+            'file_name': None,
+        }
+    stored_sha256 = document.get('sha256')
+    actual_sha256 = _sha256_file(document['path'])
+    is_valid = bool(stored_sha256) and stored_sha256 == actual_sha256
+    return {
+        'status': 'valid' if is_valid else 'changed',
+        'message': 'Скан-копия МИ не изменялась.' if is_valid else 'SHA-256 не совпадает: файл был изменён или заменён.',
+        'stored_sha256': stored_sha256,
+        'actual_sha256': actual_sha256,
+        'file_name': document.get('file_name'),
+    }
