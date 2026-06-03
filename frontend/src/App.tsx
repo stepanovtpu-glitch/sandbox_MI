@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Database, FileText, Gauge, History, Settings, ShieldCheck } from 'lucide-react';
+import { HistoryPanel } from './HistoryPanel';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
-import { calculate, downloadReport, getMethods, scoreMethods, type CalculationContext, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
+import { calculate, downloadReport, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = {
   pipe_dn_mm: 100,
@@ -53,6 +54,8 @@ function App() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [reportStatus, setReportStatus] = useState<string>('');
+  const [projectName, setProjectName] = useState('УУГ / расчёт по МИ ДРГ');
+  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
 
   const selectedMethod = useMemo(
     () => methods.find((method) => method.mi_id === selectedMethodId) ?? methods[0] ?? null,
@@ -97,6 +100,20 @@ function App() {
     }
   };
 
+  const handleSaveCalculation = async () => {
+    if (!selectedMethod) return;
+    setReportStatus('Сохранение расчёта...');
+    setApiError(null);
+    try {
+      await saveCalculation(projectName, line, errors, selectedMethod, 'DRG_SERIES', context);
+      setReportStatus('Расчёт сохранён в историю');
+      setHistoryRefreshToken((value) => value + 1);
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'Ошибка сохранения расчёта');
+      setReportStatus('');
+    }
+  };
+
   const flowmeterName = selectedMethod?.title.split('. ').at(-1) ?? 'ДРГ.М';
   const deltaTotal = calculation?.delta_total ?? 0;
   const limit = calculation?.limit ?? selectedMethod?.delta_total_max ?? 5;
@@ -127,6 +144,7 @@ function App() {
           <div><div className="breadcrumbs">Главная / Конструктор УУГ / Средства измерений</div><h1>Конструктор измерительной линии</h1></div>
           <div className="top-actions">
             <span className={`calc-status ${apiError ? 'error' : ''}`}><Activity size={16} /> {apiError ? 'Ошибка API' : isLoading ? 'Расчёт...' : reportStatus || 'Расчёт актуален'}</span>
+            <button className="ghost-button" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить</button>
             <button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button>
             <button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>Сформировать PDF</button>
           </div>
@@ -136,6 +154,10 @@ function App() {
           <aside className="left-panel panel">
             <div className="panel-header"><span>Шаг 1–2</span><strong>Параметры ИЛ и СИ</strong></div>
             <div className="stepper"><span className="step done">1</span><span className="step-line"></span><span className="step active">2</span><span className="step-line"></span><span className="step">3</span><span className="step-line"></span><span className="step">4</span></div>
+
+            <FormGroup title="Проект / объект">
+              <TextField label="Название расчёта" value={projectName} onChange={setProjectName} />
+            </FormGroup>
 
             <FormGroup title="Трубопровод">
               <NumberField label="Dn трубы, мм" value={line.pipe_dn_mm} onChange={(value) => setLine({ ...line, pipe_dn_mm: value })} />
@@ -199,21 +221,16 @@ function App() {
               {(calculation?.contributions ?? []).map((item) => <div className="bar-row" key={item.code}><div className="bar-label">{item.label}</div><div className="bar-track"><span className={`bar-fill ${item.share_percent > 50 ? 'warn' : 'ok'}`} style={{ width: `${Math.max(item.share_percent, 2)}%` }} /></div><div className="bar-value">{item.weighted_value.toFixed(3)}%</div></div>)}
             </div>
 
-            <div className="chart-card audit-card">
-              <div className="chart-title">Аудит расчёта DRG_SERIES</div>
-              {(calculation?.audit_log ?? []).map((row) => <code key={row}>{row}</code>)}
-            </div>
+            <div className="chart-card audit-card"><div className="chart-title">Аудит расчёта DRG_SERIES</div>{(calculation?.audit_log ?? []).map((row) => <code key={row}>{row}</code>)}</div>
           </section>
 
           <aside className="right-panel panel">
             <div className="panel-header"><span>Шаг 4</span><strong>Результаты и подбор МИ</strong></div>
             <div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(255,255,255,0.08) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>
             {apiError && <div className="api-error">{apiError}</div>}
-            <div className="report-card">
-              <div className="rec-label">→ Протокол расчёта</div>
-              <p>Выгрузка текущего расчёта с выбранной МИ, PTZ-параметрами, вкладом составляющих и журналом аудита.</p>
-              <div className="library-actions two"><button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button><button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>PDF</button></div>
-            </div>
+            <div className="report-card"><div className="rec-label">→ Сохранение расчёта</div><p>Сохраняет расчёт в историю с привязкой к версии МИ и SHA-256 документа.</p><button className="primary-button full-width" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить расчёт</button></div>
+            <div className="report-card"><div className="rec-label">→ Протокол расчёта</div><p>Выгрузка текущего расчёта с выбранной МИ, PTZ-параметрами, вкладом составляющих и журналом аудита.</p><div className="library-actions two"><button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button><button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>PDF</button></div></div>
+            <HistoryPanel refreshToken={historyRefreshToken} />
             <div className="method-list">{compatibility.map((method) => <div className={`method-card ${method.status}`} key={method.mi_id} onClick={() => setSelectedMethodId(method.mi_id)}><div className="method-top"><strong>{method.title.split('. ').at(-1)}</strong><span className="score">{method.score}</span></div><div className="method-range">{method.registration_number}</div><div className="method-status">{method.status === 'full_match' ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div><p>{method.reasons[0]}</p></div>)}</div>
             <div className="recommendation"><div className="rec-label">→ Рекомендация</div><p>{calculation?.status === 'fail' ? 'Требуется замена СИ или выбор другой МИ: расчётная величина выше предела.' : 'Текущая конфигурация проходит по диапазону Q/P/T и укладывается в предел расширенной неопределённости.'}</p></div>
             <MethodLibraryPanel methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} />
@@ -224,9 +241,8 @@ function App() {
   );
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return <label className="field"><span>{label}</span><input type="number" step="any" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>;
-}
+function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) { return <label className="field"><span>{label}</span><input type="number" step="any" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
+function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="field"><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
 function FormGroup({ title, children }: { title: string; children: React.ReactNode }) { return <section className="form-group"><h3>{title}</h3>{children}</section>; }
 function InstrumentCard({ title, name, meta, status }: { title: string; name: string; meta: string; status: string }) { return <div className="instrument-card"><div><div className="instrument-title">{title}</div><strong>{name}</strong><p>{meta}</p></div><span className="status-ok">{status}</span></div>; }
 function Kpi({ title, value, status }: { title: string; value: string; status: 'ok' | 'warn' | 'info' | 'danger' }) { return <div className={`kpi ${status}`}><span>{title}</span><strong>{value}</strong></div>; }
