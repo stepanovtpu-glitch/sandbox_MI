@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 
 from app.calculation import calculate
 from app.calculation_history import get_calculation_record, list_calculation_records, save_calculation_record
-from app.document_storage import get_method_document, save_method_document
+from app.document_storage import get_method_document, save_method_document, verify_method_document
 from app.method_library import (
     add_method_test_case,
     bootstrap_method_library,
@@ -125,6 +125,14 @@ def download_method_document(mi_id: str, version_id: str):
         media_type='application/pdf',
         filename=document.get('file_name') or 'method_document.pdf',
     )
+
+
+@app.get('/api/methods/{mi_id}/versions/{version_id}/document/verify')
+def verify_document(mi_id: str, version_id: str):
+    version = get_method_version(mi_id, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail='Measurement method version not found')
+    return verify_method_document(mi_id, version_id)
 
 
 @app.get('/api/calculations')
