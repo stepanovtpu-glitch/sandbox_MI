@@ -6,6 +6,7 @@ from typing import Any, Iterator
 
 DB_DIR = Path(__file__).resolve().parents[1] / 'data'
 DB_PATH = DB_DIR / 'gasmeter.db'
+SCHEMA_VERSION = 1
 
 
 @contextmanager
@@ -24,6 +25,12 @@ def init_db() -> None:
     with get_connection() as connection:
         connection.executescript(
             '''
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                description TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS measurement_methods (
                 mi_id TEXT PRIMARY KEY,
                 current_version_id TEXT,
@@ -71,6 +78,37 @@ def init_db() -> None:
                 ON calculation_records(mi_id);
             '''
         )
+        _ensure_schema_version(connection)
+
+
+def _ensure_schema_version(connection: sqlite3.Connection) -> None:
+    current_version = _current_schema_version(connection)
+    if current_version < 1:
+        connection.execute(
+            'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+            (1, 'Initial schema: methods, method versions, documents, calculation history'),
+        )
+    if _current_schema_version(connection) > SCHEMA_VERSION:
+        raise RuntimeError('Database schema is newer than this application version')
+
+
+def _current_schema_version(connection: sqlite3.Connection) -> int:
+    row = connection.execute('SELECT MAX(version) AS version FROM schema_migrations').fetchone()
+    return int(row['version'] or 0)
+
+
+def get_schema_version() -> int:
+    with get_connection() as connection:
+        connection.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                description TEXT NOT NULL
+            )
+            '''
+        )
+        return _current_schema_version(connection)
 
 
 def fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
