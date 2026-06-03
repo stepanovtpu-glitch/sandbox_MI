@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Database, FileText, Gauge, History, Settings, ShieldCheck } from 'lucide-react';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
-import { calculate, getMethods, scoreMethods, type CalculationContext, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
+import { calculate, downloadReport, getMethods, scoreMethods, type CalculationContext, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = {
   pipe_dn_mm: 100,
@@ -52,6 +52,7 @@ function App() {
   const [compatibility, setCompatibility] = useState<MethodCompatibility[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [reportStatus, setReportStatus] = useState<string>('');
 
   const selectedMethod = useMemo(
     () => methods.find((method) => method.mi_id === selectedMethodId) ?? methods[0] ?? null,
@@ -83,6 +84,19 @@ function App() {
       .finally(() => setIsLoading(false));
   }, [line, errors, selectedMethod, context]);
 
+  const handleDownloadReport = async (format: 'pdf' | 'docx') => {
+    if (!selectedMethod) return;
+    setReportStatus(format === 'pdf' ? 'Формирование PDF...' : 'Формирование DOCX...');
+    setApiError(null);
+    try {
+      await downloadReport(format, line, errors, selectedMethod, 'DRG_SERIES', context);
+      setReportStatus(format === 'pdf' ? 'PDF-протокол сформирован' : 'DOCX-протокол сформирован');
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'Ошибка формирования протокола');
+      setReportStatus('');
+    }
+  };
+
   const flowmeterName = selectedMethod?.title.split('. ').at(-1) ?? 'ДРГ.М';
   const deltaTotal = calculation?.delta_total ?? 0;
   const limit = calculation?.limit ?? selectedMethod?.delta_total_max ?? 5;
@@ -112,9 +126,9 @@ function App() {
         <header className="topbar">
           <div><div className="breadcrumbs">Главная / Конструктор УУГ / Средства измерений</div><h1>Конструктор измерительной линии</h1></div>
           <div className="top-actions">
-            <span className={`calc-status ${apiError ? 'error' : ''}`}><Activity size={16} /> {apiError ? 'Ошибка API' : isLoading ? 'Расчёт...' : 'Расчёт актуален'}</span>
-            <button className="ghost-button">Сохранить</button>
-            <button className="primary-button">Сформировать протокол</button>
+            <span className={`calc-status ${apiError ? 'error' : ''}`}><Activity size={16} /> {apiError ? 'Ошибка API' : isLoading ? 'Расчёт...' : reportStatus || 'Расчёт актуален'}</span>
+            <button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button>
+            <button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>Сформировать PDF</button>
           </div>
         </header>
 
@@ -195,8 +209,13 @@ function App() {
             <div className="panel-header"><span>Шаг 4</span><strong>Результаты и подбор МИ</strong></div>
             <div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(255,255,255,0.08) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>
             {apiError && <div className="api-error">{apiError}</div>}
+            <div className="report-card">
+              <div className="rec-label">→ Протокол расчёта</div>
+              <p>Выгрузка текущего расчёта с выбранной МИ, PTZ-параметрами, вкладом составляющих и журналом аудита.</p>
+              <div className="library-actions two"><button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button><button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>PDF</button></div>
+            </div>
             <div className="method-list">{compatibility.map((method) => <div className={`method-card ${method.status}`} key={method.mi_id} onClick={() => setSelectedMethodId(method.mi_id)}><div className="method-top"><strong>{method.title.split('. ').at(-1)}</strong><span className="score">{method.score}</span></div><div className="method-range">{method.registration_number}</div><div className="method-status">{method.status === 'full_match' ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div><p>{method.reasons[0]}</p></div>)}</div>
-            <div className="recommendation"><div className="rec-label">→ Рекомендация</div><p>{calculation?.status === 'fail' ? 'Требуется замена СИ или выбор другой МИ: расчётная величина выше предела.' : 'Текущая конфигурация проходит по диапазону Q/P/T и укладывается в предел расширенной неопределённости.'}</p><button className="secondary-button">Открыть аудит расчёта</button></div>
+            <div className="recommendation"><div className="rec-label">→ Рекомендация</div><p>{calculation?.status === 'fail' ? 'Требуется замена СИ или выбор другой МИ: расчётная величина выше предела.' : 'Текущая конфигурация проходит по диапазону Q/P/T и укладывается в предел расширенной неопределённости.'}</p></div>
             <MethodLibraryPanel methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} />
           </aside>
         </section>
