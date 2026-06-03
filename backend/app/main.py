@@ -1,8 +1,10 @@
+from pydantic import BaseModel
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.calculation import calculate
+from app.calculation_history import get_calculation_record, list_calculation_records, save_calculation_record
 from app.document_storage import get_method_document, save_method_document
 from app.method_library import (
     add_method_test_case,
@@ -28,6 +30,12 @@ from app.scoring import score_methods
 from app.test_runner import run_method_test_cases
 
 app = FastAPI(title='GasMeter Pro', version='0.1.0')
+
+
+class SaveCalculationPayload(BaseModel):
+    project_name: str | None = None
+    calculation: CalculationRequest
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -117,6 +125,25 @@ def download_method_document(mi_id: str, version_id: str):
         media_type='application/pdf',
         filename=document.get('file_name') or 'method_document.pdf',
     )
+
+
+@app.get('/api/calculations')
+def calculation_history(limit: int = 50):
+    return list_calculation_records(limit=limit)
+
+
+@app.get('/api/calculations/{record_id}')
+def calculation_record(record_id: str):
+    record = get_calculation_record(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail='Calculation record not found')
+    return record
+
+
+@app.post('/api/calculations')
+def save_calculation(payload: SaveCalculationPayload):
+    result = _calculate_with_request_template(payload.calculation)
+    return save_calculation_record(payload.calculation, result, project_name=payload.project_name)
 
 
 @app.post('/api/reports/pdf')
