@@ -66,6 +66,16 @@ export type CalculationRecord = {
   conclusion: string;
 };
 
+export type SystemInfo = {
+  status: 'ok' | string;
+  application: string;
+  version: string;
+  schema_version: number;
+  expected_schema_version: number;
+  database_path: string;
+  database_exists: boolean;
+};
+
 export type MethodCompatibility = { mi_id: string; registration_number: string; title: string; status: 'full_match' | 'partial_match' | 'not_applicable'; score: number; reasons: string[]; };
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
@@ -93,6 +103,7 @@ async function downloadRequest(path: string, body: unknown, fallbackName: string
   URL.revokeObjectURL(url);
 }
 
+export function getSystemInfo() { return request<SystemInfo>('/api/system/info'); }
 export function getMethods() { return request<MeasurementMethod[]>('/api/methods'); }
 export function getMethodVersions(miId: string) { return request<MeasurementMethodVersion[]>(`/api/methods/${miId}/versions`); }
 export function createMethodVersion(miId: string, method: MeasurementMethod, changeComment: string, calculationTemplate = 'DRG_SERIES') { return request<MeasurementMethodVersion>(`/api/methods/${miId}/versions`, { method: 'POST', body: JSON.stringify({ method, change_comment: changeComment, calculation_template: calculationTemplate }) }); }
