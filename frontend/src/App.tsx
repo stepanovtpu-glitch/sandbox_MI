@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Activity, Database, FileText, Gauge, History, Settings, ShieldCheck } from 'lucide-react';
 import { HistoryPanel } from './HistoryPanel';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
@@ -243,7 +243,7 @@ function App() {
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) { return <label className="field"><span>{label}</span><input type="number" step="any" value={value} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="field"><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
-function FormGroup({ title, children }: { title: string; children: React.ReactNode }) { return <section className="form-group"><h3>{title}</h3>{children}</section>; }
+function FormGroup({ title, children }: { title: string; children: ReactNode }) { return <section className="form-group"><h3>{title}</h3>{children}</section>; }
 function InstrumentCard({ title, name, meta, status }: { title: string; name: string; meta: string; status: string }) { return <div className="instrument-card"><div><div className="instrument-title">{title}</div><strong>{name}</strong><p>{meta}</p></div><span className="status-ok">{status}</span></div>; }
 function Kpi({ title, value, status }: { title: string; value: string; status: 'ok' | 'warn' | 'info' | 'danger' }) { return <div className={`kpi ${status}`}><span>{title}</span><strong>{value}</strong></div>; }
 
