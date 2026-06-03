@@ -47,6 +47,28 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_method_versions_mi_id
                 ON measurement_method_versions(mi_id);
+
+            CREATE TABLE IF NOT EXISTS calculation_records (
+                record_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                project_name TEXT,
+                mi_id TEXT,
+                method_version_id TEXT,
+                document_sha256 TEXT,
+                status TEXT NOT NULL,
+                delta_total REAL NOT NULL,
+                limit_value REAL,
+                calculation_template TEXT NOT NULL,
+                request_json TEXT NOT NULL,
+                result_json TEXT NOT NULL,
+                conclusion TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_calculation_records_created_at
+                ON calculation_records(created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_calculation_records_mi_id
+                ON calculation_records(mi_id);
             '''
         )
 
