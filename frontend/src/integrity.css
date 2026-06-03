@@ -1,0 +1,40 @@
+.integrity-button {
+  width: 100%;
+  margin-top: 9px;
+  height: 30px;
+  border: 1px solid rgba(0, 200, 180, 0.22);
+  background: rgba(0, 200, 180, 0.08);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.integrity-status.valid {
+  border-color: rgba(63, 185, 80, 0.32);
+  background: rgba(63, 185, 80, 0.08);
+}
+
+.integrity-status.valid span,
+.integrity-status.valid b {
+  color: var(--ok);
+}
+
+.integrity-status.changed {
+  border-color: rgba(248, 81, 73, 0.32);
+  background: rgba(248, 81, 73, 0.08);
+}
+
+.integrity-status.changed span,
+.integrity-status.changed b {
+  color: var(--danger);
+}
+
+.integrity-status.missing {
+  border-color: rgba(210, 153, 34, 0.32);
+  background: rgba(210, 153, 34, 0.08);
+}
+
+.integrity-status.missing span,
+.integrity-status.missing b {
+  color: var(--warn);
+}
