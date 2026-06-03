@@ -5,6 +5,8 @@ import {
   getMethodDocumentUrl,
   getMethodVersions,
   uploadMethodDocument,
+  verifyMethodDocument,
+  type DocumentVerification,
   type MeasurementMethod,
   type MeasurementMethodVersion,
 } from './api';
@@ -23,6 +25,8 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
   const [changeComment, setChangeComment] = useState('Новая версия МИ / обновление диапазонов и требований');
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingVersionId, setUploadingVersionId] = useState<string | null>(null);
+  const [verification, setVerification] = useState<DocumentVerification | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [targetVersionId, setTargetVersionId] = useState<string | null>(null);
@@ -30,6 +34,7 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
   useEffect(() => {
     if (!selectedMethod) return;
     setDraft({ ...selectedMethod });
+    setVerification(null);
     reloadVersions(selectedMethod.mi_id);
   }, [selectedMethod]);
 
@@ -55,6 +60,7 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
       await createMethodVersion(draft.mi_id, draft, changeComment);
       const nextVersions = await getMethodVersions(draft.mi_id);
       setVersions(nextVersions);
+      setVerification(null);
       await onRefreshMethods();
       onSelectMethod(draft.mi_id);
     } catch (err) {
@@ -77,6 +83,7 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
     setError(null);
     try {
       await uploadMethodDocument(selectedMethod.mi_id, targetVersionId, file);
+      setVerification(null);
       reloadVersions(selectedMethod.mi_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка загрузки PDF');
@@ -94,6 +101,19 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
   const printPdf = (versionId: string) => {
     const printWindow = window.open(getMethodDocumentUrl(selectedMethod.mi_id, versionId), '_blank', 'noopener,noreferrer');
     if (printWindow) printWindow.addEventListener('load', () => printWindow.print());
+  };
+
+  const handleVerifyDocument = async () => {
+    if (!activeVersion) return;
+    setIsVerifying(true);
+    setError(null);
+    try {
+      setVerification(await verifyMethodDocument(selectedMethod.mi_id, activeVersion.version_id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка проверки SHA-256');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleVersionUpdated = (updatedVersion: MeasurementMethodVersion) => {
@@ -153,12 +173,15 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
 
           <div className="library-card">
             <div className="library-card-title">Документ активной версии</div>
-            <DocumentInfo version={activeVersion} />
+            <DocumentInfo version={activeVersion} verification={verification} />
             <div className="library-actions three">
               <button className="ghost-button" onClick={() => activeVersion && beginUpload(activeVersion.version_id)} disabled={!activeVersion || !!uploadingVersionId}>{uploadingVersionId === activeVersion?.version_id ? 'Загрузка...' : 'Загрузить PDF'}</button>
               <button className="ghost-button" onClick={() => activeVersion && openPdf(activeVersion.version_id)} disabled={!activeVersion?.document?.file_name}>Открыть PDF</button>
               <button className="secondary-button" onClick={() => activeVersion && printPdf(activeVersion.version_id)} disabled={!activeVersion?.document?.file_name}>Печать</button>
             </div>
+            <button className="integrity-button" onClick={handleVerifyDocument} disabled={!activeVersion || isVerifying}>
+              {isVerifying ? 'Проверка SHA-256...' : 'Проверить файл МИ по SHA-256'}
+            </button>
           </div>
 
           <div className="library-card">
@@ -202,10 +225,24 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
   );
 }
 
-function DocumentInfo({ version }: { version?: MeasurementMethodVersion }) {
+function DocumentInfo({ version, verification }: { version?: MeasurementMethodVersion; verification: DocumentVerification | null }) {
   if (!version) return <div className="document-empty">Версия не выбрана</div>;
   if (!version.document?.file_name) return <div className="document-empty">PDF к версии не загружен</div>;
-  return <div className="document-info"><div><span>Файл</span><b>{version.document.file_name}</b></div><div><span>SHA-256</span><b>{version.document.sha256 ?? 'не рассчитан'}</b></div></div>;
+  return (
+    <div className="document-info">
+      <div><span>Файл</span><b>{version.document.file_name}</b></div>
+      <div><span>SHA-256</span><b>{version.document.sha256 ?? 'не рассчитан'}</b></div>
+      {verification && (
+        <div className={`integrity-status ${verification.status}`}>
+          <span>{verification.status}</span>
+          <b>{verification.message}</b>
+        </div>
+      )}
+      {verification?.actual_sha256 && verification.actual_sha256 !== version.document.sha256 && (
+        <div><span>Факт SHA</span><b>{verification.actual_sha256}</b></div>
+      )}
+    </div>
+  );
 }
 
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
