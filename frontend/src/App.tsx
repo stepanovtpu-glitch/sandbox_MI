@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Activity, Database, FileText, Gauge, History, Settings, ShieldCheck } from 'lucide-react';
+import { DesignScreenForm } from './DesignScreenForm';
 import { HistoryPanel } from './HistoryPanel';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
 import { SystemStatusPanel } from './SystemStatusPanel';
@@ -196,7 +197,8 @@ function App() {
           </aside>
 
           <section className="center-panel panel">
-            <div className="panel-header row"><div><span>Шаг 3</span><strong>Схема ИЛ и структура погрешности</strong></div><span className="tag info">DRG_SERIES / PTZ</span></div>
+            <div className="panel-header row"><div><span>Шаг 3</span><strong>Экранная форма и схема ИЛ</strong></div><span className="tag info">DRG_SERIES / PTZ</span></div>
+            <DesignScreenForm projectName={projectName} selectedMethod={selectedMethod} line={line} context={context} totalStatus={totalStatus} deltaTotal={deltaTotal} limit={limit} />
             <div className="pipeline-card">
               <svg viewBox="0 0 820 220" className="pipeline-svg" role="img" aria-label="Схема измерительной линии">
                 <defs><linearGradient id="pipe" x1="0" x2="1"><stop offset="0%" stopColor="#1f3a4a" /><stop offset="50%" stopColor="#32576c" /><stop offset="100%" stopColor="#1f3a4a" /></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3.5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
