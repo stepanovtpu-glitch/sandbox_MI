@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Activity, Database, FileText, Gauge, History, Settings, ShieldCheck } from 'lucide-react';
 import { HistoryPanel } from './HistoryPanel';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
+import { SystemStatusPanel } from './SystemStatusPanel';
 import { calculate, downloadReport, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = {
@@ -226,6 +227,7 @@ function App() {
 
           <aside className="right-panel panel">
             <div className="panel-header"><span>Шаг 4</span><strong>Результаты и подбор МИ</strong></div>
+            <SystemStatusPanel />
             <div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(255,255,255,0.08) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>
             {apiError && <div className="api-error">{apiError}</div>}
             <div className="report-card"><div className="rec-label">→ Сохранение расчёта</div><p>Сохраняет расчёт в историю с привязкой к версии МИ и SHA-256 документа.</p><button className="primary-button full-width" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить расчёт</button></div>
