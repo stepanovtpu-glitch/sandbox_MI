@@ -1,0 +1,96 @@
+.screen-form-card {
+  margin-bottom: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 200, 180, 0.28);
+  background: linear-gradient(135deg, rgba(16, 37, 56, 0.92), rgba(4, 13, 21, 0.9));
+}
+
+.screen-form-titlebar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.screen-form-kicker {
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.screen-form-titlebar h2 {
+  margin: 5px 0 0;
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.screen-form-status {
+  min-width: 136px;
+  text-align: center;
+  padding: 8px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.screen-form-status.ok {
+  color: var(--ok);
+  border-color: rgba(63, 185, 80, 0.35);
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.screen-form-status.warn {
+  color: var(--warn);
+  border-color: rgba(210, 153, 34, 0.35);
+  background: rgba(210, 153, 34, 0.1);
+}
+
+.screen-form-status.danger {
+  color: var(--danger);
+  border-color: rgba(248, 81, 73, 0.35);
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.screen-form-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  gap: 9px;
+}
+
+.screen-form-cell {
+  min-height: 58px;
+  padding: 10px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: rgba(4, 13, 21, 0.42);
+}
+
+.screen-form-cell.wide {
+  grid-column: span 2;
+}
+
+.screen-form-cell span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.screen-form-cell strong {
+  display: block;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
