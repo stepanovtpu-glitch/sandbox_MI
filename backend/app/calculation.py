@@ -1,7 +1,7 @@
 from math import sqrt
 from typing import Any
 
-from app.calculation_templates import calculate_drg_series
+from app.calculation_templates import calculate_template
 from app.schemas import CalculationRequest, CalculationResult, ContributionResult
 
 
@@ -16,8 +16,9 @@ def calculate_total_error(delta_q, delta_p, delta_t, delta_vc, delta_c, kp=1.0, 
 
 
 def calculate(request: CalculationRequest, template: str | None = None, context: dict[str, Any] | None = None) -> CalculationResult:
-    if template == 'DRG_SERIES':
-        return calculate_drg_series(request, context=context)
+    template_result = calculate_template(request, template, context=context)
+    if template_result:
+        return template_result
     return calculate_manual_quadrature(request)
 
 
@@ -73,6 +74,7 @@ def calculate_manual_quadrature(request: CalculationRequest) -> CalculationResul
     else:
         status = 'fail'
     audit_log = [
+        'template=MANUAL_QUADRATURE',
         'Расчёт выполнен методом квадратурного суммирования составляющих неопределённости/погрешности.',
         f'delta_q={errors.delta_q}',
         f'delta_p={errors.delta_p}; kp={errors.kp}; weighted_delta_p={weighted["delta_p"]}',
