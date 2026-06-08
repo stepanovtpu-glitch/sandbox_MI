@@ -1,3 +1,6 @@
+export type CalculationTemplateCode = 'DRG_SERIES' | 'GAS_VOLUME_PTZ' | 'ROTARY_COUNTER_GAS' | 'TURBINE_COUNTER_GAS' | 'ULTRASONIC_GAS' | 'MANUAL_QUADRATURE' | 'CUSTOM';
+export type CalculationTemplateInfo = { code: CalculationTemplateCode; title: string; status: 'ready' | 'draft' | string };
+
 export type MeasurementMethod = {
   mi_id: string;
   registration_number: string;
@@ -22,7 +25,6 @@ export type MeasurementMethod = {
 
 export type MethodDocument = { file_name?: string | null; storage_path?: string | null; sha256?: string | null };
 export type DocumentVerification = { status: 'valid' | 'changed' | 'missing'; message: string; stored_sha256?: string | null; actual_sha256?: string | null; file_name?: string | null };
-
 export type MethodTestCase = { name: string; input_data: Record<string, unknown>; expected_result: Record<string, unknown>; tolerance: number; };
 export type MethodTestResult = { name: string; status: 'pass' | 'fail' | 'not_implemented'; expected_result: Record<string, unknown>; actual_result: Record<string, unknown> | null; message: string; };
 
@@ -30,7 +32,7 @@ export type MeasurementMethodVersion = {
   version_id: string;
   version_number: number;
   status: 'draft' | 'active' | 'archived';
-  calculation_template: 'DRG_SERIES' | 'MANUAL_QUADRATURE' | 'CUSTOM';
+  calculation_template: CalculationTemplateCode;
   created_at: string;
   method: MeasurementMethod;
   change_comment?: string | null;
@@ -104,9 +106,10 @@ async function downloadRequest(path: string, body: unknown, fallbackName: string
 }
 
 export function getSystemInfo() { return request<SystemInfo>('/api/system/info'); }
+export function getCalculationTemplates() { return request<CalculationTemplateInfo[]>('/api/calculation-templates'); }
 export function getMethods() { return request<MeasurementMethod[]>('/api/methods'); }
 export function getMethodVersions(miId: string) { return request<MeasurementMethodVersion[]>(`/api/methods/${miId}/versions`); }
-export function createMethodVersion(miId: string, method: MeasurementMethod, changeComment: string, calculationTemplate = 'DRG_SERIES') { return request<MeasurementMethodVersion>(`/api/methods/${miId}/versions`, { method: 'POST', body: JSON.stringify({ method, change_comment: changeComment, calculation_template: calculationTemplate }) }); }
+export function createMethodVersion(miId: string, method: MeasurementMethod, changeComment: string, calculationTemplate: CalculationTemplateCode = 'DRG_SERIES') { return request<MeasurementMethodVersion>(`/api/methods/${miId}/versions`, { method: 'POST', body: JSON.stringify({ method, change_comment: changeComment, calculation_template: calculationTemplate }) }); }
 export function addMethodTestCase(miId: string, versionId: string, testCase: MethodTestCase) { return request<MeasurementMethodVersion>(`/api/methods/${miId}/versions/${versionId}/test-cases`, { method: 'POST', body: JSON.stringify({ test_case: testCase }) }); }
 export function runMethodTestCases(miId: string, versionId: string) { return request<MethodTestResult[]>(`/api/methods/${miId}/versions/${versionId}/test-cases/run`, { method: 'POST' }); }
 export function verifyMethodDocument(miId: string, versionId: string) { return request<DocumentVerification>(`/api/methods/${miId}/versions/${versionId}/document/verify`); }
@@ -120,27 +123,10 @@ export async function uploadMethodDocument(miId: string, versionId: string, file
 }
 
 export function getMethodDocumentUrl(miId: string, versionId: string) { return `${API_BASE}/api/methods/${miId}/versions/${versionId}/document`; }
-
-export function makeCalculationRequest(line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate = 'DRG_SERIES', context: CalculationContext = {}) {
-  return { line, errors, method, calculation_template: calculationTemplate, context };
-}
-
-export function calculate(line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate = 'DRG_SERIES', context: CalculationContext = {}) {
-  return request<CalculationResult>('/api/calculate', { method: 'POST', body: JSON.stringify(makeCalculationRequest(line, errors, method, calculationTemplate, context)) });
-}
-
-export function saveCalculation(projectName: string, line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate = 'DRG_SERIES', context: CalculationContext = {}) {
-  return request<CalculationRecord>('/api/calculations', { method: 'POST', body: JSON.stringify({ project_name: projectName, calculation: makeCalculationRequest(line, errors, method, calculationTemplate, context) }) });
-}
-
+export function makeCalculationRequest(line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate: CalculationTemplateCode = 'DRG_SERIES', context: CalculationContext = {}) { return { line, errors, method, calculation_template: calculationTemplate, context }; }
+export function calculate(line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate: CalculationTemplateCode = 'DRG_SERIES', context: CalculationContext = {}) { return request<CalculationResult>('/api/calculate', { method: 'POST', body: JSON.stringify(makeCalculationRequest(line, errors, method, calculationTemplate, context)) }); }
+export function saveCalculation(projectName: string, line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate: CalculationTemplateCode = 'DRG_SERIES', context: CalculationContext = {}) { return request<CalculationRecord>('/api/calculations', { method: 'POST', body: JSON.stringify({ project_name: projectName, calculation: makeCalculationRequest(line, errors, method, calculationTemplate, context) }) }); }
 export function getCalculationHistory(limit = 20) { return request<CalculationRecord[]>(`/api/calculations?limit=${limit}`); }
 export function getCalculationRecord(recordId: string) { return request<CalculationRecord>(`/api/calculations/${recordId}`); }
-
-export function downloadReport(format: 'pdf' | 'docx', line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate = 'DRG_SERIES', context: CalculationContext = {}) {
-  const fallbackName = `gasmeter_protocol.${format}`;
-  return downloadRequest(`/api/reports/${format}`, makeCalculationRequest(line, errors, method, calculationTemplate, context), fallbackName);
-}
-
-export function scoreMethods(line: LineParameters, calculation: CalculationResult | null) {
-  return request<MethodCompatibility[]>('/api/methods/score', { method: 'POST', body: JSON.stringify({ line, calculation }) });
-}
+export function downloadReport(format: 'pdf' | 'docx', line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate: CalculationTemplateCode = 'DRG_SERIES', context: CalculationContext = {}) { return downloadRequest(`/api/reports/${format}`, makeCalculationRequest(line, errors, method, calculationTemplate, context), `gasmeter_protocol.${format}`); }
+export function scoreMethods(line: LineParameters, calculation: CalculationResult | null) { return request<MethodCompatibility[]>('/api/methods/score', { method: 'POST', body: JSON.stringify({ line, calculation }) }); }
