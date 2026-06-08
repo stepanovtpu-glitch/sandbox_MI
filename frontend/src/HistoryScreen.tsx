@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getCalculationHistory, getCalculationRecord, type CalculationRecord } from './api';
+import { downloadReport, getCalculationHistory, getCalculationRecord, type CalculationContext, type CalculationRecord, type CalculationTemplateCode, type ErrorContributions, type LineParameters, type MeasurementMethod } from './api';
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
   onLoadRecord?: (record: CalculationRecord) => void;
+};
+
+type StoredCalculationRequest = {
+  line?: LineParameters;
+  errors?: ErrorContributions;
+  context?: CalculationContext;
+  method?: MeasurementMethod | null;
+  calculation_template?: CalculationTemplateCode;
 };
 
 export function HistoryScreen({ isOpen, onClose, onLoadRecord }: Props) {
@@ -13,6 +21,7 @@ export function HistoryScreen({ isOpen, onClose, onLoadRecord }: Props) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [error, setError] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -28,7 +37,7 @@ export function HistoryScreen({ isOpen, onClose, onLoadRecord }: Props) {
     const normalized = query.trim().toLowerCase();
     return records.filter((record) => {
       const matchesStatus = statusFilter === 'all' || record.status === statusFilter;
-      const haystack = `${record.project_name ?? ''} ${record.mi_id ?? ''} ${record.method_version_id ?? ''} ${record.conclusion}`.toLowerCase();
+      const haystack = `${record.project_name ?? ''} ${record.mi_id ?? ''} ${record.method_version_id ?? ''} ${record.calculation_template} ${record.conclusion}`.toLowerCase();
       return matchesStatus && (!normalized || haystack.includes(normalized));
     });
   }, [records, query, statusFilter]);
@@ -48,6 +57,24 @@ export function HistoryScreen({ isOpen, onClose, onLoadRecord }: Props) {
     onClose();
   };
 
+  const exportRecord = async (format: 'pdf' | 'docx') => {
+    if (!selectedRecord) return;
+    const request = selectedRecord.request as StoredCalculationRequest;
+    if (!request.line || !request.errors) {
+      setError('В сохранённой записи нет исходных данных для формирования протокола');
+      return;
+    }
+    setError(null);
+    setExportStatus(format === 'pdf' ? 'Формирование PDF из истории...' : 'Формирование DOCX из истории...');
+    try {
+      await downloadReport(format, request.line, request.errors, request.method ?? null, request.calculation_template ?? 'DRG_SERIES', request.context ?? {});
+      setExportStatus(format === 'pdf' ? 'PDF из истории сформирован' : 'DOCX из истории сформирован');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка формирования протокола из истории');
+      setExportStatus('');
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -60,15 +87,18 @@ export function HistoryScreen({ isOpen, onClose, onLoadRecord }: Props) {
           </div>
           <div className="history-header-actions">
             <button className="primary-button" onClick={loadRecord} disabled={!selectedRecord}>Загрузить в форму</button>
+            <button className="ghost-button" onClick={() => exportRecord('docx')} disabled={!selectedRecord}>DOCX</button>
+            <button className="ghost-button" onClick={() => exportRecord('pdf')} disabled={!selectedRecord}>PDF</button>
             <button className="ghost-button" onClick={onClose}>Закрыть</button>
           </div>
         </header>
 
         <div className="history-toolbar">
-          <label className="field"><span>Поиск</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Объект, МИ, версия, заключение" /></label>
+          <label className="field"><span>Поиск</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Объект, МИ, версия, шаблон, заключение" /></label>
           <label className="field"><span>Статус</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Все</option><option value="pass">Соответствует</option><option value="warn">Требует проверки</option><option value="fail">Не соответствует</option></select></label>
         </div>
 
+        {exportStatus && <div className="history-export-status">{exportStatus}</div>}
         {error && <div className="api-error">{error}</div>}
 
         <div className="history-screen-layout">
@@ -88,14 +118,14 @@ export function HistoryScreen({ isOpen, onClose, onLoadRecord }: Props) {
             </div>
           </div>
 
-          <RecordDetails record={selectedRecord} onLoadRecord={loadRecord} />
+          <RecordDetails record={selectedRecord} onLoadRecord={loadRecord} onExportRecord={exportRecord} />
         </div>
       </section>
     </div>
   );
 }
 
-function RecordDetails({ record, onLoadRecord }: { record: CalculationRecord | null; onLoadRecord: () => void }) {
+function RecordDetails({ record, onLoadRecord, onExportRecord }: { record: CalculationRecord | null; onLoadRecord: () => void; onExportRecord: (format: 'pdf' | 'docx') => void }) {
   if (!record) return <aside className="history-detail-card"><div className="document-empty">Выберите расчёт</div></aside>;
   const result = record.result as { audit_log?: string[]; contributions?: Array<{ code: string; label: string; weighted_value: number; share_percent: number }> };
   return (
@@ -107,6 +137,7 @@ function RecordDetails({ record, onLoadRecord }: { record: CalculationRecord | n
 
       <div className="history-detail-actions">
         <button className="primary-button full-width" onClick={onLoadRecord}>Загрузить параметры в экранную форму</button>
+        <div className="library-actions two"><button className="ghost-button" onClick={() => onExportRecord('docx')}>DOCX из истории</button><button className="ghost-button" onClick={() => onExportRecord('pdf')}>PDF из истории</button></div>
       </div>
 
       <div className="history-detail-grid">
