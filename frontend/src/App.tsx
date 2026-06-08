@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Activity, Database, FileText, Gauge, History, Settings, ShieldCheck } from 'lucide-react';
 import { DesignScreenForm } from './DesignScreenForm';
 import { HistoryPanel } from './HistoryPanel';
+import { HistoryScreen } from './HistoryScreen';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
 import { SystemStatusPanel } from './SystemStatusPanel';
 import { calculate, downloadReport, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
@@ -58,6 +59,7 @@ function App() {
   const [reportStatus, setReportStatus] = useState<string>('');
   const [projectName, setProjectName] = useState('УУГ / расчёт по МИ ДРГ');
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const selectedMethod = useMemo(
     () => methods.find((method) => method.mi_id === selectedMethodId) ?? methods[0] ?? null,
@@ -135,7 +137,7 @@ function App() {
           <a className="nav-item active"><Gauge size={18} /> Конструктор УУГ</a>
           <a className="nav-item"><Database size={18} /> База СИ</a>
           <a className="nav-item"><FileText size={18} /> Библиотека МИ</a>
-          <a className="nav-item"><History size={18} /> История</a>
+          <button className="nav-item nav-button" onClick={() => setIsHistoryOpen(true)}><History size={18} /> История</button>
           <a className="nav-item"><ShieldCheck size={18} /> Отчёты</a>
           <a className="nav-item"><Settings size={18} /> Настройки</a>
         </nav>
@@ -146,6 +148,7 @@ function App() {
           <div><div className="breadcrumbs">Главная / Конструктор УУГ / Средства измерений</div><h1>Конструктор измерительной линии</h1></div>
           <div className="top-actions">
             <span className={`calc-status ${apiError ? 'error' : ''}`}><Activity size={16} /> {apiError ? 'Ошибка API' : isLoading ? 'Расчёт...' : reportStatus || 'Расчёт актуален'}</span>
+            <button className="ghost-button" onClick={() => setIsHistoryOpen(true)}>Журнал</button>
             <button className="ghost-button" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить</button>
             <button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button>
             <button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>Сформировать PDF</button>
@@ -233,6 +236,7 @@ function App() {
             <div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(255,255,255,0.08) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>
             {apiError && <div className="api-error">{apiError}</div>}
             <div className="report-card"><div className="rec-label">→ Сохранение расчёта</div><p>Сохраняет расчёт в историю с привязкой к версии МИ и SHA-256 документа.</p><button className="primary-button full-width" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить расчёт</button></div>
+            <div className="report-card"><div className="rec-label">→ Полный журнал</div><p>Открывает экран истории с фильтрами, карточкой расчёта, вкладом составляющих и audit log.</p><button className="ghost-button full-width" onClick={() => setIsHistoryOpen(true)}>Открыть историю</button></div>
             <div className="report-card"><div className="rec-label">→ Протокол расчёта</div><p>Выгрузка текущего расчёта с выбранной МИ, PTZ-параметрами, вкладом составляющих и журналом аудита.</p><div className="library-actions two"><button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button><button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>PDF</button></div></div>
             <HistoryPanel refreshToken={historyRefreshToken} />
             <div className="method-list">{compatibility.map((method) => <div className={`method-card ${method.status}`} key={method.mi_id} onClick={() => setSelectedMethodId(method.mi_id)}><div className="method-top"><strong>{method.title.split('. ').at(-1)}</strong><span className="score">{method.score}</span></div><div className="method-range">{method.registration_number}</div><div className="method-status">{method.status === 'full_match' ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div><p>{method.reasons[0]}</p></div>)}</div>
@@ -241,6 +245,7 @@ function App() {
           </aside>
         </section>
       </main>
+      <HistoryScreen isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
     </div>
   );
 }
