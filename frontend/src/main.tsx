@@ -8,6 +8,7 @@ import './integrity.css';
 import './system-status.css';
 import './screen-form.css';
 import './history-screen.css';
+import './ui-polish.css';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
