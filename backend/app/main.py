@@ -16,6 +16,7 @@ from app.method_library import (
     list_current_methods,
     list_method_versions,
 )
+from app.pilot_readiness import get_pilot_readiness
 from app.reporting import generate_docx_report, generate_pdf_report
 from app.schemas import (
     CalculationRequest,
@@ -79,6 +80,11 @@ def system_info():
         'database_path': str(DB_PATH),
         'database_exists': DB_PATH.exists(),
     }
+
+
+@app.get('/api/system/readiness')
+def pilot_readiness():
+    return get_pilot_readiness()
 
 
 @app.get('/api/calculation-templates')
