@@ -78,6 +78,9 @@ export type SystemInfo = {
   database_exists: boolean;
 };
 
+export type ReadinessCheck = { code: string; title: string; status: 'pass' | 'partial' | 'fail' | string; weight: number; details: string; score: number };
+export type PilotReadiness = { status: 'pilot_ready' | 'pilot_limited' | 'not_ready' | string; readiness_percent: number; score: number; max_score: number; checks: ReadinessCheck[]; summary: string };
+
 export type MethodCompatibility = { mi_id: string; registration_number: string; title: string; status: 'full_match' | 'partial_match' | 'not_applicable'; score: number; reasons: string[]; };
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
@@ -106,6 +109,7 @@ async function downloadRequest(path: string, body: unknown, fallbackName: string
 }
 
 export function getSystemInfo() { return request<SystemInfo>('/api/system/info'); }
+export function getPilotReadiness() { return request<PilotReadiness>('/api/system/readiness'); }
 export function getCalculationTemplates() { return request<CalculationTemplateInfo[]>('/api/calculation-templates'); }
 export function getMethods() { return request<MeasurementMethod[]>('/api/methods'); }
 export function getMethodVersions(miId: string) { return request<MeasurementMethodVersion[]>(`/api/methods/${miId}/versions`); }
