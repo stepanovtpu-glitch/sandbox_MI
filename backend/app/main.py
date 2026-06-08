@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 
 from app.calculation import calculate
 from app.calculation_history import get_calculation_record, list_calculation_records, save_calculation_record
+from app.calculation_templates import TEMPLATE_TITLES
 from app.database import DB_PATH, SCHEMA_VERSION, get_schema_version
 from app.document_storage import get_method_document, save_method_document, verify_method_document
 from app.method_library import (
@@ -19,6 +20,7 @@ from app.reporting import generate_docx_report, generate_pdf_report
 from app.schemas import (
     CalculationRequest,
     CalculationResult,
+    CalculationTemplate,
     MeasurementMethod,
     MeasurementMethodVersion,
     MethodCompatibility,
@@ -77,6 +79,18 @@ def system_info():
         'database_path': str(DB_PATH),
         'database_exists': DB_PATH.exists(),
     }
+
+
+@app.get('/api/calculation-templates')
+def calculation_templates():
+    return [
+        {
+            'code': template.value,
+            'title': TEMPLATE_TITLES.get(template.value, template.value),
+            'status': 'ready' if template.value in TEMPLATE_TITLES or template == CalculationTemplate.MANUAL_QUADRATURE else 'draft',
+        }
+        for template in CalculationTemplate
+    ]
 
 
 @app.get('/api/methods', response_model=list[MeasurementMethod])
