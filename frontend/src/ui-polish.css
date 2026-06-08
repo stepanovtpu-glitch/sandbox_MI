@@ -1,0 +1,208 @@
+/* Pilot UI polish layer: keeps the dark industrial design consistent across newly added screens. */
+
+button,
+.nav-item,
+.method-card,
+.method-pill,
+.history-table-row {
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
+}
+
+button:hover:not(:disabled),
+.method-card:hover,
+.method-pill:hover,
+.history-table-row:hover {
+  transform: translateY(-1px);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.nav-item:focus-visible,
+.history-table-row:focus-visible,
+.method-card:focus-visible,
+.method-pill:focus-visible {
+  outline: 2px solid rgba(0, 200, 180, 0.55);
+  outline-offset: 2px;
+}
+
+.nav-button {
+  width: 100%;
+  justify-content: flex-start;
+  border: 0;
+  background: transparent;
+}
+
+.nav-button:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+  border: 1px solid rgba(0, 200, 180, 0.16);
+}
+
+.primary-button:hover:not(:disabled) {
+  box-shadow: 0 0 0 1px rgba(0, 200, 180, 0.2), 0 10px 28px rgba(0, 200, 180, 0.16);
+}
+
+.ghost-button:hover:not(:disabled) {
+  border-color: rgba(0, 200, 180, 0.28);
+  background: rgba(0, 200, 180, 0.08);
+}
+
+.template-hint {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+}
+
+.template-hint.ready {
+  color: #b6f6c0;
+  border-color: rgba(63, 185, 80, 0.28);
+  background: rgba(63, 185, 80, 0.08);
+}
+
+.template-hint.draft {
+  color: #f2d39b;
+  border-color: rgba(210, 153, 34, 0.28);
+  background: rgba(210, 153, 34, 0.08);
+}
+
+.document-empty {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(140, 168, 184, 0.3);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.audit-card {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.audit-card code {
+  display: block;
+  margin-bottom: 6px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(116, 155, 178, 0.14);
+  background: rgba(3, 8, 13, 0.42);
+  color: #c9d7df;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.api-error {
+  overflow-wrap: anywhere;
+}
+
+.top-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.calc-status {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field input:hover,
+.field select:hover {
+  border-color: rgba(0, 200, 180, 0.26);
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: rgba(0, 200, 180, 0.45);
+  box-shadow: 0 0 0 3px rgba(0, 200, 180, 0.08);
+}
+
+.left-panel,
+.center-panel,
+.right-panel,
+.history-detail-card,
+.history-table-body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 200, 180, 0.32) rgba(255, 255, 255, 0.04);
+}
+
+.left-panel::-webkit-scrollbar,
+.center-panel::-webkit-scrollbar,
+.right-panel::-webkit-scrollbar,
+.history-detail-card::-webkit-scrollbar,
+.history-table-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.left-panel::-webkit-scrollbar-thumb,
+.center-panel::-webkit-scrollbar-thumb,
+.right-panel::-webkit-scrollbar-thumb,
+.history-detail-card::-webkit-scrollbar-thumb,
+.history-table-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(0, 200, 180, 0.28);
+}
+
+.left-panel::-webkit-scrollbar-track,
+.center-panel::-webkit-scrollbar-track,
+.right-panel::-webkit-scrollbar-track,
+.history-detail-card::-webkit-scrollbar-track,
+.history-table-body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+@media (max-width: 1440px) {
+  body {
+    min-width: 1180px;
+  }
+
+  .app-shell {
+    grid-template-columns: 204px 1fr;
+  }
+
+  .side-nav {
+    width: 204px;
+  }
+
+  .three-column-layout {
+    grid-template-columns: 300px minmax(500px, 1fr) 290px;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .topbar {
+    height: auto;
+    min-height: 52px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    gap: 10px;
+  }
+}
+
+@media (max-height: 820px) {
+  .three-column-layout {
+    min-height: 660px;
+  }
+
+  .pipeline-card {
+    min-height: 225px;
+  }
+
+  .pipeline-svg {
+    height: 220px;
+  }
+
+  .form-group {
+    padding: 10px;
+  }
+}
