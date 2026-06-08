@@ -4,9 +4,10 @@ import { getCalculationHistory, getCalculationRecord, type CalculationRecord } f
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+  onLoadRecord?: (record: CalculationRecord) => void;
 };
 
-export function HistoryScreen({ isOpen, onClose }: Props) {
+export function HistoryScreen({ isOpen, onClose, onLoadRecord }: Props) {
   const [records, setRecords] = useState<CalculationRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<CalculationRecord | null>(null);
   const [query, setQuery] = useState('');
@@ -41,6 +42,12 @@ export function HistoryScreen({ isOpen, onClose }: Props) {
     }
   };
 
+  const loadRecord = () => {
+    if (!selectedRecord || !onLoadRecord) return;
+    onLoadRecord(selectedRecord);
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -51,7 +58,10 @@ export function HistoryScreen({ isOpen, onClose }: Props) {
             <div className="screen-form-kicker">Журнал расчётов</div>
             <h2>История сохранённых расчётов</h2>
           </div>
-          <button className="ghost-button" onClick={onClose}>Закрыть</button>
+          <div className="history-header-actions">
+            <button className="primary-button" onClick={loadRecord} disabled={!selectedRecord}>Загрузить в форму</button>
+            <button className="ghost-button" onClick={onClose}>Закрыть</button>
+          </div>
         </header>
 
         <div className="history-toolbar">
@@ -78,14 +88,14 @@ export function HistoryScreen({ isOpen, onClose }: Props) {
             </div>
           </div>
 
-          <RecordDetails record={selectedRecord} />
+          <RecordDetails record={selectedRecord} onLoadRecord={loadRecord} />
         </div>
       </section>
     </div>
   );
 }
 
-function RecordDetails({ record }: { record: CalculationRecord | null }) {
+function RecordDetails({ record, onLoadRecord }: { record: CalculationRecord | null; onLoadRecord: () => void }) {
   if (!record) return <aside className="history-detail-card"><div className="document-empty">Выберите расчёт</div></aside>;
   const result = record.result as { audit_log?: string[]; contributions?: Array<{ code: string; label: string; weighted_value: number; share_percent: number }> };
   return (
@@ -93,6 +103,10 @@ function RecordDetails({ record }: { record: CalculationRecord | null }) {
       <div className="history-detail-title">
         <div><span>Карточка расчёта</span><strong>{record.project_name || 'Без названия'}</strong></div>
         <b className={`history-detail-status ${record.status}`}>{record.status}</b>
+      </div>
+
+      <div className="history-detail-actions">
+        <button className="primary-button full-width" onClick={onLoadRecord}>Загрузить параметры в экранную форму</button>
       </div>
 
       <div className="history-detail-grid">
