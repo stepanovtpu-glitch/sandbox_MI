@@ -5,7 +5,7 @@ import { HistoryPanel } from './HistoryPanel';
 import { HistoryScreen } from './HistoryScreen';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
 import { SystemStatusPanel } from './SystemStatusPanel';
-import { calculate, downloadReport, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationResult, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
+import { calculate, downloadReport, getCalculationTemplates, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationResult, type CalculationTemplateCode, type CalculationTemplateInfo, type ErrorContributions, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = {
   pipe_dn_mm: 100,
@@ -51,7 +51,9 @@ function App() {
   const [errors] = useState<ErrorContributions>(initialErrors);
   const [context, setContext] = useState<CalculationContext>(initialContext);
   const [methods, setMethods] = useState<MeasurementMethod[]>([]);
+  const [templates, setTemplates] = useState<CalculationTemplateInfo[]>([]);
   const [selectedMethodId, setSelectedMethodId] = useState('drg-m-1600-0169');
+  const [selectedTemplate, setSelectedTemplate] = useState<CalculationTemplateCode>('DRG_SERIES');
   const [calculation, setCalculation] = useState<CalculationResult | null>(null);
   const [compatibility, setCompatibility] = useState<MethodCompatibility[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -66,6 +68,11 @@ function App() {
     [methods, selectedMethodId],
   );
 
+  const selectedTemplateInfo = useMemo(
+    () => templates.find((template) => template.code === selectedTemplate) ?? null,
+    [templates, selectedTemplate],
+  );
+
   const refreshMethods = useCallback(() => {
     return getMethods()
       .then((loadedMethods) => {
@@ -78,10 +85,16 @@ function App() {
   useEffect(() => { refreshMethods(); }, [refreshMethods]);
 
   useEffect(() => {
+    getCalculationTemplates()
+      .then(setTemplates)
+      .catch((error: Error) => setApiError(error.message));
+  }, []);
+
+  useEffect(() => {
     if (!selectedMethod) return;
     setIsLoading(true);
     setApiError(null);
-    calculate(line, errors, selectedMethod, 'DRG_SERIES', context)
+    calculate(line, errors, selectedMethod, selectedTemplate, context)
       .then((result) => {
         setCalculation(result);
         return scoreMethods(line, result);
@@ -89,14 +102,14 @@ function App() {
       .then(setCompatibility)
       .catch((error: Error) => setApiError(error.message))
       .finally(() => setIsLoading(false));
-  }, [line, errors, selectedMethod, context]);
+  }, [line, errors, selectedMethod, selectedTemplate, context]);
 
   const handleDownloadReport = async (format: 'pdf' | 'docx') => {
     if (!selectedMethod) return;
     setReportStatus(format === 'pdf' ? 'Формирование PDF...' : 'Формирование DOCX...');
     setApiError(null);
     try {
-      await downloadReport(format, line, errors, selectedMethod, 'DRG_SERIES', context);
+      await downloadReport(format, line, errors, selectedMethod, selectedTemplate, context);
       setReportStatus(format === 'pdf' ? 'PDF-протокол сформирован' : 'DOCX-протокол сформирован');
     } catch (error) {
       setApiError(error instanceof Error ? error.message : 'Ошибка формирования протокола');
@@ -109,7 +122,7 @@ function App() {
     setReportStatus('Сохранение расчёта...');
     setApiError(null);
     try {
-      await saveCalculation(projectName, line, errors, selectedMethod, 'DRG_SERIES', context);
+      await saveCalculation(projectName, line, errors, selectedMethod, selectedTemplate, context);
       setReportStatus('Расчёт сохранён в историю');
       setHistoryRefreshToken((value) => value + 1);
     } catch (error) {
@@ -160,17 +173,13 @@ function App() {
             <div className="panel-header"><span>Шаг 1–2</span><strong>Параметры ИЛ и СИ</strong></div>
             <div className="stepper"><span className="step done">1</span><span className="step-line"></span><span className="step active">2</span><span className="step-line"></span><span className="step">3</span><span className="step-line"></span><span className="step">4</span></div>
 
-            <FormGroup title="Проект / объект">
-              <TextField label="Название расчёта" value={projectName} onChange={setProjectName} />
-            </FormGroup>
-
+            <FormGroup title="Проект / объект"><TextField label="Название расчёта" value={projectName} onChange={setProjectName} /></FormGroup>
             <FormGroup title="Трубопровод">
               <NumberField label="Dn трубы, мм" value={line.pipe_dn_mm} onChange={(value) => setLine({ ...line, pipe_dn_mm: value })} />
               <NumberField label="Dn расходомера, мм" value={line.flowmeter_dn_mm} onChange={(value) => setLine({ ...line, flowmeter_dn_mm: value })} />
               <NumberField label="Прямой участок до, Dn" value={line.straight_before_dn} onChange={(value) => setLine({ ...line, straight_before_dn: value })} />
               <NumberField label="Прямой участок после, Dn" value={line.straight_after_dn} onChange={(value) => setLine({ ...line, straight_after_dn: value })} />
             </FormGroup>
-
             <FormGroup title="Рабочие условия / область МИ">
               <NumberField label="Q min, м³/ч" value={line.q_min} onChange={(value) => setLine({ ...line, q_min: value })} />
               <NumberField label="Q max, м³/ч" value={line.q_max} onChange={(value) => setLine({ ...line, q_max: value })} />
@@ -179,8 +188,7 @@ function App() {
               <NumberField label="T min, °C" value={line.t_min_c} onChange={(value) => setLine({ ...line, t_min_c: value })} />
               <NumberField label="T max, °C" value={line.t_max_c} onChange={(value) => setLine({ ...line, t_max_c: value })} />
             </FormGroup>
-
-            <FormGroup title="Точка расчёта DRG/PTZ">
+            <FormGroup title="Точка расчёта PTZ">
               <NumberField label="Q рабочий, м³/ч" value={context.working_flow_rate ?? 0} onChange={(value) => setContext({ ...context, working_flow_rate: value })} />
               <NumberField label="P избыточное, МПа" value={context.gauge_pressure_mpa ?? 0} onChange={(value) => setContext({ ...context, gauge_pressure_mpa: value })} />
               <NumberField label="Температура, °C" value={context.temperature_c ?? 0} onChange={(value) => setContext({ ...context, temperature_c: value })} />
@@ -188,9 +196,10 @@ function App() {
               <NumberField label="Z рабоч." value={context.z_working ?? 1} onChange={(value) => setContext({ ...context, z_working: value })} />
               <NumberField label="Z станд." value={context.z_standard ?? 1} onChange={(value) => setContext({ ...context, z_standard: value })} />
             </FormGroup>
-
-            <FormGroup title="Выбранная МИ">
+            <FormGroup title="МИ и расчётный шаблон">
               <label className="field"><span>Методика</span><select value={selectedMethodId} onChange={(event) => setSelectedMethodId(event.target.value)}>{methods.map((method) => <option key={method.mi_id} value={method.mi_id}>{method.registration_number}</option>)}</select></label>
+              <label className="field"><span>Шаблон расчёта</span><select value={selectedTemplate} onChange={(event) => setSelectedTemplate(event.target.value as CalculationTemplateCode)}>{templates.map((template) => <option key={template.code} value={template.code}>{template.code} · {template.title}</option>)}</select></label>
+              {selectedTemplateInfo && <div className={`template-hint ${selectedTemplateInfo.status}`}>{selectedTemplateInfo.status === 'ready' ? 'Готов к применению' : 'Черновой шаблон'} · {selectedTemplateInfo.title}</div>}
             </FormGroup>
 
             <InstrumentCard title="Расходомер" name={flowmeterName} meta={`δQ ${errors.delta_q}% · ${selectedMethod?.q_min ?? 0}–${selectedMethod?.q_max ?? 0} м³/ч`} status="✓" />
@@ -200,34 +209,12 @@ function App() {
           </aside>
 
           <section className="center-panel panel">
-            <div className="panel-header row"><div><span>Шаг 3</span><strong>Экранная форма и схема ИЛ</strong></div><span className="tag info">DRG_SERIES / PTZ</span></div>
-            <DesignScreenForm projectName={projectName} selectedMethod={selectedMethod} line={line} context={context} totalStatus={totalStatus} deltaTotal={deltaTotal} limit={limit} />
-            <div className="pipeline-card">
-              <svg viewBox="0 0 820 220" className="pipeline-svg" role="img" aria-label="Схема измерительной линии">
-                <defs><linearGradient id="pipe" x1="0" x2="1"><stop offset="0%" stopColor="#1f3a4a" /><stop offset="50%" stopColor="#32576c" /><stop offset="100%" stopColor="#1f3a4a" /></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3.5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
-                <line x1="50" y1="110" x2="770" y2="110" stroke="url(#pipe)" strokeWidth="34" strokeLinecap="round" />
-                <line x1="50" y1="110" x2="770" y2="110" stroke="#00c8b4" strokeWidth="2" strokeDasharray="10 12" opacity="0.55" />
-                <text x="130" y="72" className="svg-label">{line.straight_before_dn} Dn</text><text x="620" y="72" className="svg-label">{line.straight_after_dn} Dn</text>
-                <rect x="340" y="62" width="142" height="96" rx="16" className="flowmeter" filter="url(#glow)" /><text x="365" y="105" className="svg-title">{flowmeterName}</text><text x="371" y="130" className="svg-caption">Q {selectedMethod?.q_min ?? 0}–{selectedMethod?.q_max ?? 0}</text>
-                <circle cx="252" cy="76" r="22" className="sensor ok" /><text x="228" y="42" className="svg-caption">P</text><circle cx="558" cy="76" r="22" className="sensor ok" /><text x="534" y="42" className="svg-caption">T</text>
-                <rect x="345" y="174" width="132" height="34" rx="8" className="computer" /><text x="379" y="196" className="svg-caption">СПГ-742</text>
-                <line x1="252" y1="98" x2="360" y2="174" className="signal-line" /><line x1="558" y1="98" x2="462" y2="174" className="signal-line" /><line x1="410" y1="158" x2="410" y2="174" className="signal-line" />
-              </svg>
-            </div>
-
-            <div className="kpi-grid">
-              <Kpi title="U / δΣ" value={`${deltaTotal.toFixed(3)}%`} status={calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'} />
-              <Kpi title="Qc стандарт." value={qStandard} status="info" />
-              <Kpi title="K" value={kValue} status="info" />
-              <Kpi title="P abs / T" value={`${pAbs} / ${temperatureK}`} status="info" />
-            </div>
-
-            <div className="chart-card">
-              <div className="chart-title">Структура погрешности / неопределённости</div>
-              {(calculation?.contributions ?? []).map((item) => <div className="bar-row" key={item.code}><div className="bar-label">{item.label}</div><div className="bar-track"><span className={`bar-fill ${item.share_percent > 50 ? 'warn' : 'ok'}`} style={{ width: `${Math.max(item.share_percent, 2)}%` }} /></div><div className="bar-value">{item.weighted_value.toFixed(3)}%</div></div>)}
-            </div>
-
-            <div className="chart-card audit-card"><div className="chart-title">Аудит расчёта DRG_SERIES</div>{(calculation?.audit_log ?? []).map((row) => <code key={row}>{row}</code>)}</div>
+            <div className="panel-header row"><div><span>Шаг 3</span><strong>Экранная форма и схема ИЛ</strong></div><span className="tag info">{selectedTemplate}</span></div>
+            <DesignScreenForm projectName={projectName} selectedMethod={selectedMethod} line={line} context={context} selectedTemplate={selectedTemplate} totalStatus={totalStatus} deltaTotal={deltaTotal} limit={limit} />
+            <div className="pipeline-card"><svg viewBox="0 0 820 220" className="pipeline-svg" role="img" aria-label="Схема измерительной линии"><defs><linearGradient id="pipe" x1="0" x2="1"><stop offset="0%" stopColor="#1f3a4a" /><stop offset="50%" stopColor="#32576c" /><stop offset="100%" stopColor="#1f3a4a" /></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3.5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs><line x1="50" y1="110" x2="770" y2="110" stroke="url(#pipe)" strokeWidth="34" strokeLinecap="round" /><line x1="50" y1="110" x2="770" y2="110" stroke="#00c8b4" strokeWidth="2" strokeDasharray="10 12" opacity="0.55" /><text x="130" y="72" className="svg-label">{line.straight_before_dn} Dn</text><text x="620" y="72" className="svg-label">{line.straight_after_dn} Dn</text><rect x="340" y="62" width="142" height="96" rx="16" className="flowmeter" filter="url(#glow)" /><text x="365" y="105" className="svg-title">{flowmeterName}</text><text x="371" y="130" className="svg-caption">Q {selectedMethod?.q_min ?? 0}–{selectedMethod?.q_max ?? 0}</text><circle cx="252" cy="76" r="22" className="sensor ok" /><text x="228" y="42" className="svg-caption">P</text><circle cx="558" cy="76" r="22" className="sensor ok" /><text x="534" y="42" className="svg-caption">T</text><rect x="345" y="174" width="132" height="34" rx="8" className="computer" /><text x="379" y="196" className="svg-caption">СПГ-742</text><line x1="252" y1="98" x2="360" y2="174" className="signal-line" /><line x1="558" y1="98" x2="462" y2="174" className="signal-line" /><line x1="410" y1="158" x2="410" y2="174" className="signal-line" /></svg></div>
+            <div className="kpi-grid"><Kpi title="U / δΣ" value={`${deltaTotal.toFixed(3)}%`} status={calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'} /><Kpi title="Qc стандарт." value={qStandard} status="info" /><Kpi title="K" value={kValue} status="info" /><Kpi title="P abs / T" value={`${pAbs} / ${temperatureK}`} status="info" /></div>
+            <div className="chart-card"><div className="chart-title">Структура погрешности / неопределённости</div>{(calculation?.contributions ?? []).map((item) => <div className="bar-row" key={item.code}><div className="bar-label">{item.label}</div><div className="bar-track"><span className={`bar-fill ${item.share_percent > 50 ? 'warn' : 'ok'}`} style={{ width: `${Math.max(item.share_percent, 2)}%` }} /></div><div className="bar-value">{item.weighted_value.toFixed(3)}%</div></div>)}</div>
+            <div className="chart-card audit-card"><div className="chart-title">Аудит расчёта</div>{(calculation?.audit_log ?? []).map((row) => <code key={row}>{row}</code>)}</div>
           </section>
 
           <aside className="right-panel panel">
@@ -235,7 +222,7 @@ function App() {
             <SystemStatusPanel />
             <div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(255,255,255,0.08) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>
             {apiError && <div className="api-error">{apiError}</div>}
-            <div className="report-card"><div className="rec-label">→ Сохранение расчёта</div><p>Сохраняет расчёт в историю с привязкой к версии МИ и SHA-256 документа.</p><button className="primary-button full-width" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить расчёт</button></div>
+            <div className="report-card"><div className="rec-label">→ Сохранение расчёта</div><p>Сохраняет расчёт в историю с выбранным шаблоном, версией МИ и SHA-256 документа.</p><button className="primary-button full-width" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить расчёт</button></div>
             <div className="report-card"><div className="rec-label">→ Полный журнал</div><p>Открывает экран истории с фильтрами, карточкой расчёта, вкладом составляющих и audit log.</p><button className="ghost-button full-width" onClick={() => setIsHistoryOpen(true)}>Открыть историю</button></div>
             <div className="report-card"><div className="rec-label">→ Протокол расчёта</div><p>Выгрузка текущего расчёта с выбранной МИ, PTZ-параметрами, вкладом составляющих и журналом аудита.</p><div className="library-actions two"><button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button><button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>PDF</button></div></div>
             <HistoryPanel refreshToken={historyRefreshToken} />
