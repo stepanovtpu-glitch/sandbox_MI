@@ -49,23 +49,12 @@
   padding: 11px;
   border-radius: 13px;
   border: 1px solid var(--border);
-  background: rgba(4, 13, 21, 0.42);
+  background: rgba(4, 13, 21, 0.38);
 }
 
-.readiness-card.pilot_ready {
-  border-color: rgba(63, 185, 80, 0.28);
-  background: rgba(63, 185, 80, 0.07);
-}
-
-.readiness-card.pilot_limited {
-  border-color: rgba(210, 153, 34, 0.28);
-  background: rgba(210, 153, 34, 0.07);
-}
-
-.readiness-card.not_ready {
-  border-color: rgba(248, 81, 73, 0.28);
-  background: rgba(248, 81, 73, 0.07);
-}
+.readiness-card.pilot_ready { border-color: rgba(63, 185, 80, 0.28); background: rgba(63, 185, 80, 0.07); }
+.readiness-card.pilot_limited { border-color: rgba(210, 153, 34, 0.3); background: rgba(210, 153, 34, 0.07); }
+.readiness-card.not_ready { border-color: rgba(248, 81, 73, 0.3); background: rgba(248, 81, 73, 0.07); }
 
 .readiness-top {
   display: flex;
@@ -78,21 +67,25 @@
   color: var(--muted);
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 .readiness-top b {
-  font-family: 'JetBrains Mono', monospace;
   color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
   font-size: 18px;
 }
+
+.readiness-card.pilot_ready .readiness-top b { color: var(--ok); }
+.readiness-card.pilot_limited .readiness-top b { color: var(--warn); }
+.readiness-card.not_ready .readiness-top b { color: var(--danger); }
 
 .readiness-track {
   height: 8px;
   margin-top: 9px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
   overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .readiness-track i {
@@ -143,42 +136,30 @@
 .readiness-checks {
   display: grid;
   gap: 7px;
-  margin-top: 4px;
+  margin-top: 5px;
 }
 
 .readiness-score,
 .readiness-check {
+  display: grid;
+  gap: 5px;
   padding: 8px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: rgba(4, 13, 21, 0.34);
 }
 
-.readiness-score {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.readiness-check {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 8px;
-}
-
-.readiness-check.pass { border-color: rgba(63, 185, 80, 0.22); }
+.readiness-check.pass { border-color: rgba(63, 185, 80, 0.23); }
 .readiness-check.partial { border-color: rgba(210, 153, 34, 0.24); }
 .readiness-check.fail { border-color: rgba(248, 81, 73, 0.24); }
+
+.readiness-check small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
 
 .readiness-check.pass b { color: var(--ok); }
 .readiness-check.partial b { color: var(--warn); }
 .readiness-check.fail b { color: var(--danger); }
-
-.readiness-check small {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
