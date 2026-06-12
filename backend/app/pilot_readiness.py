@@ -67,11 +67,10 @@ def _database_check() -> ReadinessCheck:
 
 def _schema_check() -> ReadinessCheck:
     version = get_schema_version()
-    status = 'pass' if version == SCHEMA_VERSION else 'fail'
     return ReadinessCheck(
         code='schema',
         title='Версия схемы БД соответствует приложению',
-        status=status,
+        status='pass' if version == SCHEMA_VERSION else 'fail',
         weight=10,
         details=f'current={version}; expected={SCHEMA_VERSION}',
     )
@@ -96,21 +95,24 @@ def _method_documents_check() -> ReadinessCheck:
     with_document = 0
     with_sha = 0
     existing_files = 0
+
     for row in rows:
-      document = json_load(row['document_json'], None)
-      if document and (document.get('file_name') or document.get('storage_path')):
-          with_document += 1
-      if document and document.get('sha256'):
-          with_sha += 1
-      storage_path = document.get('storage_path') if document else None
-      if storage_path and Path(storage_path).exists():
-          existing_files += 1
+        document = json_load(row['document_json'], None)
+        if document and (document.get('file_name') or document.get('storage_path')):
+            with_document += 1
+        if document and document.get('sha256'):
+            with_sha += 1
+        storage_path = document.get('storage_path') if document else None
+        if storage_path and Path(storage_path).exists():
+            existing_files += 1
+
     if total and with_sha >= min(total, 3):
         status = 'pass'
     elif with_document > 0:
         status = 'partial'
     else:
         status = 'fail'
+
     return ReadinessCheck(
         code='method_documents',
         title='PDF МИ и SHA-256 зафиксированы',
