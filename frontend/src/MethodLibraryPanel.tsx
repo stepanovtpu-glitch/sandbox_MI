@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { TestCasePanel } from './TestCasePanel';
 import {
   createMethodVersion,
+  getCalculationTemplates,
   getMethodDocumentUrl,
   getMethodVersions,
   uploadMethodDocument,
   verifyMethodDocument,
+  type CalculationTemplateCode,
+  type CalculationTemplateInfo,
   type DocumentVerification,
   type MeasurementMethod,
   type MeasurementMethodVersion,
@@ -20,9 +23,11 @@ type Props = {
 
 export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, onRefreshMethods }: Props) {
   const [versions, setVersions] = useState<MeasurementMethodVersion[]>([]);
+  const [templates, setTemplates] = useState<CalculationTemplateInfo[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [draft, setDraft] = useState<MeasurementMethod | null>(null);
   const [changeComment, setChangeComment] = useState('Новая версия МИ / обновление диапазонов и требований');
+  const [versionTemplate, setVersionTemplate] = useState<CalculationTemplateCode>('DRG_SERIES');
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingVersionId, setUploadingVersionId] = useState<string | null>(null);
   const [verification, setVerification] = useState<DocumentVerification | null>(null);
@@ -30,6 +35,12 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [targetVersionId, setTargetVersionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCalculationTemplates()
+      .then(setTemplates)
+      .catch((err: Error) => setError(err.message));
+  }, []);
 
   useEffect(() => {
     if (!selectedMethod) return;
@@ -40,6 +51,11 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
 
   const hasChanges = useMemo(() => JSON.stringify(draft) !== JSON.stringify(selectedMethod), [draft, selectedMethod]);
   const activeVersion = versions.find((version) => version.status === 'active') ?? versions[0];
+  const activeTemplate = activeVersion?.calculation_template ?? 'DRG_SERIES';
+
+  useEffect(() => {
+    if (activeVersion?.calculation_template) setVersionTemplate(activeVersion.calculation_template);
+  }, [activeVersion?.version_id]);
 
   if (!selectedMethod || !draft) return null;
 
@@ -57,7 +73,7 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
     setIsSaving(true);
     setError(null);
     try {
-      await createMethodVersion(draft.mi_id, draft, changeComment);
+      await createMethodVersion(draft.mi_id, draft, changeComment, versionTemplate);
       const nextVersions = await getMethodVersions(draft.mi_id);
       setVersions(nextVersions);
       setVerification(null);
@@ -169,6 +185,15 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
               <NumberField label="δVC max, %" value={draft.delta_vc_max ?? 0} onChange={(value) => setDraftField('delta_vc_max', value)} />
             </div>
             <TextField label="PDF / источник" value={draft.source_document ?? ''} onChange={(value) => setDraftField('source_document', value)} />
+          </div>
+
+          <div className="library-card">
+            <div className="library-card-title">Расчётный шаблон версии</div>
+            <div className="library-line"><span>Активный</span><b>{activeTemplate}</b></div>
+            <label className="field"><span>Шаблон для новой версии</span><select value={versionTemplate} onChange={(event) => setVersionTemplate(event.target.value as CalculationTemplateCode)}>{templates.map((template) => <option key={template.code} value={template.code}>{template.code} · {template.title}</option>)}</select></label>
+            <div className={`template-hint ${templates.find((template) => template.code === versionTemplate)?.status ?? 'draft'}`}>
+              {templates.find((template) => template.code === versionTemplate)?.status === 'ready' ? 'Готов к применению' : 'Требует верификации'} · шаблон будет закреплён за новой версией МИ
+            </div>
           </div>
 
           <div className="library-card">
