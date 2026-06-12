@@ -17,6 +17,7 @@ from app.method_library import (
     list_method_versions,
 )
 from app.pilot_readiness import get_pilot_readiness
+from app.readiness_report import generate_readiness_docx_report, generate_readiness_pdf_report
 from app.reporting import generate_docx_report, generate_pdf_report
 from app.schemas import (
     CalculationRequest,
@@ -85,6 +86,22 @@ def system_info():
 @app.get('/api/system/readiness')
 def pilot_readiness():
     return get_pilot_readiness()
+
+
+@app.get('/api/system/readiness/report/pdf')
+def export_readiness_pdf_report():
+    report_path = generate_readiness_pdf_report()
+    return FileResponse(report_path, media_type='application/pdf', filename=report_path.name)
+
+
+@app.get('/api/system/readiness/report/docx')
+def export_readiness_docx_report():
+    report_path = generate_readiness_docx_report()
+    return FileResponse(
+        report_path,
+        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        filename=report_path.name,
+    )
 
 
 @app.get('/api/calculation-templates')
