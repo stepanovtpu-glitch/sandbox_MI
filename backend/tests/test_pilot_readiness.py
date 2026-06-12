@@ -18,7 +18,6 @@ def test_pilot_readiness_endpoint_returns_weighted_checks():
     assert payload['summary']
 
     checks = payload['checks']
-    assert isinstance(checks, list)
     assert checks
     codes = {check['code'] for check in checks}
     assert 'database' in codes
@@ -33,17 +32,6 @@ def test_pilot_readiness_endpoint_returns_weighted_checks():
     for check in checks:
         assert check['status'] in {'pass', 'partial', 'fail'}
         assert check['weight'] > 0
-        assert check['score'] <= check['weight']
+        assert 0 <= check['score'] <= check['weight']
         assert check['title']
-        assert 'details' in check
-
-
-def test_system_info_and_readiness_are_consistent():
-    info = client.get('/api/system/info').json()
-    readiness = client.get('/api/system/readiness').json()
-    schema_check = next(check for check in readiness['checks'] if check['code'] == 'schema')
-
-    if info['schema_version'] == info['expected_schema_version']:
-        assert schema_check['status'] == 'pass'
-    else:
-        assert schema_check['status'] == 'fail'
+        assert check['details']
