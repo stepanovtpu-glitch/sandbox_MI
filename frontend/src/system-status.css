@@ -105,6 +105,19 @@
   line-height: 1.45;
 }
 
+.readiness-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.readiness-actions button {
+  height: 30px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
 .system-details {
   display: grid;
   gap: 7px;
