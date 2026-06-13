@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getPilotReadiness, getSystemInfo, type PilotReadiness, type SystemInfo } from './api';
 
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
+
 export function SystemStatusPanel() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [readiness, setReadiness] = useState<PilotReadiness | null>(null);
@@ -16,6 +18,10 @@ export function SystemStatusPanel() {
       })
       .catch((err: Error) => setError(err.message));
   }, []);
+
+  const downloadReadinessReport = (format: 'pdf' | 'docx') => {
+    window.open(`${API_BASE}/api/system/readiness/report/${format}`, '_blank', 'noopener,noreferrer');
+  };
 
   const schemaOk = info?.schema_version === info?.expected_schema_version;
   const readinessState = readiness?.status === 'pilot_ready' ? 'ok' : readiness?.status === 'pilot_limited' ? 'warn' : 'error';
@@ -45,6 +51,10 @@ export function SystemStatusPanel() {
           </div>
           <div className="readiness-track"><i style={{ width: `${Math.min(Math.max(readinessPercent, 0), 100)}%` }} /></div>
           <p>{readiness.summary}</p>
+          <div className="readiness-actions">
+            <button className="ghost-button" onClick={() => downloadReadinessReport('docx')}>DOCX отчёт</button>
+            <button className="ghost-button" onClick={() => downloadReadinessReport('pdf')}>PDF отчёт</button>
+          </div>
         </div>
       )}
 
