@@ -84,6 +84,39 @@ class LineParameters(BaseModel):
         return self
 
 
+class TechnologyModeRequest(BaseModel):
+    q_min: float = Field(ge=0)
+    q_max: float = Field(gt=0)
+    q_unit: str = 'm3/h'
+    p_working_mpa: float = Field(ge=0)
+    t_working_c: float
+    preferred_flowmeter_type: str | None = None
+
+    @model_validator(mode='after')
+    def q_range_must_be_ordered(self):
+        if self.q_min > self.q_max:
+            raise ValueError('q_min must be less than or equal to q_max')
+        return self
+
+
+class TechnologyMethodRecommendation(BaseModel):
+    mi_id: str
+    registration_number: str
+    title: str
+    status: Literal['recommended', 'reserve', 'not_applicable']
+    score: int
+    calculation_template: CalculationTemplate
+    reasons: list[str]
+    recommendation: str
+
+
+class TechnologyRecommendationResponse(BaseModel):
+    input: TechnologyModeRequest
+    best_method_id: str | None = None
+    summary: str
+    recommendations: list[TechnologyMethodRecommendation]
+
+
 class GasComposition(BaseModel):
     methane: float = Field(default=0.0, ge=0)
     ethane: float = Field(default=0.0, ge=0)
