@@ -1,0 +1,94 @@
+.technology-rec-card {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 200, 180, 0.22);
+  background: linear-gradient(135deg, rgba(0, 200, 180, 0.07), rgba(56, 139, 253, 0.05));
+}
+
+.technology-rec-header,
+.technology-rec-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.technology-rec-header strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.technology-rec-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.technology-rec-result {
+  margin-top: 11px;
+}
+
+.technology-rec-result > p {
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.technology-rec-list {
+  display: grid;
+  gap: 8px;
+}
+
+.technology-rec-item {
+  padding: 9px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(4, 13, 21, 0.34);
+}
+
+.technology-rec-item.recommended { border-color: rgba(63, 185, 80, 0.35); }
+.technology-rec-item.reserve { border-color: rgba(210, 153, 34, 0.3); }
+.technology-rec-item.not_applicable { border-color: rgba(248, 81, 73, 0.28); opacity: 0.78; }
+
+.technology-rec-top strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.technology-rec-top span {
+  color: var(--accent);
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.technology-rec-item.recommended .technology-rec-top span { color: var(--ok); }
+.technology-rec-item.reserve .technology-rec-top span { color: var(--warn); }
+.technology-rec-item.not_applicable .technology-rec-top span { color: var(--danger); }
+
+.technology-rec-item b {
+  display: block;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.technology-rec-item small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.technology-rec-item ul {
+  margin: 7px 0 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
