@@ -31,9 +31,12 @@ from app.schemas import (
     MethodTestCaseCreateRequest,
     MethodTestResult,
     MethodVersionCreateRequest,
+    TechnologyModeRequest,
+    TechnologyRecommendationResponse,
 )
 from app.scoring import score_methods
 from app.security import get_user_context, require_permission, roles_payload
+from app.technology_recommendation import recommend_methods_for_technology_mode
 from app.test_runner import run_method_test_cases
 
 APP_VERSION = '0.1.0'
@@ -301,6 +304,25 @@ def export_docx_report(request: CalculationRequest, user: dict[str, object] = De
         media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         filename=report_path.name,
     )
+
+
+@app.post('/api/technology/recommendations', response_model=TechnologyRecommendationResponse)
+def technology_recommendations(request: TechnologyModeRequest, user: dict[str, object] = Depends(require_permission('method:read'))):
+    response = recommend_methods_for_technology_mode(request)
+    log_audit_event(
+        'technology_recommendation',
+        'technology_mode',
+        response.best_method_id or 'no_match',
+        {
+            'q_min': request.q_min,
+            'q_max': request.q_max,
+            'p_working_mpa': request.p_working_mpa,
+            't_working_c': request.t_working_c,
+            'best_method_id': response.best_method_id,
+        },
+        actor=_actor(user),
+    )
+    return response
 
 
 @app.post('/api/methods/score', response_model=list[MethodCompatibility])
