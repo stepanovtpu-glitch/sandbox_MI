@@ -1,0 +1,112 @@
+import { useState } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
+
+type RecommendationStatus = 'recommended' | 'reserve' | 'not_applicable';
+
+type TechnologyRecommendation = {
+  mi_id: string;
+  registration_number: string;
+  title: string;
+  status: RecommendationStatus;
+  score: number;
+  calculation_template: string;
+  reasons: string[];
+  recommendation: string;
+};
+
+type RecommendationResponse = {
+  best_method_id: string | null;
+  summary: string;
+  recommendations: TechnologyRecommendation[];
+};
+
+const statusTitle: Record<RecommendationStatus, string> = {
+  recommended: 'Рекомендуется',
+  reserve: 'Резерв',
+  not_applicable: 'Не подходит',
+};
+
+export function TechnologyRecommendationPanel() {
+  const [qMin, setQMin] = useState(100);
+  const [qMax, setQMax] = useState(1600);
+  const [pressure, setPressure] = useState(0.5);
+  const [temperature, setTemperature] = useState(25);
+  const [result, setResult] = useState<RecommendationResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const requestRecommendation = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE}/api/technology/recommendations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Role': 'engineer',
+          'X-User': 'technologist-local',
+        },
+        body: JSON.stringify({
+          q_min: qMin,
+          q_max: qMax,
+          q_unit: 'm3/h',
+          p_working_mpa: pressure,
+          t_working_c: temperature,
+        }),
+      });
+      if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
+      setResult(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка подбора МИ');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <section className="technology-rec-card">
+      <div className="technology-rec-header">
+        <div>
+          <div className="rec-label">Для технолога</div>
+          <strong>Подбор методики по рабочему режиму</strong>
+        </div>
+        <span className="tag info">МИ</span>
+      </div>
+
+      <div className="technology-rec-grid">
+        <label className="field"><span>Q min, м³/ч</span><input type="number" step="any" value={qMin} onChange={(event) => setQMin(Number(event.target.value))} /></label>
+        <label className="field"><span>Q max, м³/ч</span><input type="number" step="any" value={qMax} onChange={(event) => setQMax(Number(event.target.value))} /></label>
+        <label className="field"><span>P рабочее, МПа</span><input type="number" step="any" value={pressure} onChange={(event) => setPressure(Number(event.target.value))} /></label>
+        <label className="field"><span>T рабочая, °C</span><input type="number" step="any" value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} /></label>
+      </div>
+
+      <button className="primary-button full-width" onClick={requestRecommendation} disabled={isLoading}>
+        {isLoading ? 'Подбор...' : 'Подобрать МИ'}
+      </button>
+
+      {error && <div className="api-error">{error}</div>}
+
+      {result && (
+        <div className="technology-rec-result">
+          <p>{result.summary}</p>
+          <div className="technology-rec-list">
+            {result.recommendations.slice(0, 4).map((item) => (
+              <article className={`technology-rec-item ${item.status}`} key={item.mi_id}>
+                <div className="technology-rec-top">
+                  <strong>{item.registration_number}</strong>
+                  <span>{statusTitle[item.status]} · {item.score}</span>
+                </div>
+                <b>{item.title.split('. ').at(-1) ?? item.title}</b>
+                <small>{item.recommendation}</small>
+                <ul>
+                  {item.reasons.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}
+                </ul>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
