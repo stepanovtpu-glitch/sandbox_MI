@@ -11,6 +11,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from app.database import DB_DIR
 from app.method_library import list_method_versions
+from app.pdf_fonts import PDF_FONT, apply_cyrillic_styles, register_pdf_fonts
 from app.schemas import CalculationRequest, CalculationResult
 
 REPORTS_DIR = DB_DIR / 'reports'
@@ -64,7 +65,7 @@ def _rows_from_request(request: CalculationRequest, result: CalculationResult) -
         ['SHA-256 скан-копии', document_sha256],
         ['Путь хранения скан-копии', document_path],
         ['Контрольных примеров МИ', str(len(version.get('test_cases', []))) if version else '0'],
-        ['Диапазон Q, м3/ч', f'{request.line.q_min}–{request.line.q_max}'],
+        ['Диапазон Q, м³/ч', f'{request.line.q_min}–{request.line.q_max}'],
         ['Диапазон P, МПа', f'{request.line.p_min_mpa}–{request.line.p_max_mpa}'],
         ['Диапазон T, °C', f'{request.line.t_min_c}–{request.line.t_max_c}'],
         ['Расчётный шаблон', request.calculation_template.value if request.calculation_template else 'MANUAL_QUADRATURE'],
@@ -76,12 +77,13 @@ def _rows_from_request(request: CalculationRequest, result: CalculationResult) -
 
 
 def _apply_table_style(table: Table, first_col_bg: str = '#EAF7F5') -> None:
+    register_pdf_fonts()
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (0, -1), colors.HexColor(first_col_bg)),
         ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#6A7C86')),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTNAME', (0, 0), (-1, -1), PDF_FONT),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
     ]))
 
@@ -90,6 +92,7 @@ def generate_pdf_report(request: CalculationRequest, result: CalculationResult) 
     path = _report_name(request.method.mi_id if request.method else None, 'pdf')
     doc = SimpleDocTemplate(str(path), pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet()
+    apply_cyrillic_styles(styles)
     story = [
         Paragraph('GasMeter Pro — протокол расчёта', styles['Title']),
         Paragraph('Автоматизированный расчёт погрешности / расширенной неопределённости измерений', styles['BodyText']),
@@ -108,6 +111,7 @@ def generate_pdf_report(request: CalculationRequest, result: CalculationResult) 
     contrib_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#DDE9F2')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#6A7C86')),
+        ('FONTNAME', (0, 0), (-1, -1), PDF_FONT),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))
