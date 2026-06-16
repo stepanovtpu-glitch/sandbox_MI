@@ -35,10 +35,12 @@ export function TechnologyRecommendationPanel() {
   const [result, setResult] = useState<RecommendationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [appliedMethodId, setAppliedMethodId] = useState<string | null>(null);
 
   const requestRecommendation = async () => {
     setIsLoading(true);
     setError(null);
+    setAppliedMethodId(null);
     try {
       const response = await fetch(`${API_BASE}/api/technology/recommendations`, {
         method: 'POST',
@@ -64,6 +66,20 @@ export function TechnologyRecommendationPanel() {
     }
   };
 
+  const applyRecommendation = (item: TechnologyRecommendation) => {
+    window.dispatchEvent(new CustomEvent('gasmeter:apply-technology-recommendation', {
+      detail: {
+        mi_id: item.mi_id,
+        calculation_template: item.calculation_template,
+        q_min: qMin,
+        q_max: qMax,
+        p_working_mpa: pressure,
+        t_working_c: temperature,
+      },
+    }));
+    setAppliedMethodId(item.mi_id);
+  };
+
   return (
     <section className="technology-rec-card">
       <div className="technology-rec-header">
@@ -86,6 +102,7 @@ export function TechnologyRecommendationPanel() {
       </button>
 
       {error && <div className="api-error">{error}</div>}
+      {appliedMethodId && <div className="technology-apply-ok">МИ применена в расчёт: {appliedMethodId}</div>}
 
       {result && (
         <div className="technology-rec-result">
@@ -102,6 +119,11 @@ export function TechnologyRecommendationPanel() {
                 <ul>
                   {item.reasons.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}
                 </ul>
+                {item.status !== 'not_applicable' && (
+                  <button className="ghost-button full-width technology-apply-button" onClick={() => applyRecommendation(item)}>
+                    Применить МИ в расчёт
+                  </button>
+                )}
               </article>
             ))}
           </div>
