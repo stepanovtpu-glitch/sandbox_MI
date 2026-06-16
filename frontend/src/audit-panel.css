@@ -1,0 +1,82 @@
+.audit-panel {
+  margin-bottom: 14px;
+  padding: 13px;
+  border-radius: 15px;
+  border: 1px solid rgba(0, 200, 180, 0.18);
+  background: rgba(4, 13, 21, 0.42);
+}
+
+.audit-panel-header,
+.audit-event-top,
+.audit-event-meta,
+.audit-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.audit-panel-header strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.audit-toolbar {
+  align-items: end;
+  margin-top: 10px;
+}
+
+.audit-toolbar .field {
+  flex: 1;
+}
+
+.audit-event-list {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  margin-top: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.audit-event-card {
+  padding: 9px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.audit-event-top strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.audit-event-top span,
+.audit-event-meta span,
+.audit-event-card small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.audit-event-meta {
+  margin-top: 7px;
+  justify-content: flex-start;
+}
+
+.audit-event-card code {
+  display: block;
+  margin-top: 6px;
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.audit-event-card small {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
