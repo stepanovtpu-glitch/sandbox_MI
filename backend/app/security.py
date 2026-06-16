@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 
 DEFAULT_USER = 'pilot-user'
 DEFAULT_ROLE = 'admin'
@@ -73,7 +73,7 @@ def get_user_context(
 
 
 def require_permission(permission: str):
-    def dependency(user: dict[str, str | list[str]] = get_user_context()) -> dict[str, str | list[str]]:
+    def dependency(user: dict[str, str | list[str]] = Depends(get_user_context)) -> dict[str, str | list[str]]:
         permissions = set(user.get('permissions', []))
         if permission not in permissions:
             raise HTTPException(
