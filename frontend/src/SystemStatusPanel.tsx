@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AuditPanel } from './AuditPanel';
 import { getPilotReadiness, getSystemInfo, type PilotReadiness, type SystemInfo } from './api';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
@@ -81,6 +82,7 @@ export function SystemStatusPanel() {
               ))}
             </div>
           )}
+          <AuditPanel />
         </div>
       )}
     </div>
