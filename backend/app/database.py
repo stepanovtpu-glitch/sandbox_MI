@@ -6,7 +6,7 @@ from typing import Any, Iterator
 
 DB_DIR = Path(__file__).resolve().parents[1] / 'data'
 DB_PATH = DB_DIR / 'gasmeter.db'
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @contextmanager
@@ -88,6 +88,33 @@ def _ensure_schema_version(connection: sqlite3.Connection) -> None:
             'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
             (1, 'Initial schema: methods, method versions, documents, calculation history'),
         )
+    if current_version < 2:
+        connection.executescript(
+            '''
+            CREATE TABLE IF NOT EXISTS audit_events (
+                event_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                action TEXT NOT NULL,
+                entity_type TEXT,
+                entity_id TEXT,
+                details_json TEXT NOT NULL DEFAULT '{}'
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_audit_events_created_at
+                ON audit_events(created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_audit_events_action
+                ON audit_events(action);
+
+            CREATE INDEX IF NOT EXISTS idx_audit_events_entity
+                ON audit_events(entity_type, entity_id);
+            '''
+        )
+        connection.execute(
+            'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+            (2, 'Audit event journal for production traceability'),
+        )
     if _current_schema_version(connection) > SCHEMA_VERSION:
         raise RuntimeError('Database schema is newer than this application version')
 
@@ -108,6 +135,7 @@ def get_schema_version() -> int:
             )
             '''
         )
+        _ensure_schema_version(connection)
         return _current_schema_version(connection)
 
 
