@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 import ctypes
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -264,8 +265,11 @@ def _pdf_page_count(pdf_path: Path, max_pages: int | None) -> int:
 
 
 def _find_tesseract() -> Path:
+    bundle = _bundle_root()
     candidates = [
         os.environ.get('TESSERACT_CMD'),
+        bundle / 'tools' / 'tesseract' / 'tesseract.exe',
+        _runtime_root() / 'tools' / 'tesseract' / 'tesseract.exe',
         shutil.which('tesseract'),
         r'C:\Program Files\Tesseract-OCR\tesseract.exe',
         r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
@@ -277,9 +281,12 @@ def _find_tesseract() -> Path:
 
 
 def _find_pdftoppm() -> Path:
+    bundle = _bundle_root()
     runtime = Path.home() / '.cache' / 'codex-runtimes' / 'codex-primary-runtime' / 'dependencies' / 'native' / 'poppler' / 'Library' / 'bin' / 'pdftoppm.exe'
     candidates = [
         os.environ.get('PDFTOPPM_CMD'),
+        bundle / 'tools' / 'poppler' / 'bin' / 'pdftoppm.exe',
+        _runtime_root() / 'tools' / 'poppler' / 'bin' / 'pdftoppm.exe',
         shutil.which('pdftoppm'),
         runtime,
     ]
@@ -296,6 +303,12 @@ def _tessdata_dir() -> Path:
     configured = os.environ.get('TESSDATA_PREFIX')
     if configured and (Path(configured) / 'rus.traineddata').exists():
         return Path(configured)
+    bundle_tessdata = _bundle_root() / 'tools' / 'tesseract' / 'tessdata'
+    if (bundle_tessdata / 'rus.traineddata').exists():
+        return bundle_tessdata
+    runtime_tessdata = _runtime_root() / 'tools' / 'tesseract' / 'tessdata'
+    if (runtime_tessdata / 'rus.traineddata').exists():
+        return runtime_tessdata
     if (PROJECT_TESSDATA_DIR / 'rus.traineddata').exists():
         return PROJECT_TESSDATA_DIR
     return Path(r'C:\Program Files\Tesseract-OCR\tessdata')
@@ -407,6 +420,16 @@ def _to_float(value: str) -> float:
 
 def _safe_path_part(value: str) -> str:
     return re.sub(r'[^A-Za-z0-9_.-]+', '_', value)
+
+
+def _runtime_root() -> Path:
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[2]
+
+
+def _bundle_root() -> Path:
+    return Path(getattr(sys, '_MEIPASS', _runtime_root()))
 
 
 def _subprocess_path(path: Path) -> str:

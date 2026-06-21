@@ -23,6 +23,10 @@ backend/data/*.sqlite
 backend/data/reports/
 backend/data/method_documents/
 logs/
+/build/
+/dist/
+/release/
+*.spec
 
 # OS / IDE
 .DS_Store
