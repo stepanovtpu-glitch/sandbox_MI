@@ -9,6 +9,7 @@ from app.calculation_history import get_calculation_record, list_calculation_rec
 from app.calculation_templates import TEMPLATE_TITLES
 from app.database import DB_PATH, SCHEMA_VERSION, get_schema_version
 from app.document_storage import get_method_document, save_method_document, verify_method_document
+from app.instrument_library import bootstrap_instrument_library, list_instruments, recommend_replacements, upsert_instrument
 from app.method_library import (
     add_method_test_case,
     bootstrap_method_library,
@@ -17,6 +18,7 @@ from app.method_library import (
     list_current_methods,
     list_method_versions,
 )
+from app.method_ocr import OcrOptions, run_method_document_ocr, validate_method_ocr
 from app.pilot_readiness import get_pilot_readiness
 from app.readiness_report import generate_readiness_docx_report, generate_readiness_pdf_report
 from app.reporting import generate_docx_report, generate_pdf_report
@@ -24,9 +26,14 @@ from app.schemas import (
     CalculationRequest,
     CalculationResult,
     CalculationTemplate,
+    Instrument,
+    InstrumentRecommendationRequest,
+    InstrumentReplacementRecommendation,
     MeasurementMethod,
     MeasurementMethodVersion,
     MethodCompatibility,
+    MethodOcrRequest,
+    MethodOcrValidationRequest,
     MethodScoringRequest,
     MethodTestCaseCreateRequest,
     MethodTestResult,
@@ -76,6 +83,7 @@ def _actor(user: dict[str, object]) -> str:
 @app.on_event('startup')
 def startup() -> None:
     bootstrap_method_library()
+    bootstrap_instrument_library()
 
 
 @app.get('/health')
@@ -151,6 +159,37 @@ def calculation_templates(user: dict[str, object] = Depends(require_permission('
 @app.get('/api/methods', response_model=list[MeasurementMethod])
 def methods(user: dict[str, object] = Depends(require_permission('method:read'))):
     return list_current_methods()
+
+
+@app.get('/api/instruments', response_model=list[Instrument])
+def instruments(type: str | None = None, status: str | None = None, user: dict[str, object] = Depends(require_permission('instrument:read'))):
+    return list_instruments(instrument_type=type, status=status)
+
+
+@app.post('/api/instruments', response_model=Instrument)
+def save_instrument(instrument: Instrument, user: dict[str, object] = Depends(require_permission('instrument:write'))):
+    saved = upsert_instrument(instrument, actor=_actor(user))
+    log_audit_event(
+        'upsert_instrument',
+        'instrument',
+        saved.id,
+        {'type': saved.type.value, 'status': saved.status.value, 'name': saved.name},
+        actor=_actor(user),
+    )
+    return saved
+
+
+@app.post('/api/instruments/recommendations', response_model=list[InstrumentReplacementRecommendation])
+def instrument_recommendations(request: InstrumentRecommendationRequest, user: dict[str, object] = Depends(require_permission('instrument:read'))):
+    recommendations = recommend_replacements(request.line, request.method, request.errors)
+    log_audit_event(
+        'recommend_instrument_replacements',
+        'instrument',
+        request.method.mi_id,
+        {'recommendation_groups': len(recommendations)},
+        actor=_actor(user),
+    )
+    return recommendations
 
 
 @app.get('/api/methods/{mi_id}/versions', response_model=list[MeasurementMethodVersion])
@@ -251,6 +290,56 @@ def verify_document(mi_id: str, version_id: str, user: dict[str, object] = Depen
     result = verify_method_document(mi_id, version_id)
     log_audit_event('verify_method_document', 'measurement_method_version', version_id, {'mi_id': mi_id, 'status': result.get('status')}, actor=_actor(user))
     return result
+
+
+@app.post('/api/methods/{mi_id}/versions/{version_id}/document/ocr', response_model=MeasurementMethodVersion)
+def recognize_method_document(mi_id: str, version_id: str, request: MethodOcrRequest, user: dict[str, object] = Depends(require_permission('document:write'))):
+    try:
+        version = run_method_document_ocr(
+            mi_id,
+            version_id,
+            OcrOptions(languages=request.languages, dpi=request.dpi, max_pages=request.max_pages, psm=request.psm),
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if not version:
+        raise HTTPException(status_code=404, detail='Measurement method version not found')
+    document = version.get('document') or {}
+    ocr = document.get('ocr') or {}
+    log_audit_event(
+        'recognize_method_document',
+        'measurement_method_version',
+        version_id,
+        {
+            'mi_id': mi_id,
+            'status': ocr.get('status'),
+            'pages_processed': ocr.get('pages_processed'),
+            'avg_confidence': ocr.get('avg_confidence'),
+            'extracted': ocr.get('extracted'),
+        },
+        actor=_actor(user),
+    )
+    return version
+
+
+@app.post('/api/methods/{mi_id}/versions/{version_id}/document/ocr/validate', response_model=MeasurementMethodVersion)
+def validate_recognized_method_document(mi_id: str, version_id: str, request: MethodOcrValidationRequest, user: dict[str, object] = Depends(require_permission('document:write'))):
+    if mi_id != request.method.mi_id:
+        raise HTTPException(status_code=400, detail='Path mi_id must match method.mi_id')
+    version = validate_method_ocr(mi_id, version_id, request.method.model_dump(), actor=_actor(user), notes=request.notes)
+    if not version:
+        raise HTTPException(status_code=404, detail='Measurement method version not found')
+    validation = (version.get('document') or {}).get('validation') or {}
+    log_audit_event(
+        'validate_method_ocr',
+        'measurement_method_version',
+        version_id,
+        {'mi_id': mi_id, 'status': validation.get('status'), 'confirmed_by': validation.get('confirmed_by')},
+        actor=_actor(user),
+    )
+    return version
 
 
 @app.get('/api/calculations')

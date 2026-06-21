@@ -4,11 +4,11 @@ import { getPilotReadiness, getSystemInfo, type PilotReadiness, type SystemInfo 
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
 
-export function SystemStatusPanel() {
+export function SystemStatusPanel({ defaultExpanded = false }: { defaultExpanded?: boolean }) {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [readiness, setReadiness] = useState<PilotReadiness | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   useEffect(() => {
     Promise.all([getSystemInfo(), getPilotReadiness()])

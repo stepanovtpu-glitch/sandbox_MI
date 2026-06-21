@@ -1,8 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { ApplyRecommendationBridge } from './ApplyRecommendationBridge';
-import { TechnologyRecommendationPanel } from './TechnologyRecommendationPanel';
 import './styles.css';
 import './document.css';
 import './history.css';
@@ -16,10 +14,6 @@ import './ui-polish.css';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <ApplyRecommendationBridge />
     <App />
-    <div className="technology-floating-panel">
-      <TechnologyRecommendationPanel />
-    </div>
   </React.StrictMode>,
 );

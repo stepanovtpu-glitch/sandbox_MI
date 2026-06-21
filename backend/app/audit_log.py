@@ -63,7 +63,7 @@ def list_audit_events(limit: int = 100, action: str | None = None, entity_type: 
         params.append(entity_type)
     if conditions:
         query += ' WHERE ' + ' AND '.join(conditions)
-    query += ' ORDER BY created_at DESC LIMIT ?'
+    query += ' ORDER BY rowid DESC LIMIT ?'
     params.append(limit)
     rows = fetch_all(query, tuple(params))
     return [

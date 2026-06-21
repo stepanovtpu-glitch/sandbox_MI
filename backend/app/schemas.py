@@ -46,11 +46,17 @@ class Instrument(BaseModel):
     range_min: float | None = None
     range_max: float | None = None
     range_unit: str | None = None
+    dn_mm: float | None = Field(default=None, ge=0)
+    accuracy_class: str | None = None
     error_percent: float | None = Field(default=None, ge=0)
     error_absolute: float | None = Field(default=None, ge=0)
+    calibration_date: str | None = None
     certificate_number: str | None = None
     calibration_due: str | None = None
+    location: str | None = None
+    warehouse_bin: str | None = None
     notes: str | None = None
+    updated_by: str | None = None
 
 
 class LineParameters(BaseModel):
@@ -159,6 +165,19 @@ class MethodDocument(BaseModel):
     file_name: str | None = None
     storage_path: str | None = None
     sha256: str | None = None
+    ocr: dict | None = None
+
+
+class MethodOcrRequest(BaseModel):
+    languages: str = 'rus+eng'
+    dpi: int = Field(default=220, ge=120, le=400)
+    max_pages: int | None = Field(default=3, ge=1, le=100)
+    psm: int = Field(default=6, ge=3, le=13)
+
+
+class MethodOcrValidationRequest(BaseModel):
+    method: MeasurementMethod
+    notes: str | None = None
 
 
 class MethodTestCase(BaseModel):
@@ -213,6 +232,7 @@ class CalculationRequest(BaseModel):
     line: LineParameters
     errors: ErrorContributions
     gas_composition: GasComposition | None = None
+    instruments: list[Instrument] = Field(default_factory=list)
     method: MeasurementMethod | None = None
     calculation_template: CalculationTemplate | None = None
     context: dict = Field(default_factory=dict)
@@ -221,6 +241,20 @@ class CalculationRequest(BaseModel):
 class MethodScoringRequest(BaseModel):
     line: LineParameters
     calculation: 'CalculationResult | None' = None
+
+
+class InstrumentRecommendationRequest(BaseModel):
+    line: LineParameters
+    method: MeasurementMethod
+    errors: ErrorContributions
+
+
+class InstrumentReplacementRecommendation(BaseModel):
+    reason: str
+    target_type: InstrumentType
+    current_error_percent: float
+    allowed_error_percent: float
+    alternatives: list[Instrument]
 
 
 class ContributionResult(BaseModel):

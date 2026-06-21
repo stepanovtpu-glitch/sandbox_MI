@@ -11,7 +11,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from app.database import DB_DIR
 from app.method_library import list_method_versions
-from app.pdf_fonts import PDF_FONT, apply_cyrillic_styles, register_pdf_fonts
+from app.pdf_fonts import apply_cyrillic_styles, register_pdf_fonts
 from app.schemas import CalculationRequest, CalculationResult
 
 REPORTS_DIR = DB_DIR / 'reports'
@@ -56,7 +56,7 @@ def _rows_from_request(request: CalculationRequest, result: CalculationResult) -
         if result.status == 'fail'
         else 'Расчёт требует дополнительной проверки.'
     )
-    return [
+    rows = [
         ['Методика', method.title if method else 'не выбрана'],
         ['Регистрационный номер', method.registration_number if method else '—'],
         ['Версия МИ в библиотеке', version.get('version_id', '—') if version else '—'],
@@ -74,18 +74,35 @@ def _rows_from_request(request: CalculationRequest, result: CalculationResult) -
         ['Статус', result.status],
         ['Заключение', conclusion],
     ]
+    if request.instruments:
+        rows.append(['Состав СИ', ''])
+        for instrument in request.instruments:
+            rows.append([
+                f'СИ: {instrument.type.value}',
+                (
+                    f'{instrument.name}; зав. № {instrument.serial_number or "—"}; '
+                    f'δ={instrument.error_percent if instrument.error_percent is not None else "—"}%; '
+                    f'диапазон={instrument.range_min if instrument.range_min is not None else "—"}–{instrument.range_max if instrument.range_max is not None else "—"} {instrument.range_unit or ""}; '
+                    f'свидетельство={instrument.certificate_number or "—"}; поверка до={instrument.calibration_due or "—"}'
+                ),
+            ])
+    return rows
 
 
 def _apply_table_style(table: Table, first_col_bg: str = '#EAF7F5') -> None:
-    register_pdf_fonts()
+    regular, _ = register_pdf_fonts()
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (0, -1), colors.HexColor(first_col_bg)),
         ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#6A7C86')),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('FONTNAME', (0, 0), (-1, -1), PDF_FONT),
+        ('FONTNAME', (0, 0), (-1, -1), regular),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
     ]))
+
+
+def _pdf_rows(rows: list[list[str]], styles) -> list[list[Paragraph]]:
+    return [[Paragraph(str(cell), styles['BodyText']) for cell in row] for row in rows]
 
 
 def generate_pdf_report(request: CalculationRequest, result: CalculationResult) -> Path:
@@ -99,7 +116,7 @@ def generate_pdf_report(request: CalculationRequest, result: CalculationResult) 
         Paragraph(f'Дата формирования: {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}', styles['BodyText']),
         Spacer(1, 12),
     ]
-    table = Table(_rows_from_request(request, result), colWidths=[155, 340])
+    table = Table(_pdf_rows(_rows_from_request(request, result), styles), colWidths=[155, 340])
     _apply_table_style(table)
     story.append(table)
     story.append(Spacer(1, 14))
@@ -107,11 +124,12 @@ def generate_pdf_report(request: CalculationRequest, result: CalculationResult) 
     contrib_rows = [['Код', 'Наименование', 'Значение', 'Взвешенное', 'Доля, %']]
     for item in result.contributions:
         contrib_rows.append([item.code, item.label, str(item.value), str(item.weighted_value), str(item.share_percent)])
-    contrib_table = Table(contrib_rows, colWidths=[60, 235, 65, 75, 60])
+    contrib_table = Table(_pdf_rows(contrib_rows, styles), colWidths=[60, 235, 65, 75, 60])
+    regular, _ = register_pdf_fonts()
     contrib_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#DDE9F2')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#6A7C86')),
-        ('FONTNAME', (0, 0), (-1, -1), PDF_FONT),
+        ('FONTNAME', (0, 0), (-1, -1), regular),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))

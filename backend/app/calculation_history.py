@@ -83,7 +83,7 @@ def _row_to_record(row: Any) -> dict[str, Any]:
 
 def list_calculation_records(limit: int = 50) -> list[dict[str, Any]]:
     rows = fetch_all(
-        'SELECT * FROM calculation_records ORDER BY created_at DESC LIMIT ?',
+        'SELECT * FROM calculation_records ORDER BY rowid DESC LIMIT ?',
         (limit,),
     )
     return [_row_to_record(row) for row in rows]

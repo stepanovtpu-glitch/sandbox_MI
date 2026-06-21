@@ -17,10 +17,12 @@ yarn-debug.log*
 yarn-error.log*
 
 # Runtime data
+backend/data/
 backend/data/*.db
 backend/data/*.sqlite
 backend/data/reports/
 backend/data/method_documents/
+logs/
 
 # OS / IDE
 .DS_Store

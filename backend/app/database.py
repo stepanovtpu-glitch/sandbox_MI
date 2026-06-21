@@ -1,12 +1,13 @@
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-DB_DIR = Path(__file__).resolve().parents[1] / 'data'
+DB_DIR = Path(os.environ.get('GASMETER_DB_DIR', Path(__file__).resolve().parents[1] / 'data'))
 DB_PATH = DB_DIR / 'gasmeter.db'
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 @contextmanager
@@ -114,6 +115,26 @@ def _ensure_schema_version(connection: sqlite3.Connection) -> None:
         connection.execute(
             'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
             (2, 'Audit event journal for production traceability'),
+        )
+    if current_version < 3:
+        connection.executescript(
+            '''
+            CREATE TABLE IF NOT EXISTS instruments (
+                instrument_id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                name TEXT NOT NULL,
+                instrument_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_instruments_type_status
+                ON instruments(type, status);
+            '''
+        )
+        connection.execute(
+            'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+            (3, 'Measurement instrument inventory for alpha recommendations'),
         )
     if _current_schema_version(connection) > SCHEMA_VERSION:
         raise RuntimeError('Database schema is newer than this application version')

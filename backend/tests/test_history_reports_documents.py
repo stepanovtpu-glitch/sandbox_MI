@@ -70,6 +70,8 @@ def test_report_export_pdf_and_docx():
     assert pdf.status_code == 200
     assert pdf.headers['content-type'].startswith('application/pdf')
     assert len(pdf.content) > 100
+    assert b'/ToUnicode' in pdf.content
+    assert any(font_marker in pdf.content for font_marker in (b'Arial', b'DejaVuSans', b'GasMeterSans'))
 
     docx = client.post('/api/reports/docx', json=payload)
     assert docx.status_code == 200

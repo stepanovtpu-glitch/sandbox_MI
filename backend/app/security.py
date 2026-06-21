@@ -12,6 +12,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         'method:read',
         'method:write',
         'method:approve',
+        'instrument:read',
+        'instrument:write',
         'document:read',
         'document:write',
         'testcase:write',
@@ -25,6 +27,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         'method:read',
         'method:write',
         'method:approve',
+        'instrument:read',
+        'instrument:write',
         'document:read',
         'document:write',
         'testcase:write',
@@ -35,6 +39,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     'engineer': {
         'system:read',
         'method:read',
+        'instrument:read',
         'document:read',
         'testcase:run',
         'calculation:create',
@@ -43,6 +48,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     'viewer': {
         'system:read',
         'method:read',
+        'instrument:read',
         'document:read',
         'report:export',
     },

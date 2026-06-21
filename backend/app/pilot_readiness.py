@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.database import DB_PATH, SCHEMA_VERSION, fetch_all, fetch_one, get_schema_version, json_load
+from app.instrument_library import list_instruments
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ def get_pilot_readiness() -> dict[str, Any]:
         _database_check(),
         _schema_check(),
         _method_library_check(),
+        _instrument_inventory_check(),
         _method_documents_check(),
         _method_test_cases_check(),
         _calculation_history_check(),
@@ -86,6 +88,21 @@ def _method_library_check() -> ReadinessCheck:
         status=status,
         weight=15,
         details=f'active_method_versions={count}; pilot_target>=3',
+    )
+
+
+def _instrument_inventory_check() -> ReadinessCheck:
+    instruments = list_instruments()
+    types = {instrument.type.value for instrument in instruments}
+    available = [instrument for instrument in instruments if instrument.status.value == 'available']
+    required = {'flowmeter', 'pressure', 'temperature', 'computer'}
+    status = 'pass' if required.issubset(types) and len(available) >= 6 else 'partial' if instruments else 'fail'
+    return ReadinessCheck(
+        code='instrument_inventory',
+        title='База средств измерений заполнена для альфа-сценариев',
+        status=status,
+        weight=10,
+        details=f'instruments={len(instruments)}; available={len(available)}; types={sorted(types)}',
     )
 
 

@@ -27,6 +27,11 @@ const statusTitle: Record<RecommendationStatus, string> = {
   not_applicable: 'Не подходит',
 };
 
+function lastTitlePart(value: string) {
+  const parts = value.split('. ');
+  return parts[parts.length - 1] || value;
+}
+
 export function TechnologyRecommendationPanel() {
   const [qMin, setQMin] = useState(100);
   const [qMax, setQMax] = useState(1600);
@@ -114,7 +119,7 @@ export function TechnologyRecommendationPanel() {
                   <strong>{item.registration_number}</strong>
                   <span>{statusTitle[item.status]} · {item.score}</span>
                 </div>
-                <b>{item.title.split('. ').at(-1) ?? item.title}</b>
+                <b>{lastTitlePart(item.title)}</b>
                 <small>{item.recommendation}</small>
                 <ul>
                   {item.reasons.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}

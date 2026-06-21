@@ -26,6 +26,7 @@ def test_pilot_readiness_endpoint_returns_weighted_checks():
         'database',
         'schema',
         'method_library',
+        'instrument_inventory',
         'method_documents',
         'method_test_cases',
         'calculation_history',

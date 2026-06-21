@@ -10,7 +10,10 @@ DOCUMENTS_DIR = DB_DIR / 'method_documents'
 
 
 def _safe_filename(filename: str) -> str:
-    return Path(filename).name.replace('..', '_').replace('/', '_').replace('\\', '_')
+    safe_name = Path(filename).name.replace('..', '_').replace('/', '_').replace('\\', '_')
+    for char in '<>:"|?*':
+        safe_name = safe_name.replace(char, '_')
+    return safe_name
 
 
 def _version_dir(mi_id: str, version_id: str) -> Path:

@@ -29,9 +29,10 @@ def calculate_template(
     template_code = template or (request.calculation_template.value if request.calculation_template else None)
     if template_code in PTZ_COMPATIBLE_TEMPLATES:
         result = calculate_drg_series(request, context=context)
+        result.audit_log.insert(0, f'template={template_code}')
+        result.audit_log.insert(1, f'template_title={TEMPLATE_TITLES.get(template_code, template_code)}')
         if template_code != 'DRG_SERIES':
-            result.audit_log.insert(0, f'template={template_code}')
-            result.audit_log.insert(1, f'Расчёт выполнен по совместимому PTZ-шаблону: {TEMPLATE_TITLES.get(template_code, template_code)}')
+            result.audit_log.insert(2, f'Расчёт выполнен по совместимому PTZ-шаблону: {TEMPLATE_TITLES.get(template_code, template_code)}')
         return result
     return None
 
