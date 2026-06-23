@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.calculation import calculate
 from app.main import app
-from app.schemas import CalculationRequest, CalculationTemplate, ErrorContributions, LineParameters, MeasurementMethod
+from app.schemas import CalculationRequest, CalculationTemplate, ErrorContributions, Instrument, InstrumentType, LineParameters, MeasurementMethod
 
 client = TestClient(app)
 
@@ -90,6 +90,43 @@ def test_drg_series_limit_fail_when_limit_is_too_low():
     request.method.delta_total_max = 1.0
     result = calculate(request, template='DRG_SERIES', context=request.context)
     assert result.status == 'fail'
+
+
+def test_calculation_fails_when_pipe_and_flowmeter_dn_do_not_match():
+    request = _request()
+    request.line.flowmeter_dn_mm = 150
+    result = calculate(request, template='DRG_SERIES', context=request.context)
+    assert result.status == 'fail'
+    assert any('DN_MISMATCH' in row for row in result.audit_log)
+
+
+def test_calculation_fails_when_selected_flowmeter_has_wrong_dn():
+    request = _request()
+    request.instruments = [
+        Instrument(
+            id='pytest-flow-wrong-dn',
+            type=InstrumentType.FLOWMETER,
+            name='pytest flowmeter DN150',
+            status='available',
+            range_min=40,
+            range_max=1600,
+            dn_mm=150,
+            error_percent=1.5,
+        )
+    ]
+    result = calculate(request, template='DRG_SERIES', context=request.context)
+    assert result.status == 'fail'
+    assert any('SELECTED_FLOWMETER_DN_MISMATCH' in row for row in result.audit_log)
+
+
+def test_calculation_fails_when_method_requires_longer_straight_sections():
+    request = _request()
+    request.method.straight_before_dn = 20
+    request.method.straight_after_dn = 8
+    result = calculate(request, template='DRG_SERIES', context=request.context)
+    assert result.status == 'fail'
+    assert any('STRAIGHT_BEFORE_TOO_SHORT' in row for row in result.audit_log)
+    assert any('STRAIGHT_AFTER_TOO_SHORT' in row for row in result.audit_log)
 
 
 def test_ptz_templates_calculate_and_include_template_audit():

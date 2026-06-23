@@ -129,8 +129,21 @@ def recommend_replacements(line: LineParameters, method: MeasurementMethod, erro
     return recommendations
 
 
+def find_suitable_flowmeters(line: LineParameters) -> list[Instrument]:
+    alternatives = [
+        instrument
+        for instrument in list_instruments(instrument_type=InstrumentType.FLOWMETER.value, status=InstrumentStatus.AVAILABLE.value)
+        if _instrument_covers_line(instrument, line)
+    ]
+    return sorted(alternatives, key=lambda item: (item.dn_mm if item.dn_mm is not None else 999999, item.range_max or 999999, item.name))
+
+
 def _instrument_covers_line(instrument: Instrument, line: LineParameters) -> bool:
     if instrument.type == InstrumentType.FLOWMETER:
+        if line.pipe_dn_mm != line.flowmeter_dn_mm:
+            return False
+        if instrument.dn_mm is not None and instrument.dn_mm != line.flowmeter_dn_mm:
+            return False
         return _covers(instrument.range_min, instrument.range_max, line.q_min, line.q_max)
     if instrument.type == InstrumentType.PRESSURE:
         return _covers(instrument.range_min, instrument.range_max, line.p_min_mpa, line.p_max_mpa)

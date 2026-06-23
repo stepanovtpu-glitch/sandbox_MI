@@ -62,3 +62,33 @@ def test_instrument_recommendations_find_pressure_replacement():
     assert pressure['allowed_error_percent'] == 0.5
     assert pressure['alternatives']
     assert all(item['error_percent'] <= 0.5 for item in pressure['alternatives'])
+
+
+def test_flowmeter_recommendations_keep_fixed_dn():
+    method = client.get('/api/methods').json()[0]
+    method['delta_q_max'] = 1.6
+    line = _line()
+    line['q_min'] = 125
+    line['q_max'] = 2500
+    line['pipe_dn_mm'] = 150
+    line['flowmeter_dn_mm'] = 150
+    payload = {
+        'line': line,
+        'method': method,
+        'errors': {
+            'delta_q': 2.0,
+            'delta_p': 0.5,
+            'delta_t': 0.34,
+            'delta_vc': 0.05,
+            'delta_c': 0.33,
+            'kp': 1,
+            'kt': 1,
+            'kc': 1,
+        },
+    }
+    response = client.post('/api/instruments/recommendations', json=payload)
+    assert response.status_code == 200
+    recommendations = response.json()
+    flowmeter = next(item for item in recommendations if item['target_type'] == 'flowmeter')
+    assert flowmeter['alternatives']
+    assert all(item['dn_mm'] == 150 for item in flowmeter['alternatives'])
