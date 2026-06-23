@@ -1,3 +1,5 @@
+import re
+
 from app.method_library import list_method_versions, list_current_methods
 from app.schemas import (
     CalculationTemplate,
@@ -57,6 +59,17 @@ def _margin_score(method: MeasurementMethod, request: TechnologyModeRequest) -> 
             reasons.append(f'Тип расходомера отличается от предпочтительного: {method.flowmeter_type}.')
         else:
             reasons.append(f'Тип расходомера соответствует предпочтению: {method.flowmeter_type}.')
+
+    method_dn = _method_dn(method)
+    if method_dn is not None:
+        if float(method_dn) != request.pipe_dn_mm:
+            applicable = False
+            score -= 30
+            reasons.append(f'DN трубопровода {request.pipe_dn_mm:g} мм не соответствует DN методики {method_dn} мм.')
+        else:
+            reasons.append(f'DN трубопровода {request.pipe_dn_mm:g} мм соответствует DN методики.')
+    else:
+        reasons.append(f'DN трубопровода {request.pipe_dn_mm:g} мм требует ручной сверки по документу МИ.')
 
     if method.delta_total_max <= 2.0:
         score += 5
@@ -119,3 +132,22 @@ def recommend_methods_for_technology_mode(request: TechnologyModeRequest) -> Tec
         summary=summary,
         recommendations=recommendations,
     )
+
+
+def _method_dn(method: MeasurementMethod) -> int | None:
+    text = f'{method.mi_id} {method.title}'.lower()
+    match = re.search(r'(?:dn|ду)[- _]*(\d+)', text)
+    if match:
+        return int(match.group(1))
+    qmax_to_dn = {
+        160: 80,
+        400: 100,
+        800: 100,
+        1600: 100,
+        2500: 150,
+        5000: 150,
+        10000: 200,
+    }
+    if 'drg-m' in method.mi_id or 'дрг.м' in text:
+        return qmax_to_dn.get(int(round(method.q_max)))
+    return None

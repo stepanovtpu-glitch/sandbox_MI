@@ -20,7 +20,7 @@ const instrumentTypeTitles: Record<InstrumentType, string> = { flowmeter: 'Ра�
 const instrumentStatusTitles: Record<InstrumentStatus, string> = { available: 'Доступен', in_calibration: 'На поверке', ordered: 'Заказан', decommissioned: 'Выведен' };
 const instrumentTypeOrder: InstrumentType[] = ['flowmeter', 'pressure', 'temperature', 'computer', 'analyzer'];
 type ActiveView = 'constructor' | 'technologist' | 'instruments' | 'methodIntake' | 'methods' | 'reports' | 'settings';
-type ApplyTechnologyRecommendationDetail = { mi_id: string; calculation_template: string; q_min: number; q_max: number; p_working_mpa: number; t_working_c: number };
+type ApplyTechnologyRecommendationDetail = { mi_id: string; calculation_template: string; pipe_dn_mm?: number; q_min: number; q_max: number; p_working_mpa: number; t_working_c: number };
 
 function App() {
   const [line, setLine] = useState<LineParameters>(initialLine);
@@ -90,8 +90,13 @@ function App() {
       if (!detail) return;
       setSelectedMethodId(detail.mi_id);
       if (isTemplateCode(detail.calculation_template)) setSelectedTemplate(detail.calculation_template);
+      const pipeDn = detail.pipe_dn_mm ?? line.pipe_dn_mm;
+      const compatibleFlowmeter = instruments.find((instrument) => instrument.type === 'flowmeter' && instrument.status === 'available' && instrument.dn_mm === pipeDn && (instrument.range_min ?? 0) <= detail.q_min && detail.q_max <= (instrument.range_max ?? Number.MAX_SAFE_INTEGER));
+      if (compatibleFlowmeter) setSelectedInstrumentIds((current) => ({ ...current, flowmeter: compatibleFlowmeter.id }));
       setLine((current) => ({
         ...current,
+        pipe_dn_mm: pipeDn,
+        flowmeter_dn_mm: pipeDn,
         q_min: detail.q_min,
         q_max: detail.q_max,
         p_min_mpa: detail.p_working_mpa,
@@ -111,7 +116,7 @@ function App() {
     };
     window.addEventListener('gasmeter:apply-technology-recommendation', handler);
     return () => window.removeEventListener('gasmeter:apply-technology-recommendation', handler);
-  }, []);
+  }, [instruments, line.pipe_dn_mm]);
 
   useEffect(() => {
     setErrors((current) => ({

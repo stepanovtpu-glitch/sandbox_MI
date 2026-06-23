@@ -33,6 +33,7 @@ function lastTitlePart(value: string) {
 }
 
 export function TechnologyRecommendationPanel() {
+  const [pipeDn, setPipeDn] = useState(100);
   const [qMin, setQMin] = useState(100);
   const [qMax, setQMax] = useState(1600);
   const [pressure, setPressure] = useState(0.5);
@@ -55,6 +56,7 @@ export function TechnologyRecommendationPanel() {
           'X-User': 'technologist-local',
         },
         body: JSON.stringify({
+          pipe_dn_mm: pipeDn,
           q_min: qMin,
           q_max: qMax,
           q_unit: 'm3/h',
@@ -76,6 +78,7 @@ export function TechnologyRecommendationPanel() {
       detail: {
         mi_id: item.mi_id,
         calculation_template: item.calculation_template,
+        pipe_dn_mm: pipeDn,
         q_min: qMin,
         q_max: qMax,
         p_working_mpa: pressure,
@@ -96,6 +99,7 @@ export function TechnologyRecommendationPanel() {
       </div>
 
       <div className="technology-rec-grid">
+        <label className="field"><span>DN трубы, мм</span><input type="number" step="any" value={pipeDn} onChange={(event) => setPipeDn(Number(event.target.value))} /></label>
         <label className="field"><span>Q min, м³/ч</span><input type="number" step="any" value={qMin} onChange={(event) => setQMin(Number(event.target.value))} /></label>
         <label className="field"><span>Q max, м³/ч</span><input type="number" step="any" value={qMax} onChange={(event) => setQMax(Number(event.target.value))} /></label>
         <label className="field"><span>P рабочее, МПа</span><input type="number" step="any" value={pressure} onChange={(event) => setPressure(Number(event.target.value))} /></label>

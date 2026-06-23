@@ -91,6 +91,7 @@ class LineParameters(BaseModel):
 
 
 class TechnologyModeRequest(BaseModel):
+    pipe_dn_mm: float = Field(default=100, gt=0)
     q_min: float = Field(ge=0)
     q_max: float = Field(gt=0)
     q_unit: str = 'm3/h'
