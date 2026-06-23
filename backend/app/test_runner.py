@@ -8,7 +8,8 @@ def run_method_test_case(test_case: dict) -> MethodTestResult:
     name = str(test_case.get('name', 'unnamed'))
     try:
         request = CalculationRequest(**test_case.get('input_data', {}))
-        actual = calculate(request).model_dump()
+        template = request.calculation_template.value if request.calculation_template else None
+        actual = calculate(request, template=template, context=request.context).model_dump()
     except Exception as exc:
         return MethodTestResult(
             name=name,
@@ -30,13 +31,16 @@ def run_method_test_case(test_case: dict) -> MethodTestResult:
 
     actual_delta = float(actual.get('delta_total', 0))
     diff = abs(actual_delta - float(expected_delta))
-    status = 'pass' if diff <= tolerance else 'fail'
+    expected_status = expected.get('status')
+    status_matches = expected_status is None or actual.get('status') == expected_status
+    status = 'pass' if diff <= tolerance and status_matches else 'fail'
+    status_note = '' if status_matches else f" Статус: ожидался {expected_status}, получен {actual.get('status')}."
     return MethodTestResult(
         name=name,
         status=status,
         expected_result=expected,
         actual_result=actual,
-        message=f'Отклонение delta_total={diff:.6f}, допуск={tolerance:.6f}.',
+        message=f'Отклонение delta_total={diff:.6f}, допуск={tolerance:.6f}.{status_note}',
     )
 
 

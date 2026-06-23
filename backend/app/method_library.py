@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.database import execute, fetch_all, fetch_one, init_db, json_dump, json_load
+from app.default_test_cases import build_default_test_cases, merge_default_test_cases
 from app.seed_methods import MEASUREMENT_METHODS
 from app.schemas import MeasurementMethod, MethodTestCase
 
@@ -28,6 +29,7 @@ def bootstrap_method_library() -> None:
     init_db()
     existing = fetch_one('SELECT COUNT(*) AS cnt FROM measurement_methods')
     if existing and existing['cnt'] > 0:
+        ensure_default_method_test_cases()
         return
     now = _now_iso()
     for method in MEASUREMENT_METHODS:
@@ -56,6 +58,30 @@ def bootstrap_method_library() -> None:
                 json_dump({'file_name': method.source_document, 'storage_path': method.source_document}),
             ),
         )
+    ensure_default_method_test_cases()
+
+
+def ensure_default_method_test_cases() -> int:
+    rows = fetch_all("SELECT * FROM measurement_method_versions WHERE status = 'active'")
+    updated = 0
+    for row in rows:
+        existing_cases = json_load(row['test_cases_json'], []) or []
+        if len([case for case in existing_cases if str(case.get('name', '')).startswith('auto ')]) >= 3:
+            continue
+        method = MeasurementMethod(**json_load(row['method_json'], {}))
+        template = row['calculation_template']
+        generated = build_default_test_cases(method, template)
+        if not generated:
+            continue
+        merged = merge_default_test_cases(existing_cases, generated)
+        if len(merged) == len(existing_cases):
+            continue
+        execute(
+            'UPDATE measurement_method_versions SET test_cases_json = ? WHERE version_id = ?',
+            (json_dump(merged), row['version_id']),
+        )
+        updated += len(merged) - len(existing_cases)
+    return updated
 
 
 def list_current_methods() -> list[MeasurementMethod]:
