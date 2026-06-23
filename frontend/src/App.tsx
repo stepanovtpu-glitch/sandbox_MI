@@ -79,6 +79,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+    document.querySelector('.workspace')?.scrollTo(0, 0);
+    document.querySelectorAll('.workspace-screen,.left-panel,.center-panel,.right-panel').forEach((element) => element.scrollTo(0, 0));
+  }, [activeView]);
+
+  useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<ApplyTechnologyRecommendationDetail>).detail;
       if (!detail) return;
@@ -212,7 +218,14 @@ function App() {
   );
 }
 
-function firstInstrumentId(instruments: Instrument[], type: InstrumentType) { return instruments.find((item) => item.type === type && item.status === 'available')?.id ?? instruments.find((item) => item.type === type)?.id; }
+function firstInstrumentId(instruments: Instrument[], type: InstrumentType) {
+  const typed = instruments.filter((item) => item.type === type);
+  if (type === 'flowmeter') {
+    const compatible = typed.find((item) => item.status === 'available' && item.dn_mm === initialLine.flowmeter_dn_mm && (item.range_min ?? 0) <= initialLine.q_min && initialLine.q_max <= (item.range_max ?? Number.MAX_SAFE_INTEGER));
+    if (compatible) return compatible.id;
+  }
+  return typed.find((item) => item.status === 'available')?.id ?? typed[0]?.id;
+}
 function findSelectedInstrument(instruments: Instrument[], selectedId?: string) { return instruments.find((item) => item.id === selectedId) ?? instruments[0] ?? null; }
 function instrumentMeta(instrument: Instrument | null, fallback: string) {
   if (!instrument) return fallback;
