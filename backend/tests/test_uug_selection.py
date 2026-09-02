@@ -85,6 +85,35 @@ def test_uug_selection_clamps_q_to_method_range():
     assert standard['q_max'] <= 5000
 
 
+def test_uug_selection_rejects_temperature_above_gost_limit():
+    """ГОСТ 30319-2015: методы расчёта применимы до 350 К (+76,85 °С)."""
+    data = client.post('/api/uug/selection', json=_base_payload(t_working_c=90)).json()
+    assert any('30319' in error and '350' in error for error in data['validation_errors'])
+    assert data['best_method'] is None
+
+
+def test_uug_selection_rejects_pressure_above_gost_limit():
+    """ГОСТ 30319.3-2015: расчёт выполняется при давлении до 30 МПа."""
+    data = client.post('/api/uug/selection', json=_base_payload(p_abs_mpa=35)).json()
+    assert any('30319.3' in error for error in data['validation_errors'])
+
+
+def test_uug_selection_warns_about_density_method_limit():
+    """Выше 7,5 МПа метод по плотности (ГОСТ 30319.2) неприменим — это предупреждение, не ошибка."""
+    data = client.post('/api/uug/selection', json=_base_payload(p_abs_mpa=10)).json()
+    assert data['validation_errors'] == []
+    assert any('30319.2' in warning for warning in data['algorithm_warnings'])
+
+
+def test_uug_selection_flowmeter_requirements_show_both_conditions():
+    """СИ подбирается по рабочим условиям, но в требованиях видны и стандартные."""
+    data = client.post('/api/uug/selection', json=_base_payload()).json()
+    flowmeter = next(slot for slot in data['instrument_plan'] if slot['type'] == 'flowmeter')
+    requirements = ' '.join(flowmeter['requirements'])
+    assert 'рабочих условиях' in requirements
+    assert 'стандартных условиях' in requirements
+
+
 def test_uug_selection_processing_accuracy_excludes_5_percent_methods():
     data = client.post('/api/uug/selection', json=_base_payload(process='processing')).json()
     assert data['validation_errors'] == []

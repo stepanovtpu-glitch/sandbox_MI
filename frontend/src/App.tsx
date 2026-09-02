@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Activity, ChevronRight, Database, FileText, Gauge, History, Moon, PlusCircle, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronRight, LogOut, Database, FileText, Gauge, History, Moon, PlusCircle, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
 import { PipelineScene } from './PipelineScene';
+import { MIN_STRAIGHT_AFTER_DN, MIN_STRAIGHT_BEFORE_DN, PIPE_DN_SERIES } from './domain';
 import { UugSelectionScreen } from './UugSelectionScreen';
+import { LoginScreen } from './LoginScreen';
 import inkLogo from './assets/brand/ink-logo.svg';
 import inkLogoWhite from './assets/brand/ink-logo-white.svg';
 import { HistoryScreen } from './HistoryScreen';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
 import { MethodIntakeScreen } from './MethodIntakeScreen';
 import { SystemStatusPanel } from './SystemStatusPanel';
-import { calculate, downloadReport, getCalculationTemplates, getInstrumentRecommendations, getInstruments, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationRecord, type CalculationResult, type CalculationTemplateCode, type CalculationTemplateInfo, type ErrorContributions, type Instrument, type InstrumentReplacementRecommendation, type InstrumentStatus, type InstrumentType, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
+import { getCurrentUser, logout, setAuthToken, type SessionUser, calculate, downloadReport, getCalculationTemplates, getInstrumentRecommendations, getInstruments, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationRecord, type CalculationResult, type CalculationTemplateCode, type CalculationTemplateInfo, type ErrorContributions, type Instrument, type InstrumentReplacementRecommendation, type InstrumentStatus, type InstrumentType, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = { pipe_dn_mm: 100, flowmeter_dn_mm: 100, straight_before_dn: 10, straight_after_dn: 5, q_min: 40, q_max: 1600, q_unit: 'm3/h', p_min_mpa: 0.12, p_max_mpa: 2.5, t_min_c: -50, t_max_c: 50 };
 const initialErrors: ErrorContributions = { delta_q: 1.5, delta_p: 0.5, delta_t: 0.34, delta_vc: 0.05, delta_c: 0.33, kp: 1, kt: 1, kc: 1 };
@@ -56,7 +58,83 @@ function App() {
       return 'dark';
     }
   });
+  const [session, setSession] = useState<SessionUser | null>(null);
+  const [isSessionChecked, setIsSessionChecked] = useState(false);
+  // На сервере вход обязателен (GASMETER_REQUIRE_AUTH=1), локально — нет:
+  // об этом сообщает сам сервер, отвечая 401 на запрос профиля без токена.
+  const [authRequired, setAuthRequired] = useState(false);
   const apiBase = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
+
+  /** Восстановление сессии по сохранённому токену при открытии приложения. */
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem('gasmeter-token');
+    } catch {
+      saved = null;
+    }
+    if (saved) setAuthToken(saved);
+    getCurrentUser()
+      .then((user) => {
+        // без токена сервер в режиме разработки отдаёт роль по умолчанию —
+        // это не считается выполненным входом
+        if (saved) {
+          setSession(user);
+          setActiveView(user.home_view as ActiveView);
+        }
+      })
+      .catch((error: Error) => {
+        setAuthRequired(error.message.includes('401'));
+        setAuthToken(null);
+        try {
+          window.localStorage.removeItem('gasmeter-token');
+        } catch {
+          // нечего очищать
+        }
+      })
+      .finally(() => setIsSessionChecked(true));
+  }, []);
+
+  /** Право текущей роли. Пока вход не выполнен, ограничений нет — режим разработки. */
+  const can = useCallback(
+    (permission: string) => (session ? session.permissions.includes(permission) : true),
+    [session],
+  );
+
+  /** Разделы меню: каждый показывается, только если роль имеет соответствующее право. */
+  const visibleNavItems = useMemo(
+    () =>
+      (
+        [
+          { view: 'technologist', label: 'Подбор МИ', icon: <Activity size={18} />, permission: 'uug:select' },
+          { view: 'instruments', label: 'База СИ', icon: <Database size={18} />, permission: 'instrument:read' },
+          { view: 'constructor', label: 'Расчёт погрешности', icon: <Gauge size={18} />, permission: 'calculation:create' },
+          { view: 'methodIntake', label: 'Добавление МИ', icon: <PlusCircle size={18} />, permission: 'document:write' },
+          { view: 'methods', label: 'Библиотека МИ', icon: <FileText size={18} />, permission: 'method:read' },
+          { view: 'reports', label: 'Отчёты', icon: <ShieldCheck size={18} />, permission: 'report:export' },
+          { view: 'settings', label: 'Настройки', icon: <Settings size={18} />, permission: 'system:read' },
+        ] as Array<{ view: ActiveView; label: string; icon: ReactNode; permission: string }>
+      ).filter((item) => can(item.permission)),
+    [can],
+  );
+
+  /** Если роль потеряла доступ к текущему разделу — уводим на её домашний экран. */
+  useEffect(() => {
+    if (!session || visibleNavItems.length === 0) return;
+    if (!visibleNavItems.some((item) => item.view === activeView)) {
+      setActiveView(visibleNavItems[0].view);
+    }
+  }, [session, visibleNavItems, activeView]);
+
+  const handleSignOut = async () => {
+    await logout();
+    try {
+      window.localStorage.removeItem('gasmeter-token');
+    } catch {
+      // нечего очищать
+    }
+    setSession(null);
+  };
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -155,8 +233,10 @@ function App() {
   useEffect(() => {
     if (selectedFlowmeter?.dn_mm == null) return;
     setLine((current) => {
-      if (current.pipe_dn_mm === selectedFlowmeter.dn_mm && current.flowmeter_dn_mm === selectedFlowmeter.dn_mm) return current;
-      return { ...current, pipe_dn_mm: selectedFlowmeter.dn_mm ?? current.pipe_dn_mm, flowmeter_dn_mm: selectedFlowmeter.dn_mm ?? current.flowmeter_dn_mm };
+      // Трубопровод первичен: подставляем только DN самого прибора,
+      // DN трубы остаётся тем, что задал пользователь.
+      if (current.flowmeter_dn_mm === selectedFlowmeter.dn_mm) return current;
+      return { ...current, flowmeter_dn_mm: selectedFlowmeter.dn_mm ?? current.flowmeter_dn_mm };
     });
   }, [selectedFlowmeter]);
 
@@ -216,9 +296,17 @@ function App() {
     settings: { breadcrumbs: 'Главная / Настройки / Система', title: 'Настройки системы' },
   };
 
+  if (!isSessionChecked) return <div className="app-loading">Загрузка…</div>;
+  if (!session && authRequired) {
+    return <LoginScreen onSignedIn={(user) => { setSession(user); setActiveView(user.home_view as ActiveView); }} />;
+  }
+
   return (
     <div className="app-shell">
-      <aside className="side-nav"><div className="brand"><img className="brand-logo" src={theme === 'light' ? inkLogo : inkLogoWhite} alt="Эмблема ИНК" /><div><div className="brand-title">GasMeter Pro</div><div className="brand-subtitle">Иркутская нефтяная компания</div></div></div><nav className="nav-list"><button className={`nav-item nav-button ${activeView === 'constructor' ? 'active' : ''}`} onClick={() => setActiveView('constructor')}><Gauge size={18} /> Конструктор УУГ</button><button className={`nav-item nav-button ${activeView === 'technologist' ? 'active' : ''}`} onClick={() => setActiveView('technologist')}><Activity size={18} /> Подбор МИ</button><button className={`nav-item nav-button ${activeView === 'instruments' ? 'active' : ''}`} onClick={() => setActiveView('instruments')}><Database size={18} /> База СИ</button><button className={`nav-item nav-button ${activeView === 'methodIntake' ? 'active' : ''}`} onClick={() => setActiveView('methodIntake')}><PlusCircle size={18} /> Добавление МИ</button><button className={`nav-item nav-button ${activeView === 'methods' ? 'active' : ''}`} onClick={() => setActiveView('methods')}><FileText size={18} /> Библиотека МИ</button><button className="nav-item nav-button" onClick={() => setIsHistoryOpen(true)}><History size={18} /> История</button><button className={`nav-item nav-button ${activeView === 'reports' ? 'active' : ''}`} onClick={() => setActiveView('reports')}><ShieldCheck size={18} /> Отчёты</button><button className={`nav-item nav-button ${activeView === 'settings' ? 'active' : ''}`} onClick={() => setActiveView('settings')}><Settings size={18} /> Настройки</button></nav></aside>
+      <aside className="side-nav"><div className="brand"><img className="brand-logo" src={theme === 'light' ? inkLogo : inkLogoWhite} alt="Эмблема ИНК" /><div><div className="brand-title">GasMeter Pro</div><div className="brand-subtitle">Иркутская нефтяная компания</div></div></div><nav className="nav-list">{visibleNavItems.map((item) => (
+        <button key={item.view} className={`nav-item nav-button ${activeView === item.view ? 'active' : ''}`} onClick={() => setActiveView(item.view)}>{item.icon} {item.label}</button>
+      ))}
+      {can('calculation:create') && <button className="nav-item nav-button" onClick={() => setIsHistoryOpen(true)}><History size={18} /> История</button>}</nav></aside>
       <main className="workspace">
         <header className="topbar">
           <h1>{viewCopy[activeView].title}</h1>
@@ -233,13 +321,37 @@ function App() {
                 <button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>Протокол PDF</button>
               </>
             )}
+            {session && (
+              <span className="session-badge" title={`${session.full_name} · ${session.role_title}`}>
+                <span className="session-name">{session.full_name}</span>
+                <span className="session-role">{session.role_title}</span>
+              </span>
+            )}
+            {session && <button className="ghost-button" onClick={handleSignOut} title="Выйти из системы"><LogOut size={15} /></button>}
             <button className="ghost-button theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title={theme === 'dark' ? 'Светлая тема «протокол»' : 'Тёмная тема «диспетчерская»'}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}</button>
           </div>
         </header>
         {activeView === 'constructor' ? <section className="three-column-layout">
           <aside className="left-panel panel"><div className="panel-header"><strong>Исходные данные</strong></div>
             <FormGroup title="Проект / объект"><TextField label="Название расчёта" value={projectName} onChange={setProjectName} /></FormGroup>
-            <FormGroup title="Трубопровод"><NumberField label="Dn трубы, мм" value={line.pipe_dn_mm} onChange={(value) => setLine({ ...line, pipe_dn_mm: value })} locked={selectedFlowmeter?.dn_mm != null} /><NumberField label="Dn расходомера, мм" value={line.flowmeter_dn_mm} onChange={(value) => setLine({ ...line, flowmeter_dn_mm: value })} locked={selectedFlowmeter?.dn_mm != null} /><NumberField label="Прямой участок до, Dn" value={line.straight_before_dn} onChange={(value) => setLine({ ...line, straight_before_dn: value })} /><NumberField label="Прямой участок после, Dn" value={line.straight_after_dn} onChange={(value) => setLine({ ...line, straight_after_dn: value })} /></FormGroup>
+            <FormGroup title="Трубопровод">
+              <label className="field">
+                <span>Dn трубы, мм</span>
+                <select value={line.pipe_dn_mm} onChange={(event) => setLine({ ...line, pipe_dn_mm: Number(event.target.value) })}>
+                  {PIPE_DN_SERIES.map((dn) => <option key={dn} value={dn}>Dn {dn}</option>)}
+                  {!PIPE_DN_SERIES.includes(line.pipe_dn_mm as never) && <option value={line.pipe_dn_mm}>Dn {line.pipe_dn_mm} (вне ряда)</option>}
+                </select>
+              </label>
+              <NumberField label="Dn расходомера, мм" value={line.flowmeter_dn_mm} onChange={(value) => setLine({ ...line, flowmeter_dn_mm: value })} />
+              <NumberField label="Прямой участок до, Dn" value={line.straight_before_dn} onChange={(value) => setLine({ ...line, straight_before_dn: value })} invalid={line.straight_before_dn < MIN_STRAIGHT_BEFORE_DN} />
+              <NumberField label="Прямой участок после, Dn" value={line.straight_after_dn} onChange={(value) => setLine({ ...line, straight_after_dn: value })} invalid={line.straight_after_dn < MIN_STRAIGHT_AFTER_DN} />
+              {line.pipe_dn_mm !== line.flowmeter_dn_mm && (
+                <div className="field-warning"><AlertTriangle size={13} /> Dn расходомера отличается от Dn трубы — расчёт не пройдёт проверку конфигурации.</div>
+              )}
+              {(line.straight_before_dn < MIN_STRAIGHT_BEFORE_DN || line.straight_after_dn < MIN_STRAIGHT_AFTER_DN) && (
+                <div className="field-warning"><AlertTriangle size={13} /> Минимум {MIN_STRAIGHT_BEFORE_DN} Dn до и {MIN_STRAIGHT_AFTER_DN} Dn после расходомера.</div>
+              )}
+            </FormGroup>
             <FormGroup title="Рабочие условия / область МИ"><NumberField label="Q min, м³/ч" value={line.q_min} onChange={(value) => setLine({ ...line, q_min: value })} /><NumberField label="Q max, м³/ч" value={line.q_max} onChange={(value) => setLine({ ...line, q_max: value })} /><NumberField label="P min, МПа" value={line.p_min_mpa} onChange={(value) => setLine({ ...line, p_min_mpa: value })} /><NumberField label="P max, МПа" value={line.p_max_mpa} onChange={(value) => setLine({ ...line, p_max_mpa: value })} /><NumberField label="T min, °C" value={line.t_min_c} onChange={(value) => setLine({ ...line, t_min_c: value })} /><NumberField label="T max, °C" value={line.t_max_c} onChange={(value) => setLine({ ...line, t_max_c: value })} /></FormGroup>
             <Collapsible title="Экспертные параметры расчёта" hint="Точка расчёта PTZ и коэффициенты сжимаемости"><NumberField label="Q рабочий, м³/ч" value={context.working_flow_rate ?? 0} onChange={(value) => setContext({ ...context, working_flow_rate: value })} /><NumberField label="P избыточное, МПа" value={context.gauge_pressure_mpa ?? 0} onChange={(value) => setContext({ ...context, gauge_pressure_mpa: value })} /><NumberField label="Температура, °C" value={context.temperature_c ?? 0} onChange={(value) => setContext({ ...context, temperature_c: value })} /><NumberField label="P атм., МПа" value={context.atmospheric_pressure_mpa ?? 0.101325} onChange={(value) => setContext({ ...context, atmospheric_pressure_mpa: value })} /><NumberField label="Z рабоч." value={context.z_working ?? 1} onChange={(value) => setContext({ ...context, z_working: value })} /><NumberField label="Z станд." value={context.z_standard ?? 1} onChange={(value) => setContext({ ...context, z_standard: value })} /></Collapsible>
             <FormGroup title="МИ и расчётный шаблон"><label className="field"><span>Методика</span><select value={selectedMethodId} onChange={(event) => setSelectedMethodId(event.target.value)}>{methods.map((method) => <option key={method.mi_id} value={method.mi_id}>{method.registration_number}</option>)}</select></label><label className="field"><span>Шаблон расчёта</span><select value={selectedTemplate} onChange={(event) => setSelectedTemplate(event.target.value as CalculationTemplateCode)}>{templates.map((template) => <option key={template.code} value={template.code}>{template.code} · {template.title}</option>)}</select></label>{selectedTemplateInfo && <div className={`template-hint ${selectedTemplateInfo.status}`}>{selectedTemplateInfo.status === 'ready' ? 'Готов к применению' : 'Черновой шаблон'} · {selectedTemplateInfo.title}</div>}</FormGroup>
@@ -476,6 +588,39 @@ function instrumentStatusClass(status: InstrumentStatus) {
   return 'danger';
 }
 
+/**
+ * Карточка подобранной методики. Для неподходящих сразу видна причина —
+ * без неё пользователь не понимал, чем именно МИ не устроила.
+ */
+function MethodMatchCard({ method, isCurrent, onSelect }: { method: MethodCompatibility; isCurrent: boolean; onSelect: (miId: string) => void }) {
+  const [showAll, setShowAll] = useState(false);
+  const isMatch = method.status === 'full_match';
+  // Причины несоответствия важнее подтверждений — показываем их первыми.
+  // Сначала отсеиваем утвердительные формулировки: иначе «не превышает предел»
+  // попадает в проблемы из-за слова «превышает».
+  const positive = /не превышает|входит в|соответствует МИ|есть технологический|выполняется/i;
+  const negative = /вне |превышает|не пересекается|отличается|нет версии|требует|не применим/i;
+  const problems = method.reasons.filter((reason) => !positive.test(reason) && negative.test(reason));
+  const visible = showAll ? method.reasons : (problems.length > 0 ? problems.slice(0, 2) : method.reasons.slice(0, 1));
+
+  return (
+    <div className={`method-card ${method.status} ${isCurrent ? 'current' : ''}`}>
+      <button className="method-card-main" onClick={() => onSelect(method.mi_id)}>
+        <div className="method-top"><strong>{method.registration_number}</strong><span className="score">{method.score}</span></div>
+        <div className="method-status">{isMatch ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div>
+      </button>
+      <ul className={`method-reasons ${problems.length > 0 ? 'problem' : ''}`}>
+        {visible.map((reason) => <li key={reason}>{reason}</li>)}
+      </ul>
+      {method.reasons.length > visible.length && (
+        <button className="method-reasons-toggle" onClick={() => setShowAll(!showAll)}>
+          {showAll ? 'Свернуть' : `Все условия (${method.reasons.length})`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Раскрывающийся блок: второстепенное скрыто по умолчанию и не занимает экран. */
 function Collapsible({ title, hint, children, defaultOpen = false }: { title: string; hint?: string; children: ReactNode; defaultOpen?: boolean }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -515,10 +660,7 @@ function MethodMatchList({ items, selectedId, onSelect }: { items: MethodCompati
       <div className="method-list">
         {matched.length === 0 && <div className="empty-row">Ничего не найдено</div>}
         {matched.slice(0, 20).map((method) => (
-          <button className={`method-card ${method.status} ${method.mi_id === selectedId ? 'current' : ''}`} key={method.mi_id} onClick={() => onSelect(method.mi_id)}>
-            <div className="method-top"><strong>{method.registration_number}</strong><span className="score">{method.score}</span></div>
-            <div className="method-status">{method.status === 'full_match' ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div>
-          </button>
+          <MethodMatchCard key={method.mi_id} method={method} isCurrent={method.mi_id === selectedId} onSelect={onSelect} />
         ))}
         {normalized && matched.length > 20 && <div className="empty-row">Показаны первые 20 — уточните запрос</div>}
       </div>
@@ -526,7 +668,7 @@ function MethodMatchList({ items, selectedId, onSelect }: { items: MethodCompati
   );
 }
 
-function NumberField({ label, value, onChange, locked = false }: { label: string; value: number; onChange: (value: number) => void; locked?: boolean }) { return <label className="field"><span>{label}</span><input type="number" step="any" value={value} disabled={locked} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
+function NumberField({ label, value, onChange, locked = false, invalid = false }: { label: string; value: number; onChange: (value: number) => void; locked?: boolean; invalid?: boolean }) { return <label className="field"><span>{label}</span><input type="number" step="any" className={invalid ? 'invalid' : undefined} value={value} disabled={locked} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="field"><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
 function FormGroup({ title, children }: { title: string; children: ReactNode }) { return <section className="form-group"><h3>{title}</h3>{children}</section>; }
 function Kpi({ title, value, status }: { title: string; value: string; status: 'ok' | 'warn' | 'info' | 'danger' }) { return <div className={`kpi ${status}`}><span>{title}</span><strong>{value}</strong></div>; }

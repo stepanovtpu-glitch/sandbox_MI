@@ -39,6 +39,22 @@ from app.schemas import (
 MIN_ABSOLUTE_PRESSURE_MPA = 0.1
 MIN_STRAIGHT_BEFORE_DN = 10
 MIN_STRAIGHT_AFTER_DN = 5
+
+# Границы применимости методов расчёта физических свойств газа.
+# ГОСТ 30319.3-2015, п. 6.1.1: температура 250–350 К, давление 0,1–30,0 МПа.
+# ГОСТ 30319.2-2015 (расчёт по плотности, N2 и CO2): та же температура, давление до 7,5 МПа.
+# За этими границами вычислитель не имеет аттестованного алгоритма расчёта
+# коэффициента сжимаемости, поэтому узел учёта спроектировать нельзя.
+GOST_30319_T_MIN_K = 250.0
+GOST_30319_T_MAX_K = 350.0
+GOST_30319_T_MIN_C = GOST_30319_T_MIN_K - 273.15  # -23.15 °C
+GOST_30319_T_MAX_C = GOST_30319_T_MAX_K - 273.15  # +76.85 °C
+GOST_30319_3_P_MAX_MPA = 30.0
+GOST_30319_2_P_MAX_MPA = 7.5
+
+# Нижний предел температуры среды. Для ПНГ служба главного метролога ИНК
+# установила -10 °C (жёстче ГОСТ: влажный газ, риск конденсации),
+# для ПГ и СОГ действует граница методов расчёта по ГОСТ 30319 (-23 °C).
 MIN_TEMPERATURE_C = {
     GasMedium.PNG: -10.0,
     GasMedium.PG: -23.0,
@@ -72,13 +88,42 @@ def _validate(request: UugSelectionRequest) -> list[str]:
         errors.append(f'Прямой участок после расходомера должен быть не менее {MIN_STRAIGHT_AFTER_DN} Dn.')
     if request.p_abs_mpa < MIN_ABSOLUTE_PRESSURE_MPA:
         errors.append('Абсолютное давление не может принимать значение меньше 0,1 МПа.')
+    elif request.p_abs_mpa > GOST_30319_3_P_MAX_MPA:
+        errors.append(
+            f'Абсолютное давление {request.p_abs_mpa:g} МПа выходит за верхнюю границу методов расчёта '
+            f'физических свойств газа: по ГОСТ 30319.3-2015 допускается до {GOST_30319_3_P_MAX_MPA:g} МПа.'
+        )
+
     t_min = MIN_TEMPERATURE_C[request.medium]
     if request.t_working_c < t_min:
         if request.medium == GasMedium.PNG:
             errors.append('Температура ПНГ не может принимать значение меньше минус 10 °С.')
         else:
             errors.append('Температура ПГ не может принимать значение меньше минус 23 °С.')
+    elif request.t_working_c > GOST_30319_T_MAX_C:
+        errors.append(
+            f'Температура {request.t_working_c:g} °С выходит за верхнюю границу методов расчёта: '
+            f'по ГОСТ 30319-2015 расчёт выполняется до {GOST_30319_T_MAX_K:g} К '
+            f'({GOST_30319_T_MAX_C:.1f} °С).'
+        )
     return errors
+
+
+def _algorithm_warnings(request: UugSelectionRequest) -> list[str]:
+    """Предупреждения о применимости алгоритмов расчёта — не блокируют подбор."""
+    warnings: list[str] = []
+    if GOST_30319_2_P_MAX_MPA < request.p_abs_mpa <= GOST_30319_3_P_MAX_MPA:
+        warnings.append(
+            f'При давлении выше {GOST_30319_2_P_MAX_MPA:g} МПа расчёт по ГОСТ 30319.2-2015 '
+            '(по плотности, азоту и диоксиду углерода) неприменим — вычислитель должен '
+            'работать по ГОСТ 30319.3-2015 на основании компонентного состава газа.'
+        )
+    if request.t_working_c < GOST_30319_T_MIN_C:
+        warnings.append(
+            f'Температура ниже {GOST_30319_T_MIN_K:g} К ({GOST_30319_T_MIN_C:.1f} °С) — '
+            'граница методов расчёта по ГОСТ 30319-2015.'
+        )
+    return warnings
 
 
 def _method_pressure_range(method: MeasurementMethod) -> tuple[float, float]:
@@ -183,9 +228,12 @@ def _instrument_plan(
 
     slots: list[UugInstrumentSlot] = []
 
+    # Средство измерений подбирается по рабочим условиям (решение владельца продукта),
+    # стандартные условия приводим рядом — по ним ведётся учёт.
     flowmeter_requirements = [
         f'Условный диаметр DN {request.pipe_dn_mm:g} мм (равен DN трубопровода)',
         f'Диапазон измерений покрывает {qw_min:.1f}–{qw_max:.1f} м³/ч при рабочих условиях',
+        f'Соответствует {request.q_std_min:g}–{request.q_std_max:g} м³/ч при стандартных условиях',
     ]
     if method.delta_q_max is not None:
         flowmeter_requirements.append(f'Относительная погрешность δQ ≤ {method.delta_q_max:g} %')
@@ -301,12 +349,14 @@ def _technologist_params(method: MeasurementMethod, request: UugSelectionRequest
 
 def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
     validation_errors = _validate(request)
+    warnings = _algorithm_warnings(request)
     accuracy_limit, accuracy_note = ACCURACY_RULES[(request.medium, request.process)]
 
     if validation_errors:
         return UugSelectionResponse(
             input=request,
             validation_errors=validation_errors,
+            algorithm_warnings=warnings,
             accuracy_limit_percent=accuracy_limit,
             accuracy_note=accuracy_note,
             summary='Исходные данные не прошли проверку. Исправьте отмеченные поля и повторите подбор.',
@@ -335,6 +385,7 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
         return UugSelectionResponse(
             input=request,
             validation_errors=[],
+            algorithm_warnings=warnings,
             accuracy_limit_percent=accuracy_limit,
             accuracy_note=accuracy_note,
             best_method=None,
@@ -374,6 +425,7 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
     return UugSelectionResponse(
         input=request,
         validation_errors=[],
+        algorithm_warnings=warnings,
         accuracy_limit_percent=accuracy_limit,
         accuracy_note=accuracy_note,
         best_method=matches[0],

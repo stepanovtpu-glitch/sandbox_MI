@@ -2,6 +2,7 @@ import os
 
 from pydantic import BaseModel
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Header as FastApiHeader
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -46,8 +47,9 @@ from app.schemas import (
     UugSelectionResponse,
 )
 from app.scoring import score_methods
-from app.security import get_user_context, require_permission, roles_payload
+from app.security import ROLE_HOME_VIEW, ROLE_PERMISSIONS, ROLE_TITLES, get_user_context, require_permission, roles_payload
 from app.technology_recommendation import recommend_methods_for_technology_mode
+from app.users import authenticate, close_session, create_user, get_user, list_users, open_session, purge_expired_sessions, set_user_active, update_password
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
@@ -98,6 +100,94 @@ def startup() -> None:
 @app.get('/health')
 def health():
     return {'status': 'ok', 'application': 'GasMeter Pro'}
+
+
+class LoginPayload(BaseModel):
+    login: str
+    password: str
+
+
+class UserCreatePayload(BaseModel):
+    login: str
+    password: str
+    full_name: str
+    role: str
+    position: str | None = None
+
+
+class PasswordPayload(BaseModel):
+    password: str
+
+
+@app.post('/api/auth/login')
+def auth_login(payload: LoginPayload):
+    account = authenticate(payload.login, payload.password)
+    if not account:
+        log_audit_event('login_failed', 'user', payload.login, {}, actor=payload.login)
+        raise HTTPException(status_code=401, detail='Неверный логин или пароль.')
+    purge_expired_sessions()
+    token, expires_at = open_session(account['login'])
+    log_audit_event('login', 'user', account['login'], {'role': account['role']}, actor=account['login'])
+    return {
+        'token': token,
+        'expires_at': expires_at,
+        'user': {
+            'actor': account['login'],
+            'full_name': account['full_name'],
+            'role': account['role'],
+            'role_title': ROLE_TITLES.get(account['role'], account['role']),
+            'home_view': ROLE_HOME_VIEW.get(account['role'], 'technologist'),
+            'permissions': sorted(ROLE_PERMISSIONS.get(account['role'], set())),
+        },
+    }
+
+
+@app.post('/api/auth/logout')
+def auth_logout(authorization: str | None = FastApiHeader(default=None)):
+    if authorization and authorization.lower().startswith('bearer '):
+        close_session(authorization[7:].strip())
+    return {'status': 'ok'}
+
+
+@app.get('/api/users')
+def users_list(user: dict[str, object] = Depends(require_permission('user:manage'))):
+    return [
+        {key: value for key, value in account.items() if key != 'password_hash'}
+        for account in list_users()
+    ]
+
+
+@app.post('/api/users')
+def users_create(payload: UserCreatePayload, user: dict[str, object] = Depends(require_permission('user:manage'))):
+    if payload.role not in ROLE_PERMISSIONS:
+        raise HTTPException(status_code=400, detail=f'Неизвестная роль: {payload.role}')
+    if get_user(payload.login):
+        raise HTTPException(status_code=409, detail='Пользователь с таким логином уже существует.')
+    if len(payload.password) < 8:
+        raise HTTPException(status_code=400, detail='Пароль должен быть не короче 8 символов.')
+    account = create_user(payload.login, payload.password, payload.full_name, payload.role, payload.position)
+    log_audit_event('create_user', 'user', account['login'], {'role': account['role']}, actor=_actor(user))
+    return {key: value for key, value in account.items() if key != 'password_hash'}
+
+
+@app.post('/api/users/{login}/password')
+def users_set_password(login: str, payload: PasswordPayload, user: dict[str, object] = Depends(require_permission('user:manage'))):
+    if not get_user(login):
+        raise HTTPException(status_code=404, detail='Пользователь не найден.')
+    if len(payload.password) < 8:
+        raise HTTPException(status_code=400, detail='Пароль должен быть не короче 8 символов.')
+    update_password(login, payload.password)
+    log_audit_event('reset_password', 'user', login, {}, actor=_actor(user))
+    return {'status': 'ok'}
+
+
+@app.post('/api/users/{login}/active')
+def users_set_active(login: str, is_active: bool, user: dict[str, object] = Depends(require_permission('user:manage'))):
+    if not get_user(login):
+        raise HTTPException(status_code=404, detail='Пользователь не найден.')
+    set_user_active(login, is_active)
+    log_audit_event('set_user_active', 'user', login, {'is_active': is_active}, actor=_actor(user))
+    return {'status': 'ok'}
 
 
 @app.get('/api/security/me')

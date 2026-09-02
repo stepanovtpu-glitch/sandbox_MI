@@ -224,6 +224,71 @@ html[data-theme='light'] .donut::after {
   background: var(--surface);
 }
 
+/* ============ Вход в систему ============ */
+.app-loading {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  color: var(--muted);
+  font-size: 14px;
+}
+.login-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+.login-card {
+  width: min(400px, 100%);
+  background: rgba(var(--surface-rgb), 0.96);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 32px 30px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 4px;
+}
+.login-logo { height: 52px; width: auto; margin-bottom: 12px; justify-self: start; }
+html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1200%) hue-rotate(135deg); }
+.login-card h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.login-subtitle { margin: 2px 0 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.login-card .field input { height: 38px; }
+.login-error {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--danger-rgb), 0.3);
+  background: rgba(var(--danger-rgb), 0.09);
+  color: var(--danger);
+  font-size: 12.5px;
+}
+.login-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  margin-top: 16px;
+  font-weight: 600;
+}
+.login-note { margin: 16px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+
+/* Текущий пользователь и роль в шапке */
+.session-badge {
+  display: grid;
+  line-height: 1.25;
+  padding: 0 6px 0 2px;
+  text-align: right;
+}
+.session-name { font-size: 12.5px; font-weight: 600; }
+.session-role {
+  font-size: 10.5px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 /* ============ Экран «Подбор МИ и УУГ» ============ */
 .uug-screen {
   padding: 14px;
@@ -507,6 +572,51 @@ html[data-theme='light'] .donut::after {
   height: auto;
   text-align: left;
   padding: 10px 12px;
+}
+.method-card-main {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+/* Причины, по которым методика не подошла — видны сразу, без раскрытия */
+.method-reasons {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.method-reasons li {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  padding-left: 12px;
+  position: relative;
+}
+.method-reasons li::before {
+  content: '·';
+  position: absolute;
+  left: 3px;
+  color: var(--muted);
+}
+.method-reasons.problem li { color: var(--warn); }
+.method-reasons.problem li::before { content: '✕'; font-size: 9px; top: 1px; color: var(--warn); }
+.method-card.not_applicable .method-reasons.problem li,
+.method-card.not_applicable .method-reasons.problem li::before { color: var(--danger); }
+.method-reasons-toggle {
+  height: auto;
+  padding: 6px 0 0;
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font-size: 11.5px;
+  cursor: pointer;
 }
 .method-card.current { border-color: var(--border-strong); background: var(--accent-soft); }
 .empty-row { font-size: 12px; color: var(--muted); padding: 8px 2px; }

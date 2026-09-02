@@ -183,6 +183,7 @@ export type UugInstrumentSlot = {
 export type UugSelectionResponse = {
   input: UugSelectionRequest;
   validation_errors: string[];
+  algorithm_warnings: string[];
   accuracy_limit_percent?: number | null;
   accuracy_note?: string | null;
   best_method?: UugMethodMatch | null;
@@ -196,18 +197,62 @@ export type UugSelectionResponse = {
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
 
+export type UserRole = 'admin' | 'metrologist' | 'kip' | 'technologist' | 'engineer' | 'viewer';
+export type SessionUser = {
+  actor: string;
+  full_name: string;
+  role: UserRole;
+  role_title: string;
+  home_view: string;
+  permissions: string[];
+};
+
+let authToken: string | null = null;
+export function setAuthToken(token: string | null) { authToken = token; }
+export function getAuthToken() { return authToken; }
+
+export async function login(loginName: string, password: string): Promise<{ token: string; expires_at: string; user: SessionUser }> {
+  const response = await fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: loginName, password }),
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? 'Не удалось войти');
+  }
+  return response.json();
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST', headers: authHeaders() });
+  } finally {
+    setAuthToken(null);
+  }
+}
+
+export async function getCurrentUser(): Promise<SessionUser> {
+  return request<SessionUser>('/api/security/me');
+}
+
+function authHeaders(): Record<string, string> {
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
+
+
 export async function selectUug(payload: UugSelectionRequest): Promise<UugSelectionResponse> {
   return request<UugSelectionResponse>('/api/uug/selection', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
+  const response = await fetch(`${API_BASE}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(init?.headers ?? {}) } });
   if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
   return response.json() as Promise<T>;
 }
 
 async function downloadRequest(path: string, body: unknown, fallbackName: string) {
-  const response = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const response = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) });
   if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
   const blob = await response.blob();
   const disposition = response.headers.get('content-disposition') ?? '';

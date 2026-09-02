@@ -9,6 +9,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - GASMETER_DB_DIR=/app/data
+      # На сервере вход обязателен: роль определяется сессией, а не заголовком запроса
+      - GASMETER_REQUIRE_AUTH=1
     volumes:
       - ./data:/app/data
       - ./mi_library:/app/mi_library

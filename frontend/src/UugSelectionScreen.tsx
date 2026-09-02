@@ -178,6 +178,10 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
                 <div className="uug-clamp-note"><AlertTriangle size={14} /> {result.adjusted_q.note}</div>
               )}
 
+              {(result.algorithm_warnings ?? []).map((warning) => (
+                <div className="uug-clamp-note" key={warning}><AlertTriangle size={14} /> {warning}</div>
+              ))}
+
               <div className={`panel uug-method-card ${best ? 'ok' : 'none'}`}>
                 <div className="panel-header row">
                   <div>

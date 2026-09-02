@@ -355,6 +355,7 @@ class UugMethodMatch(BaseModel):
 class UugSelectionResponse(BaseModel):
     input: UugSelectionRequest
     validation_errors: list[str]
+    algorithm_warnings: list[str] = Field(default_factory=list)
     accuracy_limit_percent: float | None = None
     accuracy_note: str | None = None
     best_method: UugMethodMatch | None = None
