@@ -1,3 +1,5 @@
+import os
+
 from pydantic import BaseModel
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,10 +42,13 @@ from app.schemas import (
     MethodVersionCreateRequest,
     TechnologyModeRequest,
     TechnologyRecommendationResponse,
+    UugSelectionRequest,
+    UugSelectionResponse,
 )
 from app.scoring import score_methods
 from app.security import get_user_context, require_permission, roles_payload
 from app.technology_recommendation import recommend_methods_for_technology_mode
+from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
 APP_VERSION = '0.1.0'
@@ -55,9 +60,13 @@ class SaveCalculationPayload(BaseModel):
     calculation: CalculationRequest
 
 
+DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+_extra_origins = os.environ.get('GASMETER_ALLOWED_ORIGINS', '')
+ALLOWED_ORIGINS = DEFAULT_ALLOWED_ORIGINS + [origin.strip() for origin in _extra_origins.split(',') if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173'],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
@@ -393,6 +402,27 @@ def export_docx_report(request: CalculationRequest, user: dict[str, object] = De
         media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         filename=report_path.name,
     )
+
+
+@app.post('/api/uug/selection', response_model=UugSelectionResponse)
+def uug_selection(request: UugSelectionRequest, user: dict[str, object] = Depends(require_permission('method:read'))):
+    response = select_uug(request)
+    log_audit_event(
+        'uug_selection',
+        'uug',
+        response.best_method.mi_id if response.best_method else 'no_match',
+        {
+            'medium': request.medium.value,
+            'process': request.process.value,
+            'pipe_dn_mm': request.pipe_dn_mm,
+            'q_std': f'{request.q_std_min}-{request.q_std_max}',
+            'p_abs_mpa': request.p_abs_mpa,
+            't_working_c': request.t_working_c,
+            'validation_errors': len(response.validation_errors),
+        },
+        actor=_actor(user),
+    )
+    return response
 
 
 @app.post('/api/technology/recommendations', response_model=TechnologyRecommendationResponse)

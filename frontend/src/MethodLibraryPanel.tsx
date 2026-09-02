@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
 import { TestCasePanel } from './TestCasePanel';
 import {
   createMethodVersion,
@@ -28,6 +29,15 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
   const [versions, setVersions] = useState<MeasurementMethodVersion[]>([]);
   const [templates, setTemplates] = useState<CalculationTemplateInfo[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [libraryQuery, setLibraryQuery] = useState('');
+  const LIBRARY_PAGE_SIZE = 12;
+  const filteredMethods = useMemo(() => {
+    const normalized = libraryQuery.trim().toLowerCase();
+    if (!normalized) return methods;
+    return methods.filter((method) => `${method.registration_number} ${method.title}`.toLowerCase().includes(normalized));
+  }, [methods, libraryQuery]);
+  const visibleMethods = filteredMethods.slice(0, LIBRARY_PAGE_SIZE);
+  const hiddenMethodsCount = filteredMethods.length - visibleMethods.length;
   const [draft, setDraft] = useState<MeasurementMethod | null>(null);
   const [changeComment, setChangeComment] = useState('Новая версия МИ / обновление диапазонов и требований');
   const [versionTemplate, setVersionTemplate] = useState<CalculationTemplateCode>('DRG_SERIES');
@@ -189,14 +199,27 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
         <>
           <input ref={fileInputRef} className="hidden-file-input" type="file" accept="application/pdf,.pdf" onChange={(event) => handleFileSelected(event.target.files?.[0])} />
 
+          {/* Библиотека выросла до 216 методик — без поиска список занимал 21 экран */}
+          <label className="method-search">
+            <Search size={14} />
+            <input
+              value={libraryQuery}
+              onChange={(event) => setLibraryQuery(event.target.value)}
+              placeholder={`Поиск среди ${methods.length} методик`}
+            />
+          </label>
           <div className="method-selector-grid">
-            {methods.map((method) => (
+            {visibleMethods.map((method) => (
               <button key={method.mi_id} className={`method-pill ${selectedMethod.mi_id === method.mi_id ? 'active' : ''}`} onClick={() => onSelectMethod(method.mi_id)}>
                 <span>{method.registration_number}</span>
                 <small className={`quality-dot ${methodQuality(method).status}`}>{methodQuality(method).label}</small>
               </button>
             ))}
+            {visibleMethods.length === 0 && <div className="empty-row">Ничего не найдено</div>}
           </div>
+          {hiddenMethodsCount > 0 && (
+            <div className="empty-row">Показаны первые {visibleMethods.length} — уточните запрос, чтобы найти остальные {hiddenMethodsCount}</div>
+          )}
 
           <div className="library-card">
             <div className="library-card-title row-title">

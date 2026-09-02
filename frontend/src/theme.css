@@ -1,0 +1,586 @@
+/*
+  Дизайн-система GasMeter Pro · ИНК
+  Фирменные цвета из официальной эмблемы: зелёный #006654, графит #344855.
+  Тёмная тема — «диспетчерская», светлая — «протокол».
+  Файл ПЕРЕОПРЕДЕЛЯЕТ токены старой темы (styles.css) и добавляет светлый режим.
+*/
+
+:root {
+  /* Бренд */
+  --ink-green: #006654;
+  --ink-slate: #344855;
+
+  /* Тёмная тема (по умолчанию) */
+  --bg: #0b141b;
+  --bg-deep: #070e13;
+  --surface: #10202a;
+  --surface-2: #142835;
+  --surface-3: #18303f;
+  --border: rgba(140, 170, 188, 0.16);
+  --border-strong: rgba(46, 176, 143, 0.45);
+  --text: #e9f1f4;
+  --muted: #93aab8;
+  --accent: #2eb08f;          /* зелёный ИНК, осветлён для тёмного фона */
+  --accent-strong: #43c9a6;
+  --accent-soft: rgba(46, 176, 143, 0.14);
+  --ok: #46b578;
+  --warn: #d4a041;
+  --danger: #e06e63;
+  --info: #4f9dc9;
+  --orange: #d4a041;          /* прежний оранжевый канал уводим в янтарный */
+  --shadow: 0 22px 70px rgba(2, 8, 12, 0.5);
+
+  --photo-overlay: linear-gradient(180deg, rgba(7, 14, 19, 0.72), rgba(7, 14, 19, 0.9));
+  --surface-rgb: 16, 32, 42;
+  --font-sans: 'Golos Text', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', Consolas, monospace;
+
+  /* rgb-триплеты для полупрозрачных заливок в существующих стилях */
+  --accent-rgb: 46, 176, 143;
+  --ok-rgb: 70, 181, 120;
+  --warn-rgb: 212, 160, 65;
+  --danger-rgb: 224, 110, 99;
+  --info-rgb: 79, 157, 201;
+  --raise-rgb: 255, 255, 255;      /* «подсветка» поверх тёмных панелей */
+  --well-rgb: 6, 13, 18;           /* «углубление» — тёмные вставки */
+  --chrome-rgb: 14, 26, 34;        /* топбар и служебные полосы */
+  --accent-contrast: #04211a;      /* текст на акцентной кнопке */
+}
+
+html[data-theme='light'] {
+  --bg: #eef2f4;
+  --bg-deep: #e7edf0;
+  --surface: #ffffff;
+  --surface-2: #f2f6f8;
+  --surface-3: #e9f0f3;
+  --border: rgba(52, 72, 85, 0.16);
+  --border-strong: rgba(0, 102, 84, 0.45);
+  --text: #17242e;
+  --muted: #5c7180;
+  --accent: #006654;          /* фирменный зелёный как есть */
+  --accent-strong: #0a7a66;
+  --accent-soft: rgba(0, 102, 84, 0.1);
+  --ok: #1e7d4f;
+  --warn: #9a6b12;
+  --danger: #b04545;
+  --info: #22638c;
+  --orange: #9a6b12;
+  --shadow: 0 16px 44px rgba(23, 36, 46, 0.12);
+
+  --photo-overlay: linear-gradient(180deg, rgba(238, 242, 244, 0.88), rgba(238, 242, 244, 0.96));
+  --surface-rgb: 255, 255, 255;
+
+  --accent-rgb: 0, 102, 84;
+  --ok-rgb: 30, 125, 79;
+  --warn-rgb: 154, 107, 18;
+  --danger-rgb: 176, 69, 69;
+  --info-rgb: 34, 99, 140;
+  --raise-rgb: 23, 36, 46;
+  --well-rgb: 244, 248, 250;
+  --chrome-rgb: 255, 255, 255;
+  --accent-contrast: #ffffff;
+}
+
+html {
+  color-scheme: dark;
+}
+html[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* Фон приложения: зимний Байкал под плотной вуалью — панели опаковые, фото живёт по краям. */
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-deep);
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--photo-overlay), url('./assets/photos/baikal-winter-ice.jpg');
+  background-size: cover;
+  background-position: center 30%;
+  background-attachment: fixed;
+}
+
+/* Утилиты темы */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+}
+
+/* Эмблема ИНК в сайдбаре */
+.brand-logo {
+  height: 42px;
+  width: auto;
+  flex: none;
+}
+
+/* 3D-сцена измерительной линии: собственный тёмный «вьюпорт», одинаковый в обеих темах */
+.pipeline-scene {
+  width: 100%;
+  height: 230px;
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(420px 200px at 70% 20%, rgba(79, 157, 201, 0.14), transparent 70%),
+    radial-gradient(380px 190px at 15% 85%, rgba(46, 176, 143, 0.12), transparent 70%),
+    linear-gradient(180deg, #0d1a22, #081119);
+  border: 1px solid rgba(140, 170, 188, 0.14);
+}
+.pipeline-scene canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.pipeline-card {
+  display: grid;
+  place-items: stretch;
+  padding: 10px;
+}
+.pipeline-svg {
+  height: 190px;
+}
+.flow-dash {
+  stroke: var(--accent);
+}
+
+/* Типографика: заголовки плотнее, цифры табличные */
+h1, h2, h3, .brand-title, .panel-header strong, .chart-title {
+  letter-spacing: -0.015em;
+}
+.kpi strong, .bar-value, .donut span, .score, .field input, .field select {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Обложечные баннеры разделов: зимний Байкал, текст на тёмной вуали в обеих темах */
+.cover-band {
+  position: relative;
+  margin: 14px 14px 0;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background-image:
+    linear-gradient(90deg, rgba(7, 16, 21, 0.82) 0%, rgba(7, 16, 21, 0.55) 55%, rgba(7, 16, 21, 0.25) 100%),
+    url('./assets/photos/baikal-ice-sunset.jpg');
+  background-size: cover;
+  background-position: center 62%;
+}
+.cover-technologist,
+.cover-reports {
+  background-image:
+    linear-gradient(90deg, rgba(7, 16, 21, 0.82) 0%, rgba(7, 16, 21, 0.55) 55%, rgba(7, 16, 21, 0.25) 100%),
+    url('./assets/photos/baikal-olkhon.jpg');
+  background-position: center 40%;
+}
+.cover-settings {
+  background-image:
+    linear-gradient(90deg, rgba(7, 16, 21, 0.82) 0%, rgba(7, 16, 21, 0.55) 55%, rgba(7, 16, 21, 0.25) 100%),
+    url('./assets/photos/baikal-beauty.jpg');
+  background-position: center 55%;
+}
+.cover-band-inner {
+  padding: 26px 26px 22px;
+}
+.cover-band-inner span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(233, 241, 244, 0.75);
+  margin-bottom: 6px;
+}
+.cover-band-inner h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #f2f7f9;
+  text-wrap: balance;
+}
+
+/* Панели чуть пропускают фоновое фото Байкала */
+.panel {
+  background: rgba(var(--surface-rgb), 0.93);
+}
+
+/* Светлая тема: аккуратные тени и границы вместо свечения */
+html[data-theme='light'] .panel {
+  box-shadow: 0 10px 30px rgba(23, 36, 46, 0.08);
+}
+html[data-theme='light'] .side-nav {
+  background: linear-gradient(180deg, var(--surface), var(--bg));
+}
+html[data-theme='light'] .field input,
+html[data-theme='light'] .field select {
+  background: var(--surface);
+}
+html[data-theme='light'] .donut::after {
+  background: var(--surface);
+}
+
+/* ============ Экран «Подбор МИ и УУГ» ============ */
+.uug-screen {
+  padding: 14px;
+}
+.uug-layout {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.uug-form-panel {
+  padding: 16px;
+  position: sticky;
+  top: 62px;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.field-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: -4px 0 10px;
+  line-height: 1.45;
+}
+.field-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--warn);
+  margin-top: 6px;
+}
+.field input.invalid {
+  border-color: rgba(var(--danger-rgb), 0.55);
+}
+.hint-dot {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-left: 4px;
+  color: var(--muted);
+  cursor: help;
+}
+.uug-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.uug-result-column {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.uug-placeholder {
+  padding: 42px 28px;
+  text-align: center;
+  color: var(--muted);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.uug-placeholder strong { color: var(--text); font-size: 16px; }
+.uug-placeholder p { max-width: 52ch; margin: 0; font-size: 13.5px; line-height: 1.55; }
+.uug-placeholder svg { color: var(--accent); }
+.uug-errors { padding: 16px; }
+.uug-error-row {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--danger-rgb), 0.3);
+  background: rgba(var(--danger-rgb), 0.09);
+  color: var(--danger);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.uug-error-row svg { flex: none; margin-top: 1px; }
+.uug-clamp-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--warn-rgb), 0.35);
+  background: rgba(var(--warn-rgb), 0.1);
+  color: var(--warn);
+  font-size: 13px;
+}
+.uug-method-card { padding: 16px; }
+.uug-method-card.ok { border-color: var(--border-strong); }
+.uug-summary { margin: 0 0 10px; font-size: 13.5px; line-height: 1.55; }
+.uug-accuracy {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  display: inline-block;
+}
+.uug-method-title { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
+.uug-reasons { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 5px; }
+.uug-reasons li { display: flex; gap: 7px; align-items: flex-start; font-size: 12.5px; color: var(--muted); }
+.uug-reasons svg { color: var(--ok); flex: none; margin-top: 2px; }
+.uug-ranges { padding: 16px; }
+.uug-range-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.uug-range-row:last-child { border-bottom: 0; }
+.uug-range-label { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.uug-range-value { font-family: var(--font-mono); font-size: 20px; font-variant-numeric: tabular-nums; }
+.uug-range-note { font-size: 11.5px; color: var(--warn); margin-top: 3px; }
+.uug-audience { padding: 16px; }
+.uug-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.uug-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  height: 34px;
+  border-radius: 10px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.uug-tabs button.active { color: var(--accent); border-color: var(--border-strong); background: var(--accent-soft); font-weight: 600; }
+.uug-slots { display: grid; gap: 10px; }
+.uug-slot { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: rgba(var(--raise-rgb), 0.03); }
+.uug-slot.required { border-left: 3px solid var(--accent); }
+.uug-slot-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 7px; }
+.uug-slot-head .pill { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; border-radius: 999px; padding: 3px 9px; }
+.uug-slot-head .pill.must { color: var(--accent); background: var(--accent-soft); }
+.uug-slot-head .pill.opt { color: var(--muted); background: rgba(var(--raise-rgb), 0.06); }
+.uug-slot-reqs { margin: 0 0 8px; padding-left: 18px; font-size: 12.5px; color: var(--muted); display: grid; gap: 3px; }
+.uug-candidates { display: grid; gap: 6px; }
+.uug-candidates > span { font-size: 11px; color: var(--ok); text-transform: uppercase; letter-spacing: 0.06em; }
+.uug-candidate { display: grid; }
+.uug-candidate b { font-size: 12.5px; }
+.uug-candidate small { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.uug-slot-note { display: flex; gap: 7px; align-items: center; font-size: 12px; color: var(--warn); }
+.uug-tech-params { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.uug-tech-params li { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; line-height: 1.5; }
+.uug-tech-params svg { color: var(--accent); flex: none; margin-top: 2px; }
+.uug-alternatives { padding: 12px 16px; }
+.uug-alternatives summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.uug-alt { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.uug-alt:last-child { border-bottom: 0; }
+.uug-alt.not_applicable { opacity: 0.65; }
+.uug-alt-head { display: flex; justify-content: space-between; gap: 10px; }
+.uug-alt small { color: var(--muted); font-size: 11.5px; }
+.uug-alt p { margin: 5px 0 0; font-size: 12px; color: var(--muted); }
+
+/* ============ Фаза 0: компактность ============ */
+
+/* Топбар: один заголовок, действия справа */
+.topbar h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Раскрывающиеся блоки: второстепенное не занимает экран */
+.collapsible {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(var(--raise-rgb), 0.025);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.collapsible-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  min-height: 40px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.collapsible-head small {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 11px;
+  text-align: right;
+  max-width: 55%;
+}
+.collapsible-chevron {
+  flex: none;
+  color: var(--accent);
+  transition: transform 0.18s ease;
+}
+.collapsible.open .collapsible-chevron { transform: rotate(90deg); }
+.collapsible-body { padding: 0 12px 12px; }
+.audit-list { display: grid; gap: 4px; }
+.audit-list code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(var(--well-rgb), 0.4);
+  padding: 4px 8px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+/* Статус результата в шапке панели вместо отдельного блока */
+.result-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.result-badge.danger { background: rgba(var(--danger-rgb), 0.12); color: var(--danger); }
+.result-badge.warn { background: rgba(var(--warn-rgb), 0.12); color: var(--warn); }
+
+/* Подпись к 3D-схеме вместо второго SVG-изображения линии */
+.pipeline-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px 2px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.pipeline-legend b { color: var(--text); font-weight: 500; }
+
+/* Подходящие МИ: топ-3 + поиск вместо списка на 216 карточек */
+.method-match { margin-top: 14px; }
+.method-match-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.method-match-head strong { font-size: 13px; }
+.method-match-head span { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+.method-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0 10px;
+  background: rgba(var(--well-rgb), 0.35);
+  margin-bottom: 10px;
+}
+.method-search svg { color: var(--muted); flex: none; }
+.method-search input {
+  flex: 1;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+}
+.method-list .method-card {
+  display: block;
+  width: 100%;
+  height: auto;
+  text-align: left;
+  padding: 10px 12px;
+}
+.method-card.current { border-color: var(--border-strong); background: var(--accent-soft); }
+.empty-row { font-size: 12px; color: var(--muted); padding: 8px 2px; }
+
+/* ============ Мобильная и планшетная адаптация ============ */
+@media (max-width: 1100px) {
+  body { min-width: 0; }
+  .app-shell { grid-template-columns: 1fr; }
+  .side-nav {
+    width: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .side-nav .brand { margin-bottom: 0; height: auto; flex: none; }
+  .brand-subtitle { display: none; }
+  .brand-logo { height: 34px; }
+  .nav-list { display: flex; gap: 6px; }
+  .nav-item { flex: none; height: 38px; }
+  .three-column-layout { grid-template-columns: 1fr; height: auto; min-height: 0; }
+  .uug-layout { grid-template-columns: 1fr; }
+  .uug-form-panel { position: static; }
+  /* Шапка на телефоне занимала треть экрана — теперь одна строка.
+     Заголовок раздела не дублируем: он виден в навигации как активный пункт. */
+  .topbar {
+    display: flex;
+    /* в десктопной теме шапка прилипает на 95px — на телефоне это давало пустую полосу */
+    top: 0;
+    height: 48px;
+    min-height: 48px;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .topbar::-webkit-scrollbar { display: none; }
+  .topbar h1 { display: none; }
+  .top-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    align-items: center;
+    width: auto;
+  }
+  .top-actions .calc-status { display: none; }
+  .top-actions button {
+    flex: none;
+    width: auto;
+    height: 34px;
+    padding: 0 14px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .field-row { grid-template-columns: 1fr; }
+  .screen-summary { grid-template-columns: 1fr 1fr; }
+  .cover-band-inner h2 { font-size: 20px; }
+  .uug-tabs { flex-direction: column; }
+  .uug-tabs button { justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001s !important;
+    transition-duration: 0.001s !important;
+  }
+}

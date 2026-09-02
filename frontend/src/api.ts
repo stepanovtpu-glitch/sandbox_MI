@@ -146,7 +146,59 @@ export type PilotReadiness = { status: 'pilot_ready' | 'pilot_limited' | 'not_re
 
 export type MethodCompatibility = { mi_id: string; registration_number: string; title: string; status: 'full_match' | 'partial_match' | 'not_applicable'; score: number; reasons: string[]; };
 
+export type GasMedium = 'png' | 'pg' | 'sog';
+export type MeteringProcess = 'extraction' | 'processing';
+
+export type UugSelectionRequest = {
+  medium: GasMedium;
+  process: MeteringProcess;
+  pipe_dn_mm: number;
+  straight_before_dn: number;
+  straight_after_dn: number;
+  q_std_min: number;
+  q_std_max: number;
+  p_abs_mpa: number;
+  t_working_c: number;
+  preferred_flowmeter_type?: string | null;
+};
+
+export type UugMethodMatch = {
+  mi_id: string;
+  registration_number: string;
+  title: string;
+  status: 'recommended' | 'reserve' | 'not_applicable';
+  score: number;
+  reasons: string[];
+};
+
+export type UugInstrumentSlot = {
+  type: InstrumentType;
+  title: string;
+  required: boolean;
+  requirements: string[];
+  candidates: Instrument[];
+  note?: string | null;
+};
+
+export type UugSelectionResponse = {
+  input: UugSelectionRequest;
+  validation_errors: string[];
+  accuracy_limit_percent?: number | null;
+  accuracy_note?: string | null;
+  best_method?: UugMethodMatch | null;
+  alternatives: UugMethodMatch[];
+  adjusted_q?: { q_min: number; q_max: number; clamped: boolean; note?: string | null } | null;
+  ranges: Array<{ label: string; q_min: number; q_max: number; unit: string; note?: string | null }>;
+  instrument_plan: UugInstrumentSlot[];
+  technologist_params: string[];
+  summary: string;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
+
+export async function selectUug(payload: UugSelectionRequest): Promise<UugSelectionResponse> {
+  return request<UugSelectionResponse>('/api/uug/selection', { method: 'POST', body: JSON.stringify(payload) });
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });

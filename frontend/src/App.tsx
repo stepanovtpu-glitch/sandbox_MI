@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Activity, Database, FileText, Gauge, History, PlusCircle, Settings, ShieldCheck } from 'lucide-react';
-import { DesignScreenForm } from './DesignScreenForm';
-import { HistoryPanel } from './HistoryPanel';
+import { Activity, ChevronRight, Database, FileText, Gauge, History, Moon, PlusCircle, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { PipelineScene } from './PipelineScene';
+import { UugSelectionScreen } from './UugSelectionScreen';
+import inkLogo from './assets/brand/ink-logo.svg';
+import inkLogoWhite from './assets/brand/ink-logo-white.svg';
 import { HistoryScreen } from './HistoryScreen';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
 import { MethodIntakeScreen } from './MethodIntakeScreen';
 import { SystemStatusPanel } from './SystemStatusPanel';
-import { TechnologyRecommendationPanel } from './TechnologyRecommendationPanel';
 import { calculate, downloadReport, getCalculationTemplates, getInstrumentRecommendations, getInstruments, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationRecord, type CalculationResult, type CalculationTemplateCode, type CalculationTemplateInfo, type ErrorContributions, type Instrument, type InstrumentReplacementRecommendation, type InstrumentStatus, type InstrumentType, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = { pipe_dn_mm: 100, flowmeter_dn_mm: 100, straight_before_dn: 10, straight_after_dn: 5, q_min: 40, q_max: 1600, q_unit: 'm3/h', p_min_mpa: 0.12, p_max_mpa: 2.5, t_min_c: -50, t_max_c: 50 };
@@ -14,6 +15,12 @@ const initialErrors: ErrorContributions = { delta_q: 1.5, delta_p: 0.5, delta_t:
 const initialContext: CalculationContext = { working_flow_rate: 100, gauge_pressure_mpa: 0.398675, temperature_c: 25, atmospheric_pressure_mpa: 0.101325, z_working: 0.990393, z_standard: 0.996372 };
 
 function auditValue(audit: string[] | undefined, key: string, fallback = '—') { const row = audit?.find((item) => item.startsWith(`${key}=`)); return row ? row.split('=').slice(1).join('=') : fallback; }
+/** Числа из аудита приходят с полной машинной точностью (488.115309) — на экране это шум. */
+function formatNumber(value: string, digits = 2) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return value;
+  return parsed.toLocaleString('ru-RU', { maximumFractionDigits: digits });
+}
 function isTemplateCode(value: unknown): value is CalculationTemplateCode { return typeof value === 'string' && ['DRG_SERIES', 'GAS_VOLUME_PTZ', 'ROTARY_COUNTER_GAS', 'TURBINE_COUNTER_GAS', 'ULTRASONIC_GAS', 'MANUAL_QUADRATURE', 'CUSTOM'].includes(value); }
 function lastTitlePart(value: string) { const parts = value.split('. '); return parts[parts.length - 1] || value; }
 const instrumentTypeTitles: Record<InstrumentType, string> = { flowmeter: 'Расходомер', pressure: 'Датчик давления', temperature: 'Датчик температуры', computer: 'Вычислитель', analyzer: 'Анализатор состава' };
@@ -42,7 +49,23 @@ function App() {
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>('constructor');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      return window.localStorage.getItem('gasmeter-theme') === 'light' ? 'light' : 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
   const apiBase = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem('gasmeter-theme', theme);
+    } catch {
+      // приватный режим — тема просто не сохранится
+    }
+  }, [theme]);
 
   const selectedMethod = useMemo(() => methods.find((method) => method.mi_id === selectedMethodId) ?? methods[0] ?? null, [methods, selectedMethodId]);
   const selectedTemplateInfo = useMemo(() => templates.find((template) => template.code === selectedTemplate) ?? null, [templates, selectedTemplate]);
@@ -185,7 +208,7 @@ function App() {
   const temperatureK = auditValue(audit, 'T');
   const viewCopy: Record<ActiveView, { breadcrumbs: string; title: string }> = {
     constructor: { breadcrumbs: 'Главная / Конструктор УУГ / Средства измерений', title: 'Конструктор измерительной линии' },
-    technologist: { breadcrumbs: 'Главная / Подбор МИ / Технологический режим', title: 'Подбор методики измерений' },
+    technologist: { breadcrumbs: 'Главная / Подбор МИ и УУГ / Технолог и КИПиА', title: 'Подбор методики измерений и состава УУГ' },
     instruments: { breadcrumbs: 'Главная / База СИ / Инвентарный фонд', title: 'База средств измерений' },
     methodIntake: { breadcrumbs: 'Главная / Добавление МИ / OCR, правка и проверка', title: 'Добавление и проверка методики измерений' },
     methods: { breadcrumbs: 'Главная / Библиотека МИ / Версии и документы', title: 'Библиотека методик измерений' },
@@ -195,15 +218,30 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="side-nav"><div className="brand"><div className="brand-mark">GP</div><div><div className="brand-title">GasMeter Pro</div><div className="brand-subtitle">Industrial Precision</div></div></div><nav className="nav-list"><button className={`nav-item nav-button ${activeView === 'constructor' ? 'active' : ''}`} onClick={() => setActiveView('constructor')}><Gauge size={18} /> Конструктор УУГ</button><button className={`nav-item nav-button ${activeView === 'technologist' ? 'active' : ''}`} onClick={() => setActiveView('technologist')}><Activity size={18} /> Подбор МИ</button><button className={`nav-item nav-button ${activeView === 'instruments' ? 'active' : ''}`} onClick={() => setActiveView('instruments')}><Database size={18} /> База СИ</button><button className={`nav-item nav-button ${activeView === 'methodIntake' ? 'active' : ''}`} onClick={() => setActiveView('methodIntake')}><PlusCircle size={18} /> Добавление МИ</button><button className={`nav-item nav-button ${activeView === 'methods' ? 'active' : ''}`} onClick={() => setActiveView('methods')}><FileText size={18} /> Библиотека МИ</button><button className="nav-item nav-button" onClick={() => setIsHistoryOpen(true)}><History size={18} /> История</button><button className={`nav-item nav-button ${activeView === 'reports' ? 'active' : ''}`} onClick={() => setActiveView('reports')}><ShieldCheck size={18} /> Отчёты</button><button className={`nav-item nav-button ${activeView === 'settings' ? 'active' : ''}`} onClick={() => setActiveView('settings')}><Settings size={18} /> Настройки</button></nav></aside>
+      <aside className="side-nav"><div className="brand"><img className="brand-logo" src={theme === 'light' ? inkLogo : inkLogoWhite} alt="Эмблема ИНК" /><div><div className="brand-title">GasMeter Pro</div><div className="brand-subtitle">Иркутская нефтяная компания</div></div></div><nav className="nav-list"><button className={`nav-item nav-button ${activeView === 'constructor' ? 'active' : ''}`} onClick={() => setActiveView('constructor')}><Gauge size={18} /> Конструктор УУГ</button><button className={`nav-item nav-button ${activeView === 'technologist' ? 'active' : ''}`} onClick={() => setActiveView('technologist')}><Activity size={18} /> Подбор МИ</button><button className={`nav-item nav-button ${activeView === 'instruments' ? 'active' : ''}`} onClick={() => setActiveView('instruments')}><Database size={18} /> База СИ</button><button className={`nav-item nav-button ${activeView === 'methodIntake' ? 'active' : ''}`} onClick={() => setActiveView('methodIntake')}><PlusCircle size={18} /> Добавление МИ</button><button className={`nav-item nav-button ${activeView === 'methods' ? 'active' : ''}`} onClick={() => setActiveView('methods')}><FileText size={18} /> Библиотека МИ</button><button className="nav-item nav-button" onClick={() => setIsHistoryOpen(true)}><History size={18} /> История</button><button className={`nav-item nav-button ${activeView === 'reports' ? 'active' : ''}`} onClick={() => setActiveView('reports')}><ShieldCheck size={18} /> Отчёты</button><button className={`nav-item nav-button ${activeView === 'settings' ? 'active' : ''}`} onClick={() => setActiveView('settings')}><Settings size={18} /> Настройки</button></nav></aside>
       <main className="workspace">
-        <header className="topbar"><div><div className="breadcrumbs">{viewCopy[activeView].breadcrumbs}</div><h1>{viewCopy[activeView].title}</h1></div><div className="top-actions"><span className={`calc-status ${apiError ? 'error' : ''}`}><Activity size={16} /> {apiError ? 'Ошибка API' : isLoading ? 'Расчёт...' : reportStatus || 'Расчёт актуален'}</span><button className="ghost-button" onClick={() => setIsHistoryOpen(true)}>Журнал</button><button className="ghost-button" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить</button><button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button><button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>Сформировать PDF</button></div></header>
+        <header className="topbar">
+          <h1>{viewCopy[activeView].title}</h1>
+          <div className="top-actions">
+            {(apiError || isLoading || reportStatus) && (
+              <span className={`calc-status ${apiError ? 'error' : ''}`}><Activity size={16} /> {apiError ? 'Ошибка API' : isLoading ? 'Расчёт...' : reportStatus}</span>
+            )}
+            {activeView === 'constructor' && (
+              <>
+                <button className="ghost-button" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить</button>
+                <button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button>
+                <button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>Протокол PDF</button>
+              </>
+            )}
+            <button className="ghost-button theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title={theme === 'dark' ? 'Светлая тема «протокол»' : 'Тёмная тема «диспетчерская»'}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}</button>
+          </div>
+        </header>
         {activeView === 'constructor' ? <section className="three-column-layout">
-          <aside className="left-panel panel"><div className="panel-header"><span>Шаг 1–2</span><strong>Параметры ИЛ и СИ</strong></div><div className="stepper"><span className="step done">1</span><span className="step-line"></span><span className="step active">2</span><span className="step-line"></span><span className="step">3</span><span className="step-line"></span><span className="step">4</span></div>
+          <aside className="left-panel panel"><div className="panel-header"><strong>Исходные данные</strong></div>
             <FormGroup title="Проект / объект"><TextField label="Название расчёта" value={projectName} onChange={setProjectName} /></FormGroup>
             <FormGroup title="Трубопровод"><NumberField label="Dn трубы, мм" value={line.pipe_dn_mm} onChange={(value) => setLine({ ...line, pipe_dn_mm: value })} locked={selectedFlowmeter?.dn_mm != null} /><NumberField label="Dn расходомера, мм" value={line.flowmeter_dn_mm} onChange={(value) => setLine({ ...line, flowmeter_dn_mm: value })} locked={selectedFlowmeter?.dn_mm != null} /><NumberField label="Прямой участок до, Dn" value={line.straight_before_dn} onChange={(value) => setLine({ ...line, straight_before_dn: value })} /><NumberField label="Прямой участок после, Dn" value={line.straight_after_dn} onChange={(value) => setLine({ ...line, straight_after_dn: value })} /></FormGroup>
             <FormGroup title="Рабочие условия / область МИ"><NumberField label="Q min, м³/ч" value={line.q_min} onChange={(value) => setLine({ ...line, q_min: value })} /><NumberField label="Q max, м³/ч" value={line.q_max} onChange={(value) => setLine({ ...line, q_max: value })} /><NumberField label="P min, МПа" value={line.p_min_mpa} onChange={(value) => setLine({ ...line, p_min_mpa: value })} /><NumberField label="P max, МПа" value={line.p_max_mpa} onChange={(value) => setLine({ ...line, p_max_mpa: value })} /><NumberField label="T min, °C" value={line.t_min_c} onChange={(value) => setLine({ ...line, t_min_c: value })} /><NumberField label="T max, °C" value={line.t_max_c} onChange={(value) => setLine({ ...line, t_max_c: value })} /></FormGroup>
-            <FormGroup title="Точка расчёта PTZ"><NumberField label="Q рабочий, м³/ч" value={context.working_flow_rate ?? 0} onChange={(value) => setContext({ ...context, working_flow_rate: value })} /><NumberField label="P избыточное, МПа" value={context.gauge_pressure_mpa ?? 0} onChange={(value) => setContext({ ...context, gauge_pressure_mpa: value })} /><NumberField label="Температура, °C" value={context.temperature_c ?? 0} onChange={(value) => setContext({ ...context, temperature_c: value })} /><NumberField label="P атм., МПа" value={context.atmospheric_pressure_mpa ?? 0.101325} onChange={(value) => setContext({ ...context, atmospheric_pressure_mpa: value })} /><NumberField label="Z рабоч." value={context.z_working ?? 1} onChange={(value) => setContext({ ...context, z_working: value })} /><NumberField label="Z станд." value={context.z_standard ?? 1} onChange={(value) => setContext({ ...context, z_standard: value })} /></FormGroup>
+            <Collapsible title="Экспертные параметры расчёта" hint="Точка расчёта PTZ и коэффициенты сжимаемости"><NumberField label="Q рабочий, м³/ч" value={context.working_flow_rate ?? 0} onChange={(value) => setContext({ ...context, working_flow_rate: value })} /><NumberField label="P избыточное, МПа" value={context.gauge_pressure_mpa ?? 0} onChange={(value) => setContext({ ...context, gauge_pressure_mpa: value })} /><NumberField label="Температура, °C" value={context.temperature_c ?? 0} onChange={(value) => setContext({ ...context, temperature_c: value })} /><NumberField label="P атм., МПа" value={context.atmospheric_pressure_mpa ?? 0.101325} onChange={(value) => setContext({ ...context, atmospheric_pressure_mpa: value })} /><NumberField label="Z рабоч." value={context.z_working ?? 1} onChange={(value) => setContext({ ...context, z_working: value })} /><NumberField label="Z станд." value={context.z_standard ?? 1} onChange={(value) => setContext({ ...context, z_standard: value })} /></Collapsible>
             <FormGroup title="МИ и расчётный шаблон"><label className="field"><span>Методика</span><select value={selectedMethodId} onChange={(event) => setSelectedMethodId(event.target.value)}>{methods.map((method) => <option key={method.mi_id} value={method.mi_id}>{method.registration_number}</option>)}</select></label><label className="field"><span>Шаблон расчёта</span><select value={selectedTemplate} onChange={(event) => setSelectedTemplate(event.target.value as CalculationTemplateCode)}>{templates.map((template) => <option key={template.code} value={template.code}>{template.code} · {template.title}</option>)}</select></label>{selectedTemplateInfo && <div className={`template-hint ${selectedTemplateInfo.status}`}>{selectedTemplateInfo.status === 'ready' ? 'Готов к применению' : 'Черновой шаблон'} · {selectedTemplateInfo.title}</div>}</FormGroup>
             <FormGroup title="Средства измерений из базы">
               <InstrumentSelect title="Расходомер" type="flowmeter" instruments={instrumentsByType.flowmeter} selectedId={selectedInstrumentIds.flowmeter} onChange={(id) => setSelectedInstrumentIds({ ...selectedInstrumentIds, flowmeter: id })} />
@@ -212,11 +250,10 @@ function App() {
               <InstrumentSelect title="Вычислитель" type="computer" instruments={instrumentsByType.computer} selectedId={selectedInstrumentIds.computer} onChange={(id) => setSelectedInstrumentIds({ ...selectedInstrumentIds, computer: id })} />
               <InstrumentSelect title="Анализатор состава" type="analyzer" instruments={instrumentsByType.analyzer} selectedId={selectedInstrumentIds.analyzer} onChange={(id) => setSelectedInstrumentIds({ ...selectedInstrumentIds, analyzer: id })} />
             </FormGroup>
-            <InstrumentCard title="Расходомер" name={selectedFlowmeter?.name ?? flowmeterName} meta={instrumentMeta(selectedFlowmeter, `δQ ${errors.delta_q}% · ${selectedMethod?.q_min ?? 0}–${selectedMethod?.q_max ?? 0} м³/ч`)} status={instrumentStatus(errors.delta_q, selectedMethod?.delta_q_max)} /><InstrumentCard title="Датчик давления" name={selectedPressure?.name ?? 'EJA110E'} meta={instrumentMeta(selectedPressure, `δP ${errors.delta_p}% · ${line.p_min_mpa}–${line.p_max_mpa} МПа`)} status={instrumentStatus(errors.delta_p, selectedMethod?.delta_p_max)} /><InstrumentCard title="Датчик температуры" name={selectedTemperature?.name ?? 'Метран-286'} meta={instrumentMeta(selectedTemperature, `δT ${errors.delta_t}% · ${line.t_min_c}…${line.t_max_c} °C`)} status={instrumentStatus(errors.delta_t, selectedMethod?.delta_t_max)} /><InstrumentCard title="Вычислитель" name={selectedComputer?.name ?? 'СПГ-742'} meta={instrumentMeta(selectedComputer, `δVC ${errors.delta_vc}% · PTZ`)} status={instrumentStatus(errors.delta_vc, selectedMethod?.delta_vc_max)} />
           </aside>
-          <section className="center-panel panel"><div className="panel-header row"><div><span>Шаг 3</span><strong>Экранная форма и схема ИЛ</strong></div><span className="tag info">{selectedTemplate}</span></div><DesignScreenForm projectName={projectName} selectedMethod={selectedMethod} line={line} context={context} selectedTemplate={selectedTemplate} totalStatus={totalStatus} deltaTotal={deltaTotal} limit={limit} /><div className="pipeline-card"><svg viewBox="0 0 820 220" className="pipeline-svg" role="img" aria-label="Схема измерительной линии"><defs><linearGradient id="pipe" x1="0" x2="1"><stop offset="0%" stopColor="#1f3a4a" /><stop offset="50%" stopColor="#32576c" /><stop offset="100%" stopColor="#1f3a4a" /></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3.5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs><line x1="50" y1="110" x2="770" y2="110" stroke="url(#pipe)" strokeWidth="34" strokeLinecap="round" /><line x1="50" y1="110" x2="770" y2="110" stroke="#00c8b4" strokeWidth="2" strokeDasharray="10 12" opacity="0.55" /><text x="130" y="72" className="svg-label">{line.straight_before_dn} Dn</text><text x="620" y="72" className="svg-label">{line.straight_after_dn} Dn</text><rect x="340" y="62" width="142" height="96" rx="16" className="flowmeter" filter="url(#glow)" /><text x="365" y="105" className="svg-title">{flowmeterName}</text><text x="371" y="130" className="svg-caption">Q {selectedMethod?.q_min ?? 0}–{selectedMethod?.q_max ?? 0}</text><circle cx="252" cy="76" r="22" className="sensor ok" /><text x="228" y="42" className="svg-caption">P</text><circle cx="558" cy="76" r="22" className="sensor ok" /><text x="534" y="42" className="svg-caption">T</text><rect x="345" y="174" width="132" height="34" rx="8" className="computer" /><text x="379" y="196" className="svg-caption">СПГ-742</text><line x1="252" y1="98" x2="360" y2="174" className="signal-line" /><line x1="558" y1="98" x2="462" y2="174" className="signal-line" /><line x1="410" y1="158" x2="410" y2="174" className="signal-line" /></svg></div><div className="kpi-grid"><Kpi title="U / δΣ" value={`${deltaTotal.toFixed(3)}%`} status={calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'} /><Kpi title="Qc стандарт." value={qStandard} status="info" /><Kpi title="K" value={kValue} status="info" /><Kpi title="P abs / T" value={`${pAbs} / ${temperatureK}`} status="info" /></div><div className="chart-card"><div className="chart-title">Структура погрешности / неопределённости</div>{(calculation?.contributions ?? []).map((item) => <div className="bar-row" key={item.code}><div className="bar-label">{item.label}</div><div className="bar-track"><span className={`bar-fill ${item.share_percent > 50 ? 'warn' : 'ok'}`} style={{ width: `${Math.max(item.share_percent, 2)}%` }} /></div><div className="bar-value">{item.weighted_value.toFixed(3)}%</div></div>)}</div><div className="chart-card audit-card"><div className="chart-title">Аудит расчёта</div>{(calculation?.audit_log ?? []).map((row) => <code key={row}>{row}</code>)}</div></section>
-          <aside className="right-panel panel"><div className="panel-header"><span>Шаг 4</span><strong>Результаты и подбор МИ</strong></div><SystemStatusPanel /><div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(255,255,255,0.08) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>{apiError && <div className="api-error">{apiError}</div>}<div className="report-card"><div className="rec-label">→ Сохранение расчёта</div><p>Сохраняет расчёт в историю с выбранным шаблоном, версией МИ и SHA-256 документа.</p><button className="primary-button full-width" onClick={handleSaveCalculation} disabled={!selectedMethod}>Сохранить расчёт</button></div><div className="report-card"><div className="rec-label">→ Полный журнал</div><p>Открывает экран истории с фильтрами, карточкой расчёта, вкладом составляющих и audit log.</p><button className="ghost-button full-width" onClick={() => setIsHistoryOpen(true)}>Открыть историю</button></div><div className="report-card"><div className="rec-label">→ Протокол расчёта</div><p>Выгрузка текущего расчёта с выбранной МИ, PTZ-параметрами, вкладом составляющих и журналом аудита.</p><div className="library-actions two"><button className="ghost-button" onClick={() => handleDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button><button className="primary-button" onClick={() => handleDownloadReport('pdf')} disabled={!selectedMethod}>PDF</button></div></div><HistoryPanel refreshToken={historyRefreshToken} /><div className="method-list">{compatibility.map((method) => <div className={`method-card ${method.status}`} key={method.mi_id} onClick={() => setSelectedMethodId(method.mi_id)}><div className="method-top"><strong>{lastTitlePart(method.title)}</strong><span className="score">{method.score}</span></div><div className="method-range">{method.registration_number}</div><div className="method-status">{method.status === 'full_match' ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div><p>{method.reasons[0]}</p></div>)}</div><ReplacementPanel recommendations={replacementRecommendations} onApply={applyInstrument} /><div className="recommendation"><div className="rec-label">→ Рекомендация</div><p>{replacementRecommendations.length > 0 ? 'Найдены конкретные замены СИ из инвентарной базы. Примените подходящий прибор и пересчёт выполнится автоматически.' : calculation?.status === 'fail' ? 'Требуется замена СИ или выбор другой МИ: расчётная величина выше предела.' : 'Текущая конфигурация проходит по диапазону Q/P/T и укладывается в предел расширенной неопределённости.'}</p></div><MethodLibraryPanel methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /></aside>
-        </section> : activeView === 'technologist' ? <section className="technology-screen"><div className="technology-screen-inner"><TechnologyRecommendationPanel /><div className="technology-screen-actions"><button className="ghost-button" onClick={() => setActiveView('constructor')}>Вернуться к конструктору</button></div></div></section> : activeView === 'instruments' ? <InstrumentDatabaseScreen instruments={instruments} selectedInstrumentIds={selectedInstrumentIds} onApply={(instrument) => { applyInstrument(instrument); setActiveView('constructor'); }} /> : activeView === 'methodIntake' ? <MethodIntakeScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'methods' ? <MethodLibraryScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'reports' ? <ReportsScreen selectedMethod={selectedMethod} calculation={calculation} reportStatus={reportStatus} onSave={handleSaveCalculation} onDownloadReport={handleDownloadReport} onOpenHistory={() => setIsHistoryOpen(true)} apiBase={apiBase} /> : <SettingsScreen apiBase={apiBase} methodsCount={methods.length} instrumentsCount={instruments.length} />}
+          <section className="center-panel panel"><div className="panel-header row"><strong>Результат расчёта</strong><span className={`result-badge ${calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'}`}>{totalStatus}</span></div><div className="pipeline-card"><PipelineScene status={calculation?.status === 'fail' ? 'fail' : calculation?.status === 'pass' ? 'pass' : 'warn'} flowmeterLabel={flowmeterName} /><div className="pipeline-legend"><span>{line.straight_before_dn} Dn до</span><b>{flowmeterName}</b><span>{line.straight_after_dn} Dn после</span></div></div><div className="kpi-grid"><Kpi title="U / δΣ" value={`${deltaTotal.toFixed(3)}%`} status={calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'} /><Kpi title="Qc стандарт." value={formatNumber(qStandard, 1)} status="info" /><Kpi title="K" value={formatNumber(kValue, 4)} status="info" /><Kpi title="P abs / T" value={`${formatNumber(pAbs, 3)} / ${formatNumber(temperatureK, 1)}`} status="info" /></div><div className="chart-card"><div className="chart-title">Структура погрешности</div>{(calculation?.contributions ?? []).map((item) => <div className="bar-row" key={item.code}><div className="bar-label">{item.label}</div><div className="bar-track"><span className={`bar-fill ${item.share_percent > 50 ? 'warn' : 'ok'}`} style={{ width: `${Math.max(item.share_percent, 2)}%` }} /></div><div className="bar-value">{item.weighted_value.toFixed(3)}%</div></div>)}</div><Collapsible title="Показать расчёт" hint="Журнал аудита: исходные величины и промежуточные шаги"><div className="audit-list">{(calculation?.audit_log ?? []).map((row) => <code key={row}>{row}</code>)}</div></Collapsible></section>
+          <aside className="right-panel panel"><div className="panel-header"><strong>Итог и подбор МИ</strong></div><div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(var(--raise-rgb),0.10) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>{apiError && <div className="api-error">{apiError}</div>}<ReplacementPanel recommendations={replacementRecommendations} onApply={applyInstrument} /><MethodMatchList items={compatibility} selectedId={selectedMethodId} onSelect={setSelectedMethodId} /></aside>
+        </section> : activeView === 'technologist' ? <UugSelectionScreen onApplyMethod={(miId) => { setSelectedMethodId(miId); setActiveView('constructor'); setReportStatus(`МИ применена из подбора УУГ: ${miId}`); }} /> :activeView === 'instruments' ? <InstrumentDatabaseScreen instruments={instruments} selectedInstrumentIds={selectedInstrumentIds} onApply={(instrument) => { applyInstrument(instrument); setActiveView('constructor'); }} /> : activeView === 'methodIntake' ? <MethodIntakeScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'methods' ? <MethodLibraryScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'reports' ? <ReportsScreen selectedMethod={selectedMethod} calculation={calculation} reportStatus={reportStatus} onSave={handleSaveCalculation} onDownloadReport={handleDownloadReport} onOpenHistory={() => setIsHistoryOpen(true)} apiBase={apiBase} /> : <SettingsScreen apiBase={apiBase} methodsCount={methods.length} instrumentsCount={instruments.length} />}
       </main>
       <HistoryScreen isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} onLoadRecord={handleLoadHistoryRecord} />
     </div>
@@ -232,13 +269,6 @@ function firstInstrumentId(instruments: Instrument[], type: InstrumentType) {
   return typed.find((item) => item.status === 'available')?.id ?? typed[0]?.id;
 }
 function findSelectedInstrument(instruments: Instrument[], selectedId?: string) { return instruments.find((item) => item.id === selectedId) ?? instruments[0] ?? null; }
-function instrumentMeta(instrument: Instrument | null, fallback: string) {
-  if (!instrument) return fallback;
-  const range = instrument.range_min != null && instrument.range_max != null ? `${instrument.range_min}–${instrument.range_max} ${instrument.range_unit ?? ''}` : instrument.range_unit ?? 'диапазон не задан';
-  const due = instrument.calibration_due ? ` · поверка до ${instrument.calibration_due}` : '';
-  return `δ ${instrument.error_percent ?? '—'}% · ${range}${due}`;
-}
-function instrumentStatus(value: number, limit?: number | null) { return limit == null || value <= limit ? '✓' : '✗'; }
 
 function InstrumentSelect({ title, type, instruments, selectedId, onChange }: { title: string; type: InstrumentType; instruments: Instrument[]; selectedId?: string; onChange: (id: string) => void }) {
   return (
@@ -414,6 +444,15 @@ function SettingsScreen({ apiBase, methodsCount, instrumentsCount }: { apiBase: 
           </div>
         </section>
         <section className="settings-tile">
+          <div className="rec-label">Об оформлении</div>
+          <div className="settings-list">
+            <div><span>Эмблема</span><b>ООО «ИНК», irkutskoil.ru</b></div>
+            <div><span>Фото Байкала</span><b>Sergey Pesterev, Iurii Volkov</b></div>
+            <div><span>Лицензия фото</span><b>CC BY-SA 4.0, Wikimedia Commons</b></div>
+            <div><span>Шрифты</span><b>Golos Text · IBM Plex Mono</b></div>
+          </div>
+        </section>
+        <section className="settings-tile">
           <div className="rec-label">Рабочие ограничения</div>
           <div className="settings-list">
             <div><span>База данных</span><b>локальная SQLite</b></div>
@@ -437,10 +476,59 @@ function instrumentStatusClass(status: InstrumentStatus) {
   return 'danger';
 }
 
+/** Раскрывающийся блок: второстепенное скрыто по умолчанию и не занимает экран. */
+function Collapsible({ title, hint, children, defaultOpen = false }: { title: string; hint?: string; children: ReactNode; defaultOpen?: boolean }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <section className={`collapsible ${isOpen ? 'open' : ''}`}>
+      <button className="collapsible-head" onClick={() => setIsOpen(!isOpen)} aria-expanded={isOpen}>
+        <ChevronRight size={15} className="collapsible-chevron" />
+        <span>{title}</span>
+        {hint && !isOpen && <small>{hint}</small>}
+      </button>
+      {isOpen && <div className="collapsible-body">{children}</div>}
+    </section>
+  );
+}
+
+/**
+ * Подходящие методики: топ-3 сразу, остальные — через поиск.
+ * Раньше сюда выводились все МИ подряд (216 карточек — 46 экранов прокрутки).
+ */
+function MethodMatchList({ items, selectedId, onSelect }: { items: MethodCompatibility[]; selectedId: string; onSelect: (miId: string) => void }) {
+  const [query, setQuery] = useState('');
+  const normalized = query.trim().toLowerCase();
+  const matched = normalized
+    ? items.filter((item) => `${item.registration_number} ${item.title}`.toLowerCase().includes(normalized))
+    : items.slice(0, 3);
+
+  return (
+    <div className="method-match">
+      <div className="method-match-head">
+        <strong>Подходящие методики</strong>
+        <span>{normalized ? `найдено ${matched.length}` : `топ-3 из ${items.length}`}</span>
+      </div>
+      <label className="method-search">
+        <Search size={14} />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по номеру или названию" />
+      </label>
+      <div className="method-list">
+        {matched.length === 0 && <div className="empty-row">Ничего не найдено</div>}
+        {matched.slice(0, 20).map((method) => (
+          <button className={`method-card ${method.status} ${method.mi_id === selectedId ? 'current' : ''}`} key={method.mi_id} onClick={() => onSelect(method.mi_id)}>
+            <div className="method-top"><strong>{method.registration_number}</strong><span className="score">{method.score}</span></div>
+            <div className="method-status">{method.status === 'full_match' ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div>
+          </button>
+        ))}
+        {normalized && matched.length > 20 && <div className="empty-row">Показаны первые 20 — уточните запрос</div>}
+      </div>
+    </div>
+  );
+}
+
 function NumberField({ label, value, onChange, locked = false }: { label: string; value: number; onChange: (value: number) => void; locked?: boolean }) { return <label className="field"><span>{label}</span><input type="number" step="any" value={value} disabled={locked} onChange={(event) => onChange(Number(event.target.value))} /></label>; }
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="field"><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
 function FormGroup({ title, children }: { title: string; children: ReactNode }) { return <section className="form-group"><h3>{title}</h3>{children}</section>; }
-function InstrumentCard({ title, name, meta, status }: { title: string; name: string; meta: string; status: string }) { return <div className="instrument-card"><div><div className="instrument-title">{title}</div><strong>{name}</strong><p>{meta}</p></div><span className={status === '✓' ? 'status-ok' : 'status-bad'}>{status}</span></div>; }
 function Kpi({ title, value, status }: { title: string; value: string; status: 'ok' | 'warn' | 'info' | 'danger' }) { return <div className={`kpi ${status}`}><span>{title}</span><strong>{value}</strong></div>; }
 
 export default App;

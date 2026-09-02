@@ -35,6 +35,17 @@ class MethodVersionStatus(str, Enum):
     ARCHIVED = 'archived'
 
 
+class GasMedium(str, Enum):
+    PNG = 'png'  # попутный нефтяной газ (в т.ч. свободный, влажный)
+    PG = 'pg'    # природный газ
+    SOG = 'sog'  # сухой отбензиненный газ
+
+
+class MeteringProcess(str, Enum):
+    EXTRACTION = 'extraction'    # добыча, включая факельные установки
+    PROCESSING = 'processing'    # переработка, реализация
+
+
 class Instrument(BaseModel):
     id: str
     type: InstrumentType
@@ -142,6 +153,7 @@ class MeasurementMethod(BaseModel):
     registration_number: str
     title: str
     flowmeter_type: str | None = None
+    medium: GasMedium | None = None
     q_min: float
     q_max: float
     q_unit: str = 'm3/h'
@@ -281,3 +293,74 @@ class MethodCompatibility(BaseModel):
     status: Literal['full_match', 'partial_match', 'not_applicable']
     score: int
     reasons: list[str]
+
+
+ALLOWED_PIPE_DN_MM: tuple[float, ...] = (25, 50, 80, 100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000)
+
+
+class UugSelectionRequest(BaseModel):
+    """Запрос подбора МИ и состава УУГ от технолога / службы КИПиА."""
+
+    medium: GasMedium
+    process: MeteringProcess
+    pipe_dn_mm: float = Field(gt=0)
+    straight_before_dn: float = Field(ge=0)
+    straight_after_dn: float = Field(ge=0)
+    q_std_min: float = Field(ge=0)
+    q_std_max: float = Field(gt=0)
+    p_abs_mpa: float = Field(gt=0)
+    t_working_c: float
+    preferred_flowmeter_type: str | None = None
+
+    @model_validator(mode='after')
+    def q_range_must_be_ordered(self):
+        if self.q_std_min > self.q_std_max:
+            raise ValueError('q_std_min must be less than or equal to q_std_max')
+        return self
+
+
+class UugAdjustedRange(BaseModel):
+    q_min: float
+    q_max: float
+    clamped: bool
+    note: str | None = None
+
+
+class UugOperatingRange(BaseModel):
+    label: str
+    q_min: float
+    q_max: float
+    unit: str
+    note: str | None = None
+
+
+class UugInstrumentSlot(BaseModel):
+    type: InstrumentType
+    title: str
+    required: bool
+    requirements: list[str]
+    candidates: list[Instrument]
+    note: str | None = None
+
+
+class UugMethodMatch(BaseModel):
+    mi_id: str
+    registration_number: str
+    title: str
+    status: Literal['recommended', 'reserve', 'not_applicable']
+    score: int
+    reasons: list[str]
+
+
+class UugSelectionResponse(BaseModel):
+    input: UugSelectionRequest
+    validation_errors: list[str]
+    accuracy_limit_percent: float | None = None
+    accuracy_note: str | None = None
+    best_method: UugMethodMatch | None = None
+    alternatives: list[UugMethodMatch] = Field(default_factory=list)
+    adjusted_q: UugAdjustedRange | None = None
+    ranges: list[UugOperatingRange] = Field(default_factory=list)
+    instrument_plan: list[UugInstrumentSlot] = Field(default_factory=list)
+    technologist_params: list[str] = Field(default_factory=list)
+    summary: str

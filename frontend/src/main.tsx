@@ -11,6 +11,7 @@ import './history-screen.css';
 import './audit-panel.css';
 import './technology-recommendation.css';
 import './ui-polish.css';
+import './theme.css';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

@@ -33,3 +33,10 @@ logs/
 Thumbs.db
 .idea/
 .vscode/
+
+# MI scan library (2+ GB, not for git)
+mi_library/
+
+# Библиотека сканов МИ и результаты распознавания (2+ ГБ, хранятся локально и на сервере)
+mi_library/
+deploy/bundle/

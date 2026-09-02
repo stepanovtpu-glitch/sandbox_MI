@@ -2,8 +2,8 @@
   margin-bottom: 14px;
   padding: 13px;
   border-radius: 15px;
-  border: 1px solid rgba(0, 200, 180, 0.22);
-  background: rgba(0, 200, 180, 0.07);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+  background: rgba(var(--accent-rgb), 0.07);
 }
 
 .history-list {
@@ -16,15 +16,15 @@
   padding: 10px;
   border-radius: 13px;
   border: 1px solid var(--border);
-  background: rgba(4, 13, 21, 0.4);
+  background: rgba(var(--well-rgb), 0.4);
 }
 
 .history-row.pass {
-  border-color: rgba(63, 185, 80, 0.25);
+  border-color: rgba(var(--ok-rgb), 0.25);
 }
 
 .history-row.fail {
-  border-color: rgba(248, 81, 73, 0.25);
+  border-color: rgba(var(--danger-rgb), 0.25);
 }
 
 .history-row-top {
@@ -40,12 +40,12 @@
 }
 
 .history-row-top span {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 10px;
   color: var(--accent);
   padding: 2px 6px;
   border-radius: 7px;
-  background: rgba(0, 200, 180, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .history-meta {
@@ -57,7 +57,7 @@
 .history-meta span {
   font-size: 10px;
   color: var(--muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   overflow-wrap: anywhere;
 }
 
@@ -73,5 +73,5 @@
   font-size: 9px;
   color: var(--muted);
   overflow-wrap: anywhere;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'IBM Plex Mono', monospace;
 }

@@ -1,7 +1,8 @@
-from app.schemas import MeasurementMethod
+from app.schemas import GasMedium, MeasurementMethod
 
 COMMON_METHOD_KWARGS = {
     'flowmeter_type': 'vortex',
+    'medium': GasMedium.PNG,
     'q_unit': 'm3/h',
     't_min_c': -50,
     't_max_c': 50,

@@ -5,16 +5,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/three": "^0.161.2",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
+    "three": "^0.161.0",
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
+    "@types/node": "latest",
     "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@types/node": "latest"
+    "@types/react-dom": "latest"
   }
 }

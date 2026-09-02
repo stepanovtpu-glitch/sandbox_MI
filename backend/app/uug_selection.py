@@ -1,0 +1,386 @@
+"""Подбор МИ и состава УУГ по технологическим параметрам.
+
+Алгоритм реализует требования службы главного метролога ИНК
+(«Требования для выбора МИ», И. А. Сверкунов, 17.08.2026):
+
+- выбор среды (ПНГ/ПГ/СОГ) и процесса учёта задаёт показатель точности;
+- DN трубопровода — из фиксированного ряда условных диаметров;
+- прямые участки: до расходомера >= 10 Dn, после >= 5 Dn;
+- подбор ведётся по расходу, приведённому к стандартным условиям,
+  с ограничением (clamp) запрошенного диапазона диапазоном МИ и уведомлением;
+- абсолютное давление >= 0,1 МПа и внутри диапазона МИ
+  (при отсутствии минимума в МИ минимальным считается 0,1 МПа);
+- температура: ПНГ >= -10 C, ПГ/СОГ >= -23 C и внутри диапазона МИ.
+"""
+
+from app.calculation_templates.drg_series import (
+    STANDARD_PRESSURE_MPA,
+    STANDARD_TEMPERATURE_K,
+    thermodynamic_temperature_k,
+)
+from app.instrument_library import list_instruments
+from app.method_library import list_current_methods
+from app.schemas import (
+    ALLOWED_PIPE_DN_MM,
+    GasMedium,
+    Instrument,
+    InstrumentStatus,
+    InstrumentType,
+    MeasurementMethod,
+    MeteringProcess,
+    UugAdjustedRange,
+    UugInstrumentSlot,
+    UugMethodMatch,
+    UugOperatingRange,
+    UugSelectionRequest,
+    UugSelectionResponse,
+)
+
+MIN_ABSOLUTE_PRESSURE_MPA = 0.1
+MIN_STRAIGHT_BEFORE_DN = 10
+MIN_STRAIGHT_AFTER_DN = 5
+MIN_TEMPERATURE_C = {
+    GasMedium.PNG: -10.0,
+    GasMedium.PG: -23.0,
+    GasMedium.SOG: -23.0,
+}
+
+MEDIUM_TITLES = {
+    GasMedium.PNG: 'попутный нефтяной газ',
+    GasMedium.PG: 'природный газ',
+    GasMedium.SOG: 'сухой отбензиненный газ',
+}
+
+ACCURACY_RULES: dict[tuple[GasMedium, MeteringProcess], tuple[float, str]] = {
+    (GasMedium.PNG, MeteringProcess.EXTRACTION): (5.0, 'ПНГ при добыче, включая факельные установки: ±5 %'),
+    (GasMedium.PNG, MeteringProcess.PROCESSING): (4.0, 'ПНГ при переработке, реализации: ±(1,5–4) %'),
+    (GasMedium.PG, MeteringProcess.EXTRACTION): (5.0, 'Природный газ при добыче, включая факельные установки: ±5 %'),
+    (GasMedium.PG, MeteringProcess.PROCESSING): (4.0, 'Природный газ при переработке, реализации: ±(1,5–4) %'),
+    (GasMedium.SOG, MeteringProcess.EXTRACTION): (5.0, 'СОГ при добыче, включая факельные установки: ±5 %'),
+    (GasMedium.SOG, MeteringProcess.PROCESSING): (4.0, 'СОГ при переработке, реализации: ±(1,5–4) %'),
+}
+
+
+def _validate(request: UugSelectionRequest) -> list[str]:
+    errors: list[str] = []
+    if request.pipe_dn_mm not in ALLOWED_PIPE_DN_MM:
+        allowed = ', '.join(str(int(value)) for value in ALLOWED_PIPE_DN_MM)
+        errors.append(f'Условный диаметр Dn {request.pipe_dn_mm:g} мм не входит в ряд условных диаметров: {allowed}.')
+    if request.straight_before_dn < MIN_STRAIGHT_BEFORE_DN:
+        errors.append(f'Прямой участок до расходомера должен быть не менее {MIN_STRAIGHT_BEFORE_DN} Dn.')
+    if request.straight_after_dn < MIN_STRAIGHT_AFTER_DN:
+        errors.append(f'Прямой участок после расходомера должен быть не менее {MIN_STRAIGHT_AFTER_DN} Dn.')
+    if request.p_abs_mpa < MIN_ABSOLUTE_PRESSURE_MPA:
+        errors.append('Абсолютное давление не может принимать значение меньше 0,1 МПа.')
+    t_min = MIN_TEMPERATURE_C[request.medium]
+    if request.t_working_c < t_min:
+        if request.medium == GasMedium.PNG:
+            errors.append('Температура ПНГ не может принимать значение меньше минус 10 °С.')
+        else:
+            errors.append('Температура ПГ не может принимать значение меньше минус 23 °С.')
+    return errors
+
+
+def _method_pressure_range(method: MeasurementMethod) -> tuple[float, float]:
+    p_min = method.p_min_mpa if method.p_min_mpa and method.p_min_mpa > 0 else MIN_ABSOLUTE_PRESSURE_MPA
+    return p_min, method.p_max_mpa
+
+
+def _score_method(method: MeasurementMethod, request: UugSelectionRequest, accuracy_limit: float) -> tuple[int, bool, list[str], UugAdjustedRange | None]:
+    reasons: list[str] = []
+    score = 100
+    applicable = True
+    adjusted: UugAdjustedRange | None = None
+
+    if method.medium is not None and method.medium != request.medium:
+        return 0, False, [f'МИ предназначена для среды «{MEDIUM_TITLES.get(method.medium, method.medium.value)}», выбрана «{MEDIUM_TITLES[request.medium]}».'], None
+    if method.medium == request.medium:
+        reasons.append(f'Среда соответствует МИ: {MEDIUM_TITLES[request.medium]}.')
+
+    if method.delta_total_max > accuracy_limit:
+        applicable = False
+        score -= 40
+        reasons.append(
+            f'Предел погрешности МИ ±{method.delta_total_max:g} % превышает требуемый показатель точности ±{accuracy_limit:g} %.'
+        )
+    else:
+        reasons.append(f'Показатель точности выполняется: предел МИ ±{method.delta_total_max:g} % ≤ ±{accuracy_limit:g} %.')
+
+    # Подбор по расходу при стандартных условиях с ограничением диапазоном МИ
+    q_min = max(request.q_std_min, method.q_min)
+    q_max = min(request.q_std_max, method.q_max)
+    if q_min >= q_max:
+        applicable = False
+        score -= 45
+        reasons.append(
+            f'Диапазон расхода при ст. у. {request.q_std_min:g}–{request.q_std_max:g} м³/ч не пересекается с диапазоном МИ {method.q_min:g}–{method.q_max:g} м³/ч.'
+        )
+    else:
+        clamped = q_min != request.q_std_min or q_max != request.q_std_max
+        note = None
+        if clamped:
+            note = (
+                f'Значения Q при ст. у. приведены к диапазону МИ: {q_min:g}–{q_max:g} м³/ч '
+                f'(запрошено {request.q_std_min:g}–{request.q_std_max:g} м³/ч).'
+            )
+            score -= 12
+            reasons.append(note)
+        else:
+            reasons.append(f'Расход при ст. у. {q_min:g}–{q_max:g} м³/ч полностью внутри диапазона МИ {method.q_min:g}–{method.q_max:g} м³/ч.')
+        adjusted = UugAdjustedRange(q_min=q_min, q_max=q_max, clamped=clamped, note=note)
+
+    p_min, p_max = _method_pressure_range(method)
+    if not (p_min <= request.p_abs_mpa <= p_max):
+        applicable = False
+        score -= 25
+        reasons.append(f'Абсолютное давление {request.p_abs_mpa:g} МПа вне диапазона МИ {p_min:g}–{p_max:g} МПа.')
+    else:
+        reasons.append(f'Абсолютное давление {request.p_abs_mpa:g} МПа внутри диапазона МИ {p_min:g}–{p_max:g} МПа.')
+
+    if not (method.t_min_c <= request.t_working_c <= method.t_max_c):
+        applicable = False
+        score -= 20
+        reasons.append(f'Температура {request.t_working_c:g} °C вне диапазона МИ {method.t_min_c:g}–{method.t_max_c:g} °C.')
+    else:
+        reasons.append(f'Температура {request.t_working_c:g} °C внутри диапазона МИ.')
+
+    required_before = method.straight_before_dn or MIN_STRAIGHT_BEFORE_DN
+    if request.straight_before_dn < required_before:
+        applicable = False
+        reasons.append(f'МИ требует прямой участок до расходомера не менее {required_before:g} Dn.')
+
+    if request.preferred_flowmeter_type and method.flowmeter_type:
+        if request.preferred_flowmeter_type.lower().strip() not in method.flowmeter_type.lower():
+            score -= 8
+            reasons.append(f'Тип расходомера МИ ({method.flowmeter_type}) отличается от предпочтительного.')
+
+    score = max(min(score, 100), 0) if applicable else max(min(score, 65), 0)
+    return score, applicable, reasons, adjusted
+
+
+def _working_flow_rate(q_std: float, p_abs_mpa: float, t_working_c: float) -> float:
+    """Пересчёт расхода из стандартных в рабочие условия (K принят равным 1)."""
+    temperature_k = thermodynamic_temperature_k(t_working_c)
+    return q_std * (STANDARD_PRESSURE_MPA * temperature_k) / (p_abs_mpa * STANDARD_TEMPERATURE_K)
+
+
+def _covers(range_min: float | None, range_max: float | None, target_min: float, target_max: float) -> bool:
+    if range_min is None or range_max is None:
+        return True
+    return range_min <= target_min and target_max <= range_max
+
+
+def _instrument_plan(
+    method: MeasurementMethod,
+    request: UugSelectionRequest,
+    qw_min: float,
+    qw_max: float,
+) -> list[UugInstrumentSlot]:
+    instruments = [item for item in list_instruments() if item.status == InstrumentStatus.AVAILABLE]
+
+    def by_type(instrument_type: InstrumentType) -> list[Instrument]:
+        return [item for item in instruments if item.type == instrument_type]
+
+    slots: list[UugInstrumentSlot] = []
+
+    flowmeter_requirements = [
+        f'Условный диаметр DN {request.pipe_dn_mm:g} мм (равен DN трубопровода)',
+        f'Диапазон измерений покрывает {qw_min:.1f}–{qw_max:.1f} м³/ч при рабочих условиях',
+    ]
+    if method.delta_q_max is not None:
+        flowmeter_requirements.append(f'Относительная погрешность δQ ≤ {method.delta_q_max:g} %')
+    if method.flowmeter_type:
+        flowmeter_requirements.append(f'Тип по МИ: {method.flowmeter_type}')
+    flowmeter_candidates = [
+        item
+        for item in by_type(InstrumentType.FLOWMETER)
+        if (item.dn_mm is None or item.dn_mm == request.pipe_dn_mm)
+        and _covers(item.range_min, item.range_max, qw_min, qw_max)
+        and (method.delta_q_max is None or item.error_percent is None or item.error_percent <= method.delta_q_max)
+    ]
+    slots.append(
+        UugInstrumentSlot(
+            type=InstrumentType.FLOWMETER,
+            title='Расходомер',
+            required=True,
+            requirements=flowmeter_requirements,
+            candidates=flowmeter_candidates,
+            note=None if flowmeter_candidates else 'В инвентарной базе нет подходящего расходомера — потребуется закупка.',
+        )
+    )
+
+    pressure_requirements = [f'Диапазон охватывает рабочее давление {request.p_abs_mpa:g} МПа (абс.)']
+    if method.delta_p_max is not None:
+        pressure_requirements.append(f'Погрешность δP ≤ {method.delta_p_max:g} %')
+    pressure_candidates = [
+        item
+        for item in by_type(InstrumentType.PRESSURE)
+        if _covers(item.range_min, item.range_max, request.p_abs_mpa, request.p_abs_mpa)
+        and (method.delta_p_max is None or item.error_percent is None or item.error_percent <= method.delta_p_max)
+    ]
+    slots.append(
+        UugInstrumentSlot(
+            type=InstrumentType.PRESSURE,
+            title='Датчик давления',
+            required=True,
+            requirements=pressure_requirements,
+            candidates=pressure_candidates,
+            note=None if pressure_candidates else 'Подходящий датчик давления в базе не найден.',
+        )
+    )
+
+    temperature_requirements = [f'Диапазон охватывает рабочую температуру {request.t_working_c:g} °C']
+    if method.delta_t_max is not None:
+        temperature_requirements.append(f'Погрешность δT ≤ {method.delta_t_max:g} %')
+    temperature_candidates = [
+        item
+        for item in by_type(InstrumentType.TEMPERATURE)
+        if _covers(item.range_min, item.range_max, request.t_working_c, request.t_working_c)
+        and (method.delta_t_max is None or item.error_percent is None or item.error_percent <= method.delta_t_max)
+    ]
+    slots.append(
+        UugInstrumentSlot(
+            type=InstrumentType.TEMPERATURE,
+            title='Датчик температуры',
+            required=True,
+            requirements=temperature_requirements,
+            candidates=temperature_candidates,
+            note=None if temperature_candidates else 'Подходящий датчик температуры в базе не найден.',
+        )
+    )
+
+    computer_requirements = ['Вычисление объёма, приведённого к стандартным условиям (PTZ)']
+    if method.delta_vc_max is not None:
+        computer_requirements.append(f'Погрешность вычислителя δВЧ ≤ {method.delta_vc_max:g} %')
+    computer_candidates = [
+        item
+        for item in by_type(InstrumentType.COMPUTER)
+        if method.delta_vc_max is None or item.error_percent is None or item.error_percent <= method.delta_vc_max
+    ]
+    slots.append(
+        UugInstrumentSlot(
+            type=InstrumentType.COMPUTER,
+            title='Вычислитель расхода',
+            required=True,
+            requirements=computer_requirements,
+            candidates=computer_candidates,
+            note=None,
+        )
+    )
+
+    analyzer_required = request.medium == GasMedium.PNG
+    slots.append(
+        UugInstrumentSlot(
+            type=InstrumentType.ANALYZER,
+            title='Определение состава газа',
+            required=analyzer_required,
+            requirements=[
+                'Компонентный состав для расчёта коэффициента сжимаемости K'
+                + (' — обязателен для ПНГ' if analyzer_required else ' — по требованию МИ'),
+            ],
+            candidates=by_type(InstrumentType.ANALYZER),
+            note='Допускается лабораторный анализ по графику вместо поточного анализатора.' if analyzer_required else None,
+        )
+    )
+    return slots
+
+
+def _technologist_params(method: MeasurementMethod, request: UugSelectionRequest) -> list[str]:
+    params = [
+        'Объёмный расход при рабочих условиях Qраб, м³/ч — непрерывно, по расходомеру.',
+        'Абсолютное давление среды P, МПа — непрерывно, в точке установки расходомера.',
+        'Температура среды T, °C — непрерывно, в термокармане после расходомера.',
+        'Компонентный состав газа — для вычисления коэффициента сжимаемости K '
+        + ('(для ПНГ обязателен отбор проб или поточный анализ).' if request.medium == GasMedium.PNG else '(по регламенту МИ).'),
+        'Вычисление объёма, приведённого к стандартным условиям (20 °C; 0,101325 МПа), выполняет вычислитель по PTZ.',
+    ]
+    if method.straight_before_dn:
+        params.append(f'Обеспечить прямой участок до расходомера ≥ {method.straight_before_dn:g} Dn по требованию МИ.')
+    return params
+
+
+def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
+    validation_errors = _validate(request)
+    accuracy_limit, accuracy_note = ACCURACY_RULES[(request.medium, request.process)]
+
+    if validation_errors:
+        return UugSelectionResponse(
+            input=request,
+            validation_errors=validation_errors,
+            accuracy_limit_percent=accuracy_limit,
+            accuracy_note=accuracy_note,
+            summary='Исходные данные не прошли проверку. Исправьте отмеченные поля и повторите подбор.',
+        )
+
+    scored: list[tuple[MeasurementMethod, int, bool, list[str], UugAdjustedRange | None]] = []
+    for method in list_current_methods():
+        score, applicable, reasons, adjusted = _score_method(method, request, accuracy_limit)
+        scored.append((method, score, applicable, reasons, adjusted))
+    scored.sort(key=lambda item: (item[2], item[1]), reverse=True)
+
+    matches = [
+        UugMethodMatch(
+            mi_id=method.mi_id,
+            registration_number=method.registration_number,
+            title=method.title,
+            status='not_applicable' if not applicable else ('recommended' if index == 0 else 'reserve'),
+            score=score,
+            reasons=reasons,
+        )
+        for index, (method, score, applicable, reasons, _) in enumerate(scored)
+    ]
+
+    best_entry = scored[0] if scored and scored[0][2] else None
+    if not best_entry:
+        return UugSelectionResponse(
+            input=request,
+            validation_errors=[],
+            accuracy_limit_percent=accuracy_limit,
+            accuracy_note=accuracy_note,
+            best_method=None,
+            alternatives=matches,
+            summary='Полностью подходящей МИ в библиотеке нет. Проверьте диапазоны или добавьте новую методику.',
+        )
+
+    method, _, _, _, adjusted = best_entry
+    q_min = adjusted.q_min if adjusted else request.q_std_min
+    q_max = adjusted.q_max if adjusted else request.q_std_max
+    qw_min = _working_flow_rate(q_min, request.p_abs_mpa, request.t_working_c)
+    qw_max = _working_flow_rate(q_max, request.p_abs_mpa, request.t_working_c)
+
+    ranges = [
+        UugOperatingRange(
+            label='Расход при стандартных условиях (20 °C; 0,101325 МПа)',
+            q_min=round(q_min, 2),
+            q_max=round(q_max, 2),
+            unit='м³/ч',
+            note=adjusted.note if adjusted else None,
+        ),
+        UugOperatingRange(
+            label=f'Расход при рабочих условиях (P = {request.p_abs_mpa:g} МПа; T = {request.t_working_c:g} °C)',
+            q_min=round(qw_min, 2),
+            q_max=round(qw_max, 2),
+            unit='м³/ч',
+            note='Коэффициент сжимаемости K принят равным 1; уточняется по составу газа.',
+        ),
+    ]
+
+    summary = (
+        f'Для {MEDIUM_TITLES[request.medium]} (Dn {request.pipe_dn_mm:g} мм, '
+        f'Q ст. у. {q_min:g}–{q_max:g} м³/ч, P {request.p_abs_mpa:g} МПа, T {request.t_working_c:g} °C) '
+        f'рекомендуется {method.registration_number}: {method.title}.'
+    )
+
+    return UugSelectionResponse(
+        input=request,
+        validation_errors=[],
+        accuracy_limit_percent=accuracy_limit,
+        accuracy_note=accuracy_note,
+        best_method=matches[0],
+        alternatives=matches[1:],
+        adjusted_q=adjusted,
+        ranges=ranges,
+        instrument_plan=_instrument_plan(method, request, qw_min, qw_max),
+        technologist_params=_technologist_params(method, request),
+        summary=summary,
+    )

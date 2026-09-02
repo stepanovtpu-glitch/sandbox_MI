@@ -1,0 +1,22 @@
+# GasMeter Pro — производственный запуск.
+# Наружу порт не публикуется: доступ идёт через системный nginx
+# (gasmeter.77-95-203-87.sslip.io → 127.0.0.1:8090).
+# Данные (SQLite, сканы МИ, протоколы) — в ./data и ./mi_library рядом с этим файлом.
+services:
+  backend:
+    image: gasmeter-backend:latest
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GASMETER_DB_DIR=/app/data
+    volumes:
+      - ./data:/app/data
+      - ./mi_library:/app/mi_library
+
+  frontend:
+    image: gasmeter-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:80"
+    depends_on:
+      - backend
