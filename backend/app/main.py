@@ -50,6 +50,17 @@ from app.scoring import score_methods
 from app.security import ROLE_HOME_VIEW, ROLE_PERMISSIONS, ROLE_TITLES, get_user_context, require_permission, roles_payload
 from app.technology_recommendation import recommend_methods_for_technology_mode
 from app.users import authenticate, close_session, create_user, get_user, list_users, open_session, purge_expired_sessions, set_user_active, update_password
+from app.uug_projects import (
+    STATUS_APPROVED,
+    STATUS_DRAFT,
+    STATUS_REJECTED,
+    STATUS_REVIEW,
+    change_status,
+    create_project,
+    get_project,
+    list_projects,
+    set_instruments,
+)
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
@@ -492,6 +503,88 @@ def export_docx_report(request: CalculationRequest, user: dict[str, object] = De
         media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         filename=report_path.name,
     )
+
+
+
+
+class ProjectCreatePayload(BaseModel):
+    name: str
+    object_name: str | None = None
+    selection: dict = {}
+
+
+class ProjectInstrumentsPayload(BaseModel):
+    instruments: list[dict]
+
+
+class ProjectStatusPayload(BaseModel):
+    comment: str | None = None
+
+
+@app.get('/api/uug/projects')
+def uug_projects_list(status: str | None = None, user: dict[str, object] = Depends(require_permission('uug:select'))):
+    return list_projects(status=status)
+
+
+@app.get('/api/uug/projects/{project_id}')
+def uug_project_get(project_id: str, user: dict[str, object] = Depends(require_permission('uug:select'))):
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail='Проект не найден')
+    return project
+
+
+@app.post('/api/uug/projects')
+def uug_project_create(payload: ProjectCreatePayload, user: dict[str, object] = Depends(require_permission('uug:select'))):
+    project = create_project(payload.name, payload.object_name, payload.selection, actor=_actor(user))
+    log_audit_event('create_uug_project', 'uug_project', project['project_id'], {'name': project['name']}, actor=_actor(user))
+    return project
+
+
+@app.post('/api/uug/projects/{project_id}/instruments')
+def uug_project_instruments(project_id: str, payload: ProjectInstrumentsPayload, user: dict[str, object] = Depends(require_permission('uug:compose'))):
+    try:
+        project = set_instruments(project_id, payload.instruments, actor=_actor(user))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not project:
+        raise HTTPException(status_code=404, detail='Проект не найден')
+    log_audit_event('compose_uug_project', 'uug_project', project_id, {'instruments': len(payload.instruments)}, actor=_actor(user))
+    return project
+
+
+def _apply_status(project_id: str, new_status: str, payload: ProjectStatusPayload, user: dict[str, object]):
+    permissions = set(user.get('permissions', []))  # type: ignore[arg-type]
+    try:
+        project = change_status(project_id, new_status, _actor(user), permissions, payload.comment)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    log_audit_event(f'uug_project_{new_status}', 'uug_project', project_id, {'comment': payload.comment}, actor=_actor(user))
+    return project
+
+
+@app.post('/api/uug/projects/{project_id}/submit')
+def uug_project_submit(project_id: str, payload: ProjectStatusPayload, user: dict[str, object] = Depends(get_user_context)):
+    return _apply_status(project_id, STATUS_REVIEW, payload, user)
+
+
+@app.post('/api/uug/projects/{project_id}/approve')
+def uug_project_approve(project_id: str, payload: ProjectStatusPayload, user: dict[str, object] = Depends(get_user_context)):
+    return _apply_status(project_id, STATUS_APPROVED, payload, user)
+
+
+@app.post('/api/uug/projects/{project_id}/reject')
+def uug_project_reject(project_id: str, payload: ProjectStatusPayload, user: dict[str, object] = Depends(get_user_context)):
+    return _apply_status(project_id, STATUS_REJECTED, payload, user)
+
+
+@app.post('/api/uug/projects/{project_id}/reopen')
+def uug_project_reopen(project_id: str, payload: ProjectStatusPayload, user: dict[str, object] = Depends(get_user_context)):
+    return _apply_status(project_id, STATUS_DRAFT, payload, user)
 
 
 @app.post('/api/uug/selection', response_model=UugSelectionResponse)

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Gauge, HelpCircle, Search, Thermometer, Wrench } from 'lucide-react';
-import { selectUug, type GasMedium, type MeteringProcess, type UugSelectionResponse } from './api';
+import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, HelpCircle, Search, Thermometer, Wrench } from 'lucide-react';
+import { createProject, selectUug, type GasMedium, type MeteringProcess, type UugSelectionResponse } from './api';
 
 const DN_SERIES = [25, 50, 80, 100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000];
 
@@ -47,6 +47,25 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [audience, setAudience] = useState<'kip' | 'tech'>('kip');
+  const [projectNotice, setProjectNotice] = useState<string | null>(null);
+
+  /** Подбор — начало проекта УУГ: дальше состав комплектует КИПиА, утверждает метролог. */
+  const startProject = async () => {
+    const name = window.prompt('Название проекта УУГ:', `УУГ ${MEDIUM_OPTIONS.find((option) => option.value === medium)?.label ?? ''}, Dn ${pipeDn}`);
+    if (!name?.trim()) return;
+    const objectName = window.prompt('Объект (месторождение, куст):') ?? '';
+    setApiError(null);
+    try {
+      const project = await createProject({
+        name: name.trim(),
+        object_name: objectName.trim() || null,
+        selection: { medium, process, pipe_dn_mm: pipeDn, straight_before_dn: straightBefore, straight_after_dn: straightAfter, q_std_min: qStdMin, q_std_max: qStdMax, p_abs_mpa: pAbs, t_working_c: tWorking, best_method: result?.best_method ?? null },
+      });
+      setProjectNotice(`Проект «${project.name}» создан. Дальше служба КИПиА комплектует состав СИ, метролог утверждает.`);
+    } catch (caught) {
+      setApiError(caught instanceof Error ? caught.message : 'Не удалось создать проект');
+    }
+  };
 
   const mediumHint = useMemo(() => MEDIUM_OPTIONS.find((option) => option.value === medium)?.hint ?? '', [medium]);
 
@@ -198,9 +217,13 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
                     <ul className="uug-reasons">
                       {best.reasons.map((reason) => <li key={reason}><CheckCircle2 size={13} /> {reason}</li>)}
                     </ul>
-                    {onApplyMethod && (
-                      <button className="ghost-button" onClick={() => onApplyMethod(best.mi_id)}>Открыть в конструкторе расчёта</button>
-                    )}
+                    <div className="uug-result-actions">
+                      <button className="primary-button" onClick={startProject}><ClipboardList size={14} /> Создать проект УУГ</button>
+                      {onApplyMethod && (
+                        <button className="ghost-button" onClick={() => onApplyMethod(best.mi_id)}>Открыть в расчёте погрешности</button>
+                      )}
+                    </div>
+                    {projectNotice && <div className="users-notice"><CheckCircle2 size={14} /> {projectNotice}</div>}
                   </>
                 )}
               </div>

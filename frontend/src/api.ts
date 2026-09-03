@@ -323,3 +323,35 @@ export async function setUserPassword(login: string, password: string): Promise<
 export async function setUserActive(login: string, isActive: boolean): Promise<void> {
   await request(`/api/users/${encodeURIComponent(login)}/active?is_active=${isActive}`, { method: 'POST' });
 }
+
+export type UugProjectStatus = 'draft' | 'review' | 'approved' | 'rejected';
+export type UugProjectHistoryEntry = { at: string; actor: string; action: string; comment?: string | null };
+export type UugProject = {
+  project_id: string;
+  name: string;
+  object_name?: string | null;
+  status: UugProjectStatus;
+  status_title: string;
+  selection: Record<string, unknown>;
+  instruments: Array<Record<string, unknown>>;
+  history: UugProjectHistoryEntry[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getProjects(status?: UugProjectStatus): Promise<UugProject[]> {
+  return request<UugProject[]>(`/api/uug/projects${status ? `?status=${status}` : ''}`);
+}
+
+export async function createProject(payload: { name: string; object_name?: string | null; selection: Record<string, unknown> }): Promise<UugProject> {
+  return request<UugProject>('/api/uug/projects', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function setProjectInstruments(projectId: string, instruments: Array<Record<string, unknown>>): Promise<UugProject> {
+  return request<UugProject>(`/api/uug/projects/${projectId}/instruments`, { method: 'POST', body: JSON.stringify({ instruments }) });
+}
+
+export async function moveProject(projectId: string, action: 'submit' | 'approve' | 'reject' | 'reopen', comment?: string): Promise<UugProject> {
+  return request<UugProject>(`/api/uug/projects/${projectId}/${action}`, { method: 'POST', body: JSON.stringify({ comment: comment ?? null }) });
+}

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Activity, AlertTriangle, ChevronRight, LogOut, Users, Database, FileText, Gauge, History, Moon, PlusCircle, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronRight, ClipboardList, LogOut, Users, Database, FileText, Gauge, History, Moon, PlusCircle, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
 import { PipelineScene } from './PipelineScene';
 import { MIN_STRAIGHT_AFTER_DN, MIN_STRAIGHT_BEFORE_DN, PIPE_DN_SERIES } from './domain';
 import { UugSelectionScreen } from './UugSelectionScreen';
 import { LoginScreen } from './LoginScreen';
 import { UsersScreen } from './UsersScreen';
+import { ProjectsScreen } from './ProjectsScreen';
 import inkLogo from './assets/brand/ink-logo.svg';
 import inkLogoWhite from './assets/brand/ink-logo-white.svg';
 import { HistoryScreen } from './HistoryScreen';
@@ -29,7 +30,7 @@ function lastTitlePart(value: string) { const parts = value.split('. '); return 
 const instrumentTypeTitles: Record<InstrumentType, string> = { flowmeter: 'Расходомер', pressure: 'Датчик давления', temperature: 'Датчик температуры', computer: 'Вычислитель', analyzer: 'Анализатор состава' };
 const instrumentStatusTitles: Record<InstrumentStatus, string> = { available: 'Доступен', in_calibration: 'На поверке', ordered: 'Заказан', decommissioned: 'Выведен' };
 const instrumentTypeOrder: InstrumentType[] = ['flowmeter', 'pressure', 'temperature', 'computer', 'analyzer'];
-type ActiveView = 'constructor' | 'technologist' | 'instruments' | 'methodIntake' | 'methods' | 'reports' | 'settings' | 'users';
+type ActiveView = 'constructor' | 'technologist' | 'instruments' | 'methodIntake' | 'methods' | 'reports' | 'settings' | 'users' | 'projects';
 type ApplyTechnologyRecommendationDetail = { mi_id: string; calculation_template: string; pipe_dn_mm?: number; q_min: number; q_max: number; p_working_mpa: number; t_working_c: number };
 
 function App() {
@@ -98,8 +99,13 @@ function App() {
 
   /** Право текущей роли. Пока вход не выполнен, ограничений нет — режим разработки. */
   const can = useCallback(
-    (permission: string) => (session ? session.permissions.includes(permission) : true),
-    [session],
+    (permission: string) => {
+      // Пока сессия не проверена, запросы не выполняем: иначе роль без права
+      // успевает получить 403 на первом рендере и видит ложную ошибку.
+      if (!isSessionChecked) return false;
+      return session ? session.permissions.includes(permission) : true;
+    },
+    [session, isSessionChecked],
   );
 
   /** Разделы меню: каждый показывается, только если роль имеет соответствующее право. */
@@ -108,6 +114,7 @@ function App() {
       (
         [
           { view: 'technologist', label: 'Подбор МИ', icon: <Activity size={18} />, permission: 'uug:select' },
+          { view: 'projects', label: 'Проекты УУГ', icon: <ClipboardList size={18} />, permission: 'uug:select' },
           { view: 'instruments', label: 'База СИ', icon: <Database size={18} />, permission: 'instrument:read' },
           { view: 'constructor', label: 'Расчёт погрешности', icon: <Gauge size={18} />, permission: 'calculation:create' },
           { view: 'methodIntake', label: 'Добавление МИ', icon: <PlusCircle size={18} />, permission: 'document:write' },
@@ -164,9 +171,10 @@ function App() {
   const selectedInstruments = useMemo(() => [selectedFlowmeter, selectedPressure, selectedTemperature, selectedComputer, selectedAnalyzer].filter((item): item is Instrument => Boolean(item)), [selectedFlowmeter, selectedPressure, selectedTemperature, selectedComputer, selectedAnalyzer]);
 
   const refreshMethods = useCallback(() => getMethods().then((loadedMethods) => { setMethods(loadedMethods); if (!loadedMethods.some((method) => method.mi_id === selectedMethodId)) setSelectedMethodId(loadedMethods[0]?.mi_id ?? ''); }).catch((error: Error) => setApiError(error.message)), [selectedMethodId]);
-  useEffect(() => { refreshMethods(); }, [refreshMethods]);
-  useEffect(() => { getCalculationTemplates().then(setTemplates).catch((error: Error) => setApiError(error.message)); }, []);
+  useEffect(() => { if (!isSessionChecked) return; refreshMethods(); }, [refreshMethods, isSessionChecked]);
+  useEffect(() => { if (!can('calculation:create')) return; getCalculationTemplates().then(setTemplates).catch(() => setTemplates([])); }, [can]);
   useEffect(() => {
+    if (!isSessionChecked) return;
     getInstruments()
       .then((loadedInstruments) => {
         setInstruments(loadedInstruments);
@@ -179,7 +187,7 @@ function App() {
         }));
       })
       .catch((error: Error) => setApiError(error.message));
-  }, []);
+  }, [isSessionChecked]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -243,21 +251,23 @@ function App() {
   }, [selectedFlowmeter]);
 
   useEffect(() => {
-    if (!selectedMethod) return;
+    // Расчёт погрешности — задача метролога: у технолога и КИПиА нет такого права,
+    // и запрашивать его не нужно, иначе роль получает ложную ошибку доступа.
+    if (!selectedMethod || !can('calculation:create')) return;
     setIsLoading(true); setApiError(null);
     calculate(line, errors, selectedMethod, selectedTemplate, context, selectedInstruments)
       .then((result) => { setCalculation(result); return scoreMethods(line, result); })
       .then(setCompatibility)
       .catch((error: Error) => setApiError(error.message))
       .finally(() => setIsLoading(false));
-  }, [line, errors, selectedMethod, selectedTemplate, context, selectedInstruments]);
+  }, [line, errors, selectedMethod, selectedTemplate, context, selectedInstruments, can]);
 
   useEffect(() => {
-    if (!selectedMethod) return;
+    if (!selectedMethod || !can('calculation:create')) return;
     getInstrumentRecommendations(line, selectedMethod, errors)
       .then(setReplacementRecommendations)
       .catch(() => setReplacementRecommendations([]));
-  }, [line, errors, selectedMethod]);
+  }, [line, errors, selectedMethod, can]);
 
   const handleDownloadReport = async (format: 'pdf' | 'docx') => { if (!selectedMethod) return; setReportStatus(format === 'pdf' ? 'Формирование PDF...' : 'Формирование DOCX...'); setApiError(null); try { await downloadReport(format, line, errors, selectedMethod, selectedTemplate, context, selectedInstruments); setReportStatus(format === 'pdf' ? 'PDF-протокол сформирован' : 'DOCX-протокол сформирован'); } catch (error) { setApiError(error instanceof Error ? error.message : 'Ошибка формирования протокола'); setReportStatus(''); } };
   const handleSaveCalculation = async () => { if (!selectedMethod) return; setReportStatus('Сохранение расчёта...'); setApiError(null); try { await saveCalculation(projectName, line, errors, selectedMethod, selectedTemplate, context, selectedInstruments); setReportStatus('Расчёт сохранён в историю'); setHistoryRefreshToken((value) => value + 1); } catch (error) { setApiError(error instanceof Error ? error.message : 'Ошибка сохранения расчёта'); setReportStatus(''); } };
@@ -297,6 +307,7 @@ function App() {
     reports: { breadcrumbs: 'Главная / Отчёты / Экспорт и готовность', title: 'Отчёты и протоколы' },
     settings: { breadcrumbs: 'Главная / Настройки / Система', title: 'Настройки системы' },
     users: { breadcrumbs: 'Главная / Пользователи', title: 'Пользователи и роли' },
+    projects: { breadcrumbs: 'Главная / Проекты УУГ', title: 'Проекты узлов учёта' },
   };
 
   if (!isSessionChecked) return <div className="app-loading">Загрузка…</div>;
@@ -368,7 +379,7 @@ function App() {
           </aside>
           <section className="center-panel panel"><div className="panel-header row"><strong>Результат расчёта</strong><span className={`result-badge ${calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'}`}>{totalStatus}</span></div><div className="pipeline-card"><PipelineScene status={calculation?.status === 'fail' ? 'fail' : calculation?.status === 'pass' ? 'pass' : 'warn'} flowmeterLabel={flowmeterName} /><div className="pipeline-legend"><span>{line.straight_before_dn} Dn до</span><b>{flowmeterName}</b><span>{line.straight_after_dn} Dn после</span></div></div><div className="kpi-grid"><Kpi title="U / δΣ" value={`${deltaTotal.toFixed(3)}%`} status={calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'} /><Kpi title="Qc стандарт." value={formatNumber(qStandard, 1)} status="info" /><Kpi title="K" value={formatNumber(kValue, 4)} status="info" /><Kpi title="P abs / T" value={`${formatNumber(pAbs, 3)} / ${formatNumber(temperatureK, 1)}`} status="info" /></div><div className="chart-card"><div className="chart-title">Структура погрешности</div>{(calculation?.contributions ?? []).map((item) => <div className="bar-row" key={item.code}><div className="bar-label">{item.label}</div><div className="bar-track"><span className={`bar-fill ${item.share_percent > 50 ? 'warn' : 'ok'}`} style={{ width: `${Math.max(item.share_percent, 2)}%` }} /></div><div className="bar-value">{item.weighted_value.toFixed(3)}%</div></div>)}</div><Collapsible title="Показать расчёт" hint="Журнал аудита: исходные величины и промежуточные шаги"><div className="audit-list">{(calculation?.audit_log ?? []).map((row) => <code key={row}>{row}</code>)}</div></Collapsible></section>
           <aside className="right-panel panel"><div className="panel-header"><strong>Итог и подбор МИ</strong></div><div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(var(--raise-rgb),0.10) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>{apiError && <div className="api-error">{apiError}</div>}<ReplacementPanel recommendations={replacementRecommendations} onApply={applyInstrument} /><MethodMatchList items={compatibility} selectedId={selectedMethodId} onSelect={setSelectedMethodId} /></aside>
-        </section> : activeView === 'technologist' ? <UugSelectionScreen onApplyMethod={(miId) => { setSelectedMethodId(miId); setActiveView('constructor'); setReportStatus(`МИ применена из подбора УУГ: ${miId}`); }} /> :activeView === 'instruments' ? <InstrumentDatabaseScreen instruments={instruments} selectedInstrumentIds={selectedInstrumentIds} onApply={(instrument) => { applyInstrument(instrument); setActiveView('constructor'); }} /> : activeView === 'methodIntake' ? <MethodIntakeScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'methods' ? <MethodLibraryScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'users' ? <UsersScreen currentLogin={session?.actor} /> : activeView === 'reports' ? <ReportsScreen selectedMethod={selectedMethod} calculation={calculation} reportStatus={reportStatus} onSave={handleSaveCalculation} onDownloadReport={handleDownloadReport} onOpenHistory={() => setIsHistoryOpen(true)} apiBase={apiBase} /> : <SettingsScreen apiBase={apiBase} methodsCount={methods.length} instrumentsCount={instruments.length} />}
+        </section> : activeView === 'technologist' ? <UugSelectionScreen onApplyMethod={(miId) => { setSelectedMethodId(miId); setActiveView('constructor'); setReportStatus(`МИ применена из подбора УУГ: ${miId}`); }} /> :activeView === 'instruments' ? <InstrumentDatabaseScreen instruments={instruments} selectedInstrumentIds={selectedInstrumentIds} onApply={(instrument) => { applyInstrument(instrument); setActiveView('constructor'); }} /> : activeView === 'methodIntake' ? <MethodIntakeScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'methods' ? <MethodLibraryScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'projects' ? <ProjectsScreen session={session} /> : activeView === 'users' ? <UsersScreen currentLogin={session?.actor} /> : activeView === 'reports' ? <ReportsScreen selectedMethod={selectedMethod} calculation={calculation} reportStatus={reportStatus} onSave={handleSaveCalculation} onDownloadReport={handleDownloadReport} onOpenHistory={() => setIsHistoryOpen(true)} apiBase={apiBase} /> : <SettingsScreen apiBase={apiBase} methodsCount={methods.length} instrumentsCount={instruments.length} />}
       </main>
       <HistoryScreen isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} onLoadRecord={handleLoadHistoryRecord} />
     </div>

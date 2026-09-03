@@ -7,7 +7,7 @@ from typing import Any, Iterator
 
 DB_DIR = Path(os.environ.get('GASMETER_DB_DIR', Path(__file__).resolve().parents[1] / 'data'))
 DB_PATH = DB_DIR / 'gasmeter.db'
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 @contextmanager
@@ -164,6 +164,30 @@ def _ensure_schema_version(connection: sqlite3.Connection) -> None:
         connection.execute(
             'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
             (4, 'Users and sessions: roles are enforced on the server instead of request headers'),
+        )
+    if current_version < 5:
+        connection.executescript(
+            '''
+            CREATE TABLE IF NOT EXISTS uug_projects (
+                project_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                object_name TEXT,
+                status TEXT NOT NULL,
+                selection_json TEXT NOT NULL DEFAULT '{}',
+                instruments_json TEXT NOT NULL DEFAULT '[]',
+                history_json TEXT NOT NULL DEFAULT '[]',
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_uug_projects_status
+                ON uug_projects(status, updated_at DESC);
+            '''
+        )
+        connection.execute(
+            'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+            (5, 'UUG projects: composition by KIP, approval by metrologist'),
         )
     if _current_schema_version(connection) > SCHEMA_VERSION:
         raise RuntimeError('Database schema is newer than this application version')
