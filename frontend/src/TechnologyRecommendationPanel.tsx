@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { getTechnologyRecommendations } from './api';
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
 
 type RecommendationStatus = 'recommended' | 'reserve' | 'not_applicable';
 
@@ -48,24 +48,15 @@ export function TechnologyRecommendationPanel() {
     setError(null);
     setAppliedMethodId(null);
     try {
-      const response = await fetch(`${API_BASE}/api/technology/recommendations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Role': 'engineer',
-          'X-User': 'technologist-local',
-        },
-        body: JSON.stringify({
-          pipe_dn_mm: pipeDn,
-          q_min: qMin,
-          q_max: qMax,
-          q_unit: 'm3/h',
-          p_working_mpa: pressure,
-          t_working_c: temperature,
-        }),
-      });
-      if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
-      setResult(await response.json());
+      // Через общий клиент: подставляется токен сессии, а не выдуманная роль
+      setResult(await getTechnologyRecommendations({
+        pipe_dn_mm: pipeDn,
+        q_min: qMin,
+        q_max: qMax,
+        q_unit: 'm3/h',
+        p_working_mpa: pressure,
+        t_working_c: temperature,
+      }) as RecommendationResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка подбора МИ');
     } finally {

@@ -229,8 +229,28 @@ export type SessionUser = {
 };
 
 let authToken: string | null = null;
-export function setAuthToken(token: string | null) { authToken = token; }
+let tokenCleared = false;
+export function setAuthToken(token: string | null) { authToken = token; tokenCleared = token === null; }
 export function getAuthToken() { return authToken; }
+
+/**
+ * Токен для заголовка авторизации.
+ *
+ * Панели грузят данные при монтировании — иногда раньше, чем приложение
+ * успевает восстановить сессию из localStorage. Без этого запасного чтения
+ * такие запросы уходили без токена и падали с 401 (журнал аудита на экране
+ * настроек). После явного выхода из системы к сохранённому токену
+ * не возвращаемся.
+ */
+function currentToken(): string | null {
+  if (authToken) return authToken;
+  if (tokenCleared) return null;
+  try {
+    return window.localStorage.getItem('gasmeter-token');
+  } catch {
+    return null;
+  }
+}
 
 export async function login(loginName: string, password: string): Promise<{ token: string; expires_at: string; user: SessionUser }> {
   const response = await fetch(`${API_BASE}/api/auth/login`, {
@@ -258,7 +278,8 @@ export async function getCurrentUser(): Promise<SessionUser> {
 }
 
 function authHeaders(): Record<string, string> {
-  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  const token = currentToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 
@@ -334,6 +355,25 @@ export async function openAuthenticatedFile(path: string, onLoaded?: (target: Wi
 
 export function downloadReadinessReport(format: 'pdf' | 'docx') {
   return downloadAuthenticatedFile(`/api/system/readiness/report/${format}`, `gasmeter_readiness.${format}`);
+}
+
+export type AuditEvent = {
+  event_id: string;
+  created_at: string;
+  actor: string;
+  action: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  details: Record<string, unknown>;
+};
+
+export function getAuditEvents(action?: string, limit = 20) {
+  const query = action && action !== 'all' ? `?action=${encodeURIComponent(action)}&limit=${limit}` : `?limit=${limit}`;
+  return request<AuditEvent[]>(`/api/audit/events${query}`);
+}
+
+export function getTechnologyRecommendations(payload: Record<string, unknown>) {
+  return request<unknown>('/api/technology/recommendations', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export function getSystemInfo() { return request<SystemInfo>('/api/system/info'); }

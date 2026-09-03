@@ -1357,3 +1357,60 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .report-tile-facts b { font-family: var(--font-mono); font-size: 13px; }
 .report-tile-facts b.ok { color: var(--ok); }
 .report-tile-facts b.warn { color: var(--warn); }
+
+/* Кнопка-карточка версии наследовала высоту 32px от базового button:
+   содержимое вылезало и накладывалось на соседнюю версию. */
+.version-pick,
+.history-table-row {
+  height: auto;
+  min-height: 34px;
+  align-items: start;
+}
+.version-pick { row-gap: 3px; }
+
+/* ============ Телефон и планшет ============
+   .three-column-layout.with-history (0,2,0) перебивает мобильное правило
+   .three-column-layout (0,1,0) независимо от порядка — поэтому колонки
+   для узких экранов сбрасываются отдельно и с той же специфичностью. */
+@media (max-width: 1100px) {
+  /* .uug-screen .uug-layout (0,2,0) так же перебивал мобильное правило —
+     на телефоне экран подбора уезжал вбок на 517 px при ширине 375 px */
+  .uug-screen .uug-layout {
+    grid-template-columns: 1fr;
+  }
+  .uug-screen .selection-history {
+    position: static;
+    max-height: none;
+  }
+  .three-column-layout.with-history {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .three-column-layout.with-history > .selection-history {
+    grid-column: auto;
+    max-height: none;
+    position: static;
+  }
+  .review-queue-head {
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+  .review-queue-head .review-progress-bar {
+    grid-column: 1 / -1;
+  }
+  .method-picker-dialog {
+    max-height: 92vh;
+    padding: 14px;
+  }
+  .method-picker-backdrop { padding: 12px; }
+}
+@media (max-width: 640px) {
+  .report-tile-facts { grid-template-columns: 1fr 1fr; }
+  .library-form-grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+  .library-form-grid .field.wide { grid-column: 1 / -1; }
+  .screen-intro { padding: 10px 12px; }
+  .screen-intro ol { padding-left: 16px; }
+  .selection-history-list { grid-template-columns: 1fr 1fr; }
+  .method-picker-trigger { min-height: 46px; }
+}

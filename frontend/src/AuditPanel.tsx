@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
-
-type AuditEvent = {
-  event_id: string;
-  created_at: string;
-  actor: string;
-  action: string;
-  entity_type?: string | null;
-  entity_id?: string | null;
-  details: Record<string, unknown>;
-};
+import { getAuditEvents, type AuditEvent } from './api';
 
 const ACTION_LABELS: Record<string, string> = {
   create_method_version: 'Создание версии МИ',
@@ -30,13 +19,9 @@ export function AuditPanel() {
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Через общий клиент: собственный fetch уходил без токена и падал с 401
   const loadEvents = () => {
-    const query = action === 'all' ? '' : `?action=${encodeURIComponent(action)}`;
-    fetch(`${API_BASE}/api/audit/events${query || '?limit=20'}`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
-        return response.json() as Promise<AuditEvent[]>;
-      })
+    getAuditEvents(action)
       .then((payload) => {
         setEvents(payload.slice(0, 20));
         setError(null);
