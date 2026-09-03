@@ -355,3 +355,17 @@ export async function setProjectInstruments(projectId: string, instruments: Arra
 export async function moveProject(projectId: string, action: 'submit' | 'approve' | 'reject' | 'reopen', comment?: string): Promise<UugProject> {
   return request<UugProject>(`/api/uug/projects/${projectId}/${action}`, { method: 'POST', body: JSON.stringify({ comment: comment ?? null }) });
 }
+
+export type MethodReviewItem = {
+  mi_id: string;
+  registration_number: string;
+  title: string;
+  source_document?: string | null;
+  missing_fields: string[];
+  missing_titles: string[];
+};
+export type MethodReviewQueue = { total_methods: number; needs_review: number; queue: MethodReviewItem[] };
+
+export async function getReviewQueue(): Promise<MethodReviewQueue> {
+  return request<MethodReviewQueue>('/api/methods/review-queue');
+}

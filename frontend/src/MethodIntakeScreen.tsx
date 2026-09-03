@@ -74,6 +74,8 @@ const defaultErrors: ErrorContributions = {
   kc: 1,
 };
 
+import { MethodReviewQueue } from './MethodReviewQueue';
+
 export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, onRefreshMethods }: Props) {
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [draft, setDraft] = useState<MeasurementMethod>(selectedMethod ? { ...selectedMethod } : { ...emptyMethod });
@@ -317,6 +319,18 @@ export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, on
 
   return (
     <section className="workspace-screen method-intake-screen">
+      <MethodReviewQueue
+        refreshToken={versions.length}
+        onSelectMethod={(miId) => {
+          const method = methods.find((item) => item.mi_id === miId);
+          if (!method) return;
+          setMode('existing');
+          onSelectMethod(miId);
+          setDraft({ ...method });
+          loadVersions(miId);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
       <input ref={fileInputRef} className="hidden-file-input" type="file" accept="application/pdf,.pdf" onChange={(event) => handleFileSelected(event.target.files?.[0])} />
       <div className="intake-toolbar">
         <div className="segmented-control">

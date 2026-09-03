@@ -828,3 +828,60 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   .project-history-row { grid-template-columns: 1fr; gap: 2px; }
   .project-head { flex-direction: column; }
 }
+
+/* ============ Очередь приёмки МИ ============ */
+.review-queue { padding: 16px; margin-bottom: 14px; }
+.review-progress { margin-bottom: 14px; }
+.review-progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(var(--raise-rgb), 0.08);
+  overflow: hidden;
+  margin-bottom: 7px;
+}
+.review-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--ok));
+  transition: width 0.4s ease;
+}
+.review-progress-text { font-size: 12.5px; color: var(--muted); }
+.review-progress-text b { color: var(--text); font-family: var(--font-mono); }
+.review-done {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+}
+.review-list { display: grid; gap: 8px; max-height: 320px; overflow-y: auto; }
+.review-item {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  height: auto;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: 10px;
+  background: rgba(var(--raise-rgb), 0.025);
+  color: inherit;
+  cursor: pointer;
+}
+.review-item:hover { border-color: var(--border-strong); background: var(--accent-soft); }
+.review-item-main { display: grid; gap: 2px; }
+.review-item-main strong { font-size: 13px; }
+.review-item-main small { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.review-item-missing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--warn);
+}
