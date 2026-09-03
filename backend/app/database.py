@@ -7,7 +7,7 @@ from typing import Any, Iterator
 
 DB_DIR = Path(os.environ.get('GASMETER_DB_DIR', Path(__file__).resolve().parents[1] / 'data'))
 DB_PATH = DB_DIR / 'gasmeter.db'
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 @contextmanager
@@ -188,6 +188,16 @@ def _ensure_schema_version(connection: sqlite3.Connection) -> None:
         connection.execute(
             'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
             (5, 'UUG projects: composition by KIP, approval by metrologist'),
+        )
+    if current_version < 6:
+        connection.executescript(
+            '''
+            ALTER TABLE uug_projects ADD COLUMN gas_composition_json TEXT;
+            '''
+        )
+        connection.execute(
+            'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+            (6, 'Gas composition act attached to UUG project (lab analysis instead of on-line chromatograph)'),
         )
     if _current_schema_version(connection) > SCHEMA_VERSION:
         raise RuntimeError('Database schema is newer than this application version')

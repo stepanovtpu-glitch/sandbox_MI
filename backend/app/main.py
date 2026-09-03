@@ -1,4 +1,8 @@
+import hashlib
+import json
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 from pydantic import BaseModel
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
@@ -52,6 +56,7 @@ from app.technology_recommendation import recommend_methods_for_technology_mode
 from app.users import authenticate, close_session, create_user, get_user, list_users, open_session, purge_expired_sessions, set_user_active, update_password
 from app.uug_projects import (
     STATUS_APPROVED,
+    set_gas_composition,
     STATUS_DRAFT,
     STATUS_REJECTED,
     STATUS_REVIEW,
@@ -608,6 +613,60 @@ def uug_project_create(payload: ProjectCreatePayload, user: dict[str, object] = 
     project = create_project(payload.name, payload.object_name, payload.selection, actor=_actor(user))
     log_audit_event('create_uug_project', 'uug_project', project['project_id'], {'name': project['name']}, actor=_actor(user))
     return project
+
+
+@app.post('/api/uug/projects/{project_id}/gas-composition')
+async def uug_project_gas_composition(
+    project_id: str,
+    act_number: str | None = None,
+    act_date: str | None = None,
+    laboratory: str | None = None,
+    sample_point: str | None = None,
+    components_json: str | None = None,
+    density_standard: float | None = None,
+    file: UploadFile | None = File(default=None),
+    user: dict[str, object] = Depends(require_permission('uug:compose')),
+):
+    """Акт лабораторного анализа состава газа: поточных хроматографов в парке нет."""
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail='Проект не найден')
+
+    components: dict[str, float] = {}
+    if components_json:
+        try:
+            parsed = json.loads(components_json)
+            components = {str(key): float(value) for key, value in parsed.items()}
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail='Состав газа передан в неверном формате.') from exc
+
+    total = sum(components.values())
+    if components and not 95.0 <= total <= 105.0:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Сумма компонентов {total:.2f} % — проверьте акт: должно быть около 100 %.',
+        )
+
+    file_name = sha256 = None
+    if file is not None and file.filename:
+        payload = await file.read()
+        if len(payload) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail='Файл акта больше 20 МБ.')
+        file_name = Path(file.filename).name
+        sha256 = hashlib.sha256(payload).hexdigest()
+        target_dir = DB_PATH.parent / 'gas_composition_acts' / project_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / file_name).write_bytes(payload)
+
+    act = {
+        'act_number': act_number, 'act_date': act_date, 'laboratory': laboratory,
+        'sample_point': sample_point, 'components': components,
+        'density_standard': density_standard, 'file_name': file_name, 'sha256': sha256,
+        'uploaded_by': _actor(user), 'uploaded_at': datetime.now(timezone.utc).isoformat(),
+    }
+    updated = set_gas_composition(project_id, act, actor=_actor(user))
+    log_audit_event('uug_gas_composition', 'uug_project', project_id, {'act_number': act_number, 'file': file_name}, actor=_actor(user))
+    return updated
 
 
 @app.post('/api/uug/projects/{project_id}/instruments')

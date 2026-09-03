@@ -39,8 +39,11 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
   const [pipeDn, setPipeDn] = useState(100);
   const [straightBefore, setStraightBefore] = useState(10);
   const [straightAfter, setStraightAfter] = useState(5);
-  const [qStdMin, setQStdMin] = useState(40);
-  const [qStdMax, setQStdMax] = useState(1600);
+  // Технолог знает расход при рабочих условиях; подбор МИ ведётся по расходу,
+  // приведённому к стандартным — пересчёт делает программа.
+  const [flowBasis, setFlowBasis] = useState<'working' | 'standard'>('working');
+  const [qInputMin, setQInputMin] = useState(60);
+  const [qInputMax, setQInputMax] = useState(325);
   const [pAbs, setPAbs] = useState(0.5);
   const [tWorking, setTWorking] = useState(20);
   const [result, setResult] = useState<UugSelectionResponse | null>(null);
@@ -59,7 +62,15 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
       const project = await createProject({
         name: name.trim(),
         object_name: objectName.trim() || null,
-        selection: { medium, process, pipe_dn_mm: pipeDn, straight_before_dn: straightBefore, straight_after_dn: straightAfter, q_std_min: qStdMin, q_std_max: qStdMax, p_abs_mpa: pAbs, t_working_c: tWorking, best_method: result?.best_method ?? null },
+        selection: {
+          medium, process, pipe_dn_mm: pipeDn,
+          straight_before_dn: straightBefore, straight_after_dn: straightAfter,
+          flow_basis: flowBasis, q_input_min: qInputMin, q_input_max: qInputMax,
+          q_std_min: result?.input.q_std_min ?? qInputMin,
+          q_std_max: result?.input.q_std_max ?? qInputMax,
+          p_abs_mpa: pAbs, t_working_c: tWorking,
+          best_method: result?.best_method ?? null,
+        },
       });
       setProjectNotice(`Проект «${project.name}» создан. Дальше служба КИПиА комплектует состав СИ, метролог утверждает.`);
     } catch (caught) {
@@ -79,8 +90,11 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
         pipe_dn_mm: pipeDn,
         straight_before_dn: straightBefore,
         straight_after_dn: straightAfter,
-        q_std_min: qStdMin,
-        q_std_max: qStdMax,
+        flow_basis: flowBasis,
+        q_input_min: qInputMin,
+        q_input_max: qInputMax,
+        q_std_min: qInputMin,
+        q_std_max: qInputMax,
         p_abs_mpa: pAbs,
         t_working_c: tWorking,
       });
@@ -145,14 +159,21 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
 
           <section className="form-group">
             <h3>Рабочие условия <Hint text="Подбор МИ выполняется по расходу, приведённому к стандартным условиям (20 °C; 0,101325 МПа)." /></h3>
+            <label className="field">
+              <span>Расход задан <Hint text="Технолог обычно знает расход при рабочих условиях. Для подбора методики программа пересчитает его к стандартным условиям (20 °C; 0,101325 МПа)." /></span>
+              <select value={flowBasis} onChange={(event) => setFlowBasis(event.target.value as 'working' | 'standard')}>
+                <option value="working">при рабочих условиях</option>
+                <option value="standard">при стандартных условиях</option>
+              </select>
+            </label>
             <div className="field-row">
               <label className="field">
-                <span>Q ст. у. min, м³/ч</span>
-                <input type="number" step="any" value={qStdMin} onChange={(event) => setQStdMin(Number(event.target.value))} />
+                <span>Q min, м³/ч</span>
+                <input type="number" step="any" value={qInputMin} onChange={(event) => setQInputMin(Number(event.target.value))} />
               </label>
               <label className="field">
-                <span>Q ст. у. max, м³/ч</span>
-                <input type="number" step="any" value={qStdMax} onChange={(event) => setQStdMax(Number(event.target.value))} />
+                <span>Q max, м³/ч</span>
+                <input type="number" step="any" value={qInputMax} onChange={(event) => setQInputMax(Number(event.target.value))} />
               </label>
             </div>
             <div className="field-row">
@@ -193,8 +214,22 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
 
           {result && result.validation_errors.length === 0 && (
             <>
-              {result.adjusted_q?.clamped && result.adjusted_q.note && (
-                <div className="uug-clamp-note"><AlertTriangle size={14} /> {result.adjusted_q.note}</div>
+              {result.adjusted_q?.clamped && (
+                <div className="uug-clamp-note">
+                  <AlertTriangle size={14} />
+                  <div>
+                    <b>Диапазон расхода изменён под область применения методики.</b>
+                    <div>Вы задали {result.input_basis === 'working' ? 'при рабочих условиях' : 'при стандартных условиях'}:{' '}
+                      {(result.input.q_input_min ?? 0).toLocaleString('ru-RU')} – {(result.input.q_input_max ?? 0).toLocaleString('ru-RU')} м³/ч.</div>
+                    <div>Принято для узла (ст. у.): {result.adjusted_q.q_min.toLocaleString('ru-RU')} – {result.adjusted_q.q_max.toLocaleString('ru-RU')} м³/ч.</div>
+                  </div>
+                </div>
+              )}
+              {best && best.caveats.length > 0 && (
+                <div className="uug-clamp-note">
+                  <AlertTriangle size={14} />
+                  <div>{best.caveats.map((item) => <div key={item}>{item}</div>)}</div>
+                </div>
               )}
 
               {(result.algorithm_warnings ?? []).map((warning) => (
@@ -207,7 +242,7 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
                     <span>{best ? 'Рекомендуемая методика измерений' : 'Методика не найдена'}</span>
                     <strong>{best ? best.registration_number : 'Нет полностью подходящей МИ'}</strong>
                   </div>
-                  {best && <span className="score">score {best.score}</span>}
+                  {best && <span className={`verdict-chip ${best.verdict}`}>{best.verdict_title}</span>}
                 </div>
                 <p className="uug-summary">{result.summary}</p>
                 {result.accuracy_note && <div className="uug-accuracy">Показатель точности: {result.accuracy_note}</div>}
@@ -290,7 +325,7 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
                   <summary>Другие методики из библиотеки ({result.alternatives.length})</summary>
                   {result.alternatives.map((alternative) => (
                     <div className={`uug-alt ${alternative.status}`} key={alternative.mi_id}>
-                      <div className="uug-alt-head"><strong>{alternative.registration_number}</strong><span className="score">{alternative.score}</span></div>
+                      <div className="uug-alt-head"><strong>{alternative.registration_number}</strong><span className={`verdict-chip ${alternative.verdict}`}>{alternative.verdict_title}</span></div>
                       <small>{alternative.title}</small>
                       <p>{alternative.reasons[0]}</p>
                     </div>

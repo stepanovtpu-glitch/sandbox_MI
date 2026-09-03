@@ -620,7 +620,7 @@ function MethodMatchCard({ method, isCurrent, onSelect }: { method: MethodCompat
   return (
     <div className={`method-card ${method.status} ${isCurrent ? 'current' : ''}`}>
       <button className="method-card-main" onClick={() => onSelect(method.mi_id)}>
-        <div className="method-top"><strong>{method.registration_number}</strong><span className="score">{method.score}</span></div>
+        <div className="method-top"><strong>{method.registration_number}</strong></div>
         <div className="method-status">{isMatch ? '✓ Полное совпадение' : method.status === 'partial_match' ? '⚠ Частичное совпадение' : '✗ Не применима'}</div>
       </button>
       <ul className={`method-reasons ${problems.length > 0 ? 'problem' : ''}`}>

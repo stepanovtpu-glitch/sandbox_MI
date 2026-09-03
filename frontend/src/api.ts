@@ -149,12 +149,17 @@ export type MethodCompatibility = { mi_id: string; registration_number: string; 
 export type GasMedium = 'png' | 'pg' | 'sog';
 export type MeteringProcess = 'extraction' | 'processing';
 
+export type FlowBasis = 'working' | 'standard';
+
 export type UugSelectionRequest = {
   medium: GasMedium;
   process: MeteringProcess;
   pipe_dn_mm: number;
   straight_before_dn: number;
   straight_after_dn: number;
+  flow_basis?: FlowBasis;
+  q_input_min?: number;
+  q_input_max?: number;
   q_std_min: number;
   q_std_max: number;
   p_abs_mpa: number;
@@ -167,6 +172,9 @@ export type UugMethodMatch = {
   registration_number: string;
   title: string;
   status: 'recommended' | 'reserve' | 'not_applicable';
+  verdict: 'fits' | 'fits_with_caveats' | 'not_applicable';
+  verdict_title: string;
+  caveats: string[];
   score: number;
   reasons: string[];
 };
@@ -182,6 +190,9 @@ export type UugInstrumentSlot = {
 
 export type UugSelectionResponse = {
   input: UugSelectionRequest;
+  input_basis?: FlowBasis;
+  q_requested_std?: [number, number] | null;
+  q_requested_working?: [number, number] | null;
   validation_errors: string[];
   algorithm_warnings: string[];
   accuracy_limit_percent?: number | null;
@@ -335,6 +346,13 @@ export type UugProject = {
   selection: Record<string, unknown>;
   instruments: Array<Record<string, unknown>>;
   history: UugProjectHistoryEntry[];
+  gas_composition?: {
+    act_number?: string | null;
+    act_date?: string | null;
+    laboratory?: string | null;
+    components?: Record<string, number>;
+    file_name?: string | null;
+  } | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -386,6 +404,34 @@ export type CompositionVerdict = { ok: boolean; errors: string[]; warnings: stri
 
 export async function getProjectCandidates(projectId: string): Promise<ProjectCandidates> {
   return request<ProjectCandidates>(`/api/uug/projects/${projectId}/candidates`);
+}
+
+export async function uploadGasCompositionAct(
+  projectId: string,
+  act: { act_number?: string; act_date?: string; laboratory?: string; sample_point?: string; components?: Record<string, number>; density_standard?: number },
+  file?: File | null,
+): Promise<UugProject> {
+  const params = new URLSearchParams();
+  if (act.act_number) params.set('act_number', act.act_number);
+  if (act.act_date) params.set('act_date', act.act_date);
+  if (act.laboratory) params.set('laboratory', act.laboratory);
+  if (act.sample_point) params.set('sample_point', act.sample_point);
+  if (act.density_standard != null) params.set('density_standard', String(act.density_standard));
+  if (act.components) params.set('components_json', JSON.stringify(act.components));
+
+  const form = new FormData();
+  if (file) form.append('file', file);
+
+  const response = await fetch(`${API_BASE}/api/uug/projects/${projectId}/gas-composition?${params.toString()}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: file ? form : undefined,
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(typeof detail?.detail === 'string' ? detail.detail : 'Не удалось приложить акт');
+  }
+  return response.json();
 }
 
 export async function getProjectValidation(projectId: string): Promise<CompositionVerdict> {

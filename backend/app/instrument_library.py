@@ -45,6 +45,7 @@ LEGACY_INSTRUMENT_IDS = (
     'flow-drgmzl-300-001',
     'flow-drgmzl-400-001',
     'analyzer-gas-001',
+    'analyzer-chromatec-001',
 )
 
 

@@ -246,11 +246,15 @@ INSTRUMENTS = [
     ),
 
     # --- Определение компонентного состава ---
+    # Поточных хроматографов в парке нет: состав газа определяется
+    # лабораторным анализом по актам, поэтому в составе узла это не прибор,
+    # а источник данных для расчёта коэффициента сжимаемости.
     Instrument(
-        id='analyzer-chromatec-001', type=InstrumentType.ANALYZER,
-        name='Хроматограф Хроматэк-Кристалл 5000',
-        manufacturer='Хроматэк', model='Кристалл 5000', status=InstrumentStatus.AVAILABLE,
-        error_percent=0.2, notes='Компонентный состав газа для расчёта коэффициента сжимаемости.',
+        id='analyzer-lab-001', type=InstrumentType.ANALYZER,
+        name='Лабораторный анализ компонентного состава',
+        manufacturer='Химико-аналитическая лаборатория', model='акт лабораторного анализа',
+        status=InstrumentStatus.AVAILABLE, error_percent=0.2,
+        notes='Состав газа берётся из акта лабораторного анализа, приложенного к проекту.',
         specs_verified=False,
     ),
 ]

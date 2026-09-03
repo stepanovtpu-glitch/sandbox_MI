@@ -22,6 +22,7 @@ from app.instrument_library import list_instruments
 from app.method_library import list_current_methods
 from app.schemas import (
     ALLOWED_PIPE_DN_MM,
+    FlowBasis,
     GasMedium,
     Instrument,
     InstrumentStatus,
@@ -209,6 +210,29 @@ def _working_flow_rate(q_std: float, p_abs_mpa: float, t_working_c: float) -> fl
     return q_std * (STANDARD_PRESSURE_MPA * temperature_k) / (p_abs_mpa * STANDARD_TEMPERATURE_K)
 
 
+def standard_flow_from_working(q_working: float, p_abs_mpa: float, t_working_c: float) -> float:
+    """Обратный пересчёт: технолог задаёт рабочие условия, МИ подбирается по стандартным."""
+    temperature_k = thermodynamic_temperature_k(t_working_c)
+    return q_working * (p_abs_mpa * STANDARD_TEMPERATURE_K) / (STANDARD_PRESSURE_MPA * temperature_k)
+
+
+def normalize_flow(request: UugSelectionRequest) -> UugSelectionRequest:
+    """Приводит заданный расход к стандартным условиям, сохраняя исходный ввод."""
+    if request.flow_basis != FlowBasis.WORKING:
+        return request.model_copy(update={
+            'q_input_min': request.q_input_min if request.q_input_min is not None else request.q_std_min,
+            'q_input_max': request.q_input_max if request.q_input_max is not None else request.q_std_max,
+        })
+    q_work_min = request.q_input_min if request.q_input_min is not None else request.q_std_min
+    q_work_max = request.q_input_max if request.q_input_max is not None else request.q_std_max
+    return request.model_copy(update={
+        'q_input_min': q_work_min,
+        'q_input_max': q_work_max,
+        'q_std_min': round(standard_flow_from_working(q_work_min, request.p_abs_mpa, request.t_working_c), 3),
+        'q_std_max': round(standard_flow_from_working(q_work_max, request.p_abs_mpa, request.t_working_c), 3),
+    })
+
+
 def _covers(range_min: float | None, range_max: float | None, target_min: float, target_max: float) -> bool:
     if range_min is None or range_max is None:
         return True
@@ -348,6 +372,8 @@ def _technologist_params(method: MeasurementMethod, request: UugSelectionRequest
 
 
 def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
+    basis = request.flow_basis
+    request = normalize_flow(request)
     validation_errors = _validate(request)
     warnings = _algorithm_warnings(request)
     accuracy_limit, accuracy_note = ACCURACY_RULES[(request.medium, request.process)]
@@ -355,6 +381,12 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
     if validation_errors:
         return UugSelectionResponse(
             input=request,
+            input_basis=basis,
+            q_requested_std=(request.q_std_min, request.q_std_max),
+            q_requested_working=(
+                _working_flow_rate(request.q_std_min, request.p_abs_mpa, request.t_working_c),
+                _working_flow_rate(request.q_std_max, request.p_abs_mpa, request.t_working_c),
+            ),
             validation_errors=validation_errors,
             algorithm_warnings=warnings,
             accuracy_limit_percent=accuracy_limit,
@@ -368,22 +400,45 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
         scored.append((method, score, applicable, reasons, adjusted))
     scored.sort(key=lambda item: (item[2], item[1]), reverse=True)
 
-    matches = [
-        UugMethodMatch(
-            mi_id=method.mi_id,
-            registration_number=method.registration_number,
-            title=method.title,
-            status='not_applicable' if not applicable else ('recommended' if index == 0 else 'reserve'),
-            score=score,
-            reasons=reasons,
+    def _verdict(applicable: bool, adjusted: UugAdjustedRange | None, reasons: list[str]) -> tuple[str, str, list[str]]:
+        """Вердикт словами: технологу нужен ответ, а не баллы."""
+        if not applicable:
+            return 'not_applicable', 'Не подходит', [item for item in reasons if 'вне ' in item or 'превышает' in item or 'не пересекается' in item]
+        caveats: list[str] = []
+        if adjusted is not None and adjusted.clamped and adjusted.note:
+            caveats.append(adjusted.note)
+        caveats.extend(item for item in reasons if 'близко к границе' in item or 'отличается от предпочтительного' in item)
+        if caveats:
+            return 'fits_with_caveats', 'Подходит с оговорками', caveats
+        return 'fits', 'Подходит', []
+
+    matches = []
+    for index, (method, score, applicable, reasons, adjusted_item) in enumerate(scored):
+        verdict, verdict_title, caveats = _verdict(applicable, adjusted_item, reasons)
+        matches.append(
+            UugMethodMatch(
+                mi_id=method.mi_id,
+                registration_number=method.registration_number,
+                title=method.title,
+                status='not_applicable' if not applicable else ('recommended' if index == 0 else 'reserve'),
+                verdict=verdict,
+                verdict_title=verdict_title,
+                caveats=caveats,
+                score=score,
+                reasons=reasons,
+            )
         )
-        for index, (method, score, applicable, reasons, _) in enumerate(scored)
-    ]
 
     best_entry = scored[0] if scored and scored[0][2] else None
     if not best_entry:
         return UugSelectionResponse(
             input=request,
+            input_basis=basis,
+            q_requested_std=(request.q_std_min, request.q_std_max),
+            q_requested_working=(
+                _working_flow_rate(request.q_std_min, request.p_abs_mpa, request.t_working_c),
+                _working_flow_rate(request.q_std_max, request.p_abs_mpa, request.t_working_c),
+            ),
             validation_errors=[],
             algorithm_warnings=warnings,
             accuracy_limit_percent=accuracy_limit,
@@ -424,6 +479,12 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
 
     return UugSelectionResponse(
         input=request,
+        input_basis=basis,
+        q_requested_std=(request.q_std_min, request.q_std_max),
+        q_requested_working=(
+            _working_flow_rate(request.q_std_min, request.p_abs_mpa, request.t_working_c),
+            _working_flow_rate(request.q_std_max, request.p_abs_mpa, request.t_working_c),
+        ),
         validation_errors=[],
         algorithm_warnings=warnings,
         accuracy_limit_percent=accuracy_limit,

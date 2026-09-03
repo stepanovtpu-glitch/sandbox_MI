@@ -308,14 +308,30 @@ class MethodCompatibility(BaseModel):
 ALLOWED_PIPE_DN_MM: tuple[float, ...] = (25, 50, 80, 100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000)
 
 
+class FlowBasis(str, Enum):
+    """В каких условиях задан расход: технолог знает рабочие, МИ оперирует стандартными."""
+
+    WORKING = 'working'
+    STANDARD = 'standard'
+
+
 class UugSelectionRequest(BaseModel):
-    """Запрос подбора МИ и состава УУГ от технолога / службы КИПиА."""
+    """Запрос подбора МИ и состава УУГ от технолога / службы КИПиА.
+
+    Расход задаётся в тех условиях, в которых он известен технологу
+    (по умолчанию — рабочие), а подбор методики ведётся по расходу,
+    приведённому к стандартным условиям: этого требует служба главного
+    метролога. Пересчёт выполняет программа.
+    """
 
     medium: GasMedium
     process: MeteringProcess
     pipe_dn_mm: float = Field(gt=0)
     straight_before_dn: float = Field(ge=0)
     straight_after_dn: float = Field(ge=0)
+    flow_basis: FlowBasis = FlowBasis.WORKING
+    q_input_min: float | None = Field(default=None, ge=0)
+    q_input_max: float | None = Field(default=None, gt=0)
     q_std_min: float = Field(ge=0)
     q_std_max: float = Field(gt=0)
     p_abs_mpa: float = Field(gt=0)
@@ -358,12 +374,47 @@ class UugMethodMatch(BaseModel):
     registration_number: str
     title: str
     status: Literal['recommended', 'reserve', 'not_applicable']
+    # Технологу нужен ответ «подходит или нет», а не баллы: числовая оценка
+    # остаётся служебной и используется только для сортировки вариантов.
+    verdict: Literal['fits', 'fits_with_caveats', 'not_applicable']
+    verdict_title: str
+    caveats: list[str] = Field(default_factory=list)
     score: int
     reasons: list[str]
 
 
+class GasCompositionAct(BaseModel):
+    """Акт лабораторного анализа компонентного состава газа.
+
+    Поточных хроматографов в парке нет, поэтому состав для расчёта
+    коэффициента сжимаемости берётся из лабораторного акта: он прикладывается
+    к проекту узла и хранится вместе с ним.
+    """
+
+    act_number: str | None = None
+    act_date: str | None = None
+    laboratory: str | None = None
+    sample_point: str | None = None
+    components: dict[str, float] = Field(default_factory=dict)
+    density_standard: float | None = Field(default=None, ge=0)
+    file_name: str | None = None
+    sha256: str | None = None
+    uploaded_by: str | None = None
+    uploaded_at: str | None = None
+    note: str | None = None
+
+    @property
+    def total_percent(self) -> float:
+        return sum(self.components.values())
+
+
 class UugSelectionResponse(BaseModel):
     input: UugSelectionRequest
+    # Что ввёл пользователь и во что это пересчитано — чтобы приведение к
+    # диапазону МИ не выглядело подменой введённых значений
+    input_basis: FlowBasis = FlowBasis.STANDARD
+    q_requested_std: tuple[float, float] | None = None
+    q_requested_working: tuple[float, float] | None = None
     validation_errors: list[str]
     algorithm_warnings: list[str] = Field(default_factory=list)
     accuracy_limit_percent: float | None = None

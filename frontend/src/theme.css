@@ -1030,3 +1030,61 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .composer-verdict-line { font-size: 12px; margin-top: 3px; }
 .composer-verdict-line.warn { color: var(--warn); }
 @media (max-width: 640px) { .composer-slot-head { grid-template-columns: 1fr auto; } .composer-type { grid-column: 1 / -1; } }
+
+/* Вердикт вместо баллов: технологу нужен ответ «подходит или нет» */
+.verdict-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.verdict-chip.fits { background: var(--accent-soft); color: var(--accent); }
+.verdict-chip.fits_with_caveats { background: rgba(var(--warn-rgb), 0.14); color: var(--warn); }
+.verdict-chip.not_applicable { background: rgba(var(--danger-rgb), 0.12); color: var(--danger); }
+.uug-clamp-note b { display: block; margin-bottom: 3px; }
+.uug-clamp-note div div { font-size: 12px; }
+
+/* Акт лабораторного анализа состава газа */
+.gas-act-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(var(--raise-rgb), 0.03);
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.gas-act-summary svg { color: var(--accent); flex: none; }
+.gas-act-summary span { flex: 1; }
+.gas-act-summary button { height: 30px; flex: none; }
+.gas-act-form {
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: rgba(var(--raise-rgb), 0.03);
+}
+.gas-act-form h4 { margin: 0 0 10px; font-size: 13px; }
+.gas-act-components { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 8px 0; }
+.gas-act-total { font-size: 12.5px; padding: 7px 10px; border-radius: 9px; margin-bottom: 9px; }
+.gas-act-total.ok { background: var(--accent-soft); color: var(--accent); }
+.gas-act-total.bad { background: rgba(var(--danger-rgb), 0.1); color: var(--danger); }
+.gas-act-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 9px;
+}
+.gas-act-file input { display: none; }
+.gas-act-actions { display: flex; gap: 8px; }
+.gas-act-actions button { display: inline-flex; align-items: center; gap: 7px; }

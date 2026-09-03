@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Plus, Save, Trash2 } from 'lucide-react';
+import { GasCompositionAct } from './GasCompositionAct';
 import {
   getProjectCandidates,
   getProjectValidation,
@@ -74,6 +75,8 @@ export function ProjectComposer({ project, onSaved }: { project: UugProject; onS
           <small>{candidates.k_methods.reason}</small>
         </div>
       )}
+
+      <GasCompositionAct project={project} onSaved={onSaved} />
 
       <div className="composer-slots">
         {(candidates?.slots ?? []).map((slot) => {

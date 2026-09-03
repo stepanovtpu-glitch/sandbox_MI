@@ -11,6 +11,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from app.database import DB_DIR
 from app.method_library import list_method_versions
+from app.audit_readable import audit_summary, machine_audit, readable_audit
 from app.calculation_templates import TEMPLATE_TITLES
 from app.pdf_fonts import apply_cyrillic_styles, register_pdf_fonts
 from app.schemas import CalculationRequest, CalculationResult
@@ -148,8 +149,20 @@ def generate_pdf_report(request: CalculationRequest, result: CalculationResult) 
     ]))
     story.append(contrib_table)
     story.append(Spacer(1, 14))
-    story.append(Paragraph('Аудит расчёта', styles['Heading2']))
-    for row in result.audit_log:
+    story.append(Paragraph('Как получен результат', styles['Heading2']))
+    summary_line = audit_summary(result.audit_log)
+    if summary_line:
+        story.append(Paragraph(summary_line, styles['BodyText']))
+        story.append(Spacer(1, 6))
+    audit_table = Table(_pdf_rows([['Величина', 'Значение'], *readable_audit(result.audit_log)], styles), colWidths=[240, 255])
+    _apply_table_style(audit_table)
+    story.append(audit_table)
+    story.append(Spacer(1, 10))
+    story.append(Paragraph('Приложение: журнал расчёта', styles['Heading2']))
+    story.append(Paragraph(
+        'Строки журнала приведены в исходном виде для метрологической сверки '
+        'и воспроизведения расчёта.', styles['BodyText']))
+    for row in machine_audit(result.audit_log):
         story.append(Paragraph(row, styles['Code']))
     doc.build(story)
     return path
@@ -180,8 +193,25 @@ def generate_docx_report(request: CalculationRequest, result: CalculationResult)
         cells[2].text = str(item.value)
         cells[3].text = str(item.weighted_value)
         cells[4].text = str(item.share_percent)
-    document.add_heading('Аудит расчёта', level=2)
-    for row in result.audit_log:
+    document.add_heading('Как получен результат', level=2)
+    summary_line = audit_summary(result.audit_log)
+    if summary_line:
+        document.add_paragraph(summary_line)
+    audit_rows = readable_audit(result.audit_log)
+    audit_table = document.add_table(rows=1, cols=2)
+    audit_table.style = 'Table Grid'
+    header = audit_table.rows[0].cells
+    header[0].text, header[1].text = 'Величина', 'Значение'
+    for label, value in audit_rows:
+        cells = audit_table.add_row().cells
+        cells[0].text, cells[1].text = label, value
+
+    document.add_heading('Приложение: журнал расчёта', level=2)
+    document.add_paragraph(
+        'Строки журнала приведены в исходном виде для метрологической сверки '
+        'и воспроизведения расчёта.'
+    )
+    for row in machine_audit(result.audit_log):
         p = document.add_paragraph(row)
         for run in p.runs:
             run.font.name = 'Courier New'

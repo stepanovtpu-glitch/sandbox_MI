@@ -152,3 +152,37 @@ def test_methods_catalogue_endpoint():
     assert {'NX19', 'GERG_91', 'AGA8_92DC', 'GOST_30319_2', 'GOST_30319_3', 'GSSSD_MR_113_03'} <= codes
     nx19 = next(item for item in methods if item['code'] == 'NX19')
     assert nx19['p_max_mpa'] == 12.0 and nx19['t_max_c'] == 66.0
+
+
+def test_gas_composition_act_replaces_chromatograph():
+    """Поточных хроматографов нет: состав берётся из акта лабораторного анализа."""
+    kip = _auth('c_kip', 'kip')
+    project_id = _project(kip, GOOD)
+
+    before = client.get(f'/api/uug/projects/{project_id}/validation', headers=kip).json()
+    assert any('акт' in warning for warning in before['warnings'])
+
+    components = '{"метан": 82.5, "этан": 6.1, "пропан": 4.2, "азот": 3.4, "диоксид углерода": 1.6, "прочие": 2.2}'
+    response = client.post(
+        f'/api/uug/projects/{project_id}/gas-composition',
+        params={'act_number': 'ЛА-118/2026', 'act_date': '2026-08-14', 'laboratory': 'ХАЛ УПН', 'components_json': components},
+        headers=kip,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()['gas_composition']['act_number'] == 'ЛА-118/2026'
+
+    after = client.get(f'/api/uug/projects/{project_id}/validation', headers=kip).json()
+    assert not any('акт' in warning for warning in after['warnings'])
+    assert after['ok'] is True
+
+
+def test_gas_composition_sum_is_checked():
+    kip = _auth('c_kip', 'kip')
+    project_id = _project(kip, GOOD)
+    response = client.post(
+        f'/api/uug/projects/{project_id}/gas-composition',
+        params={'components_json': '{"метан": 50.0, "этан": 10.0}'},
+        headers=kip,
+    )
+    assert response.status_code == 400
+    assert '100' in response.json()['detail']

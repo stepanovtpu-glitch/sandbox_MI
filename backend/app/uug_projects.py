@@ -52,6 +52,7 @@ def _row_to_project(row: Any) -> dict:
     project['selection'] = json_load(project.pop('selection_json', None), {})
     project['instruments'] = json_load(project.pop('instruments_json', None), [])
     project['history'] = json_load(project.pop('history_json', None), [])
+    project['gas_composition'] = json_load(project.pop('gas_composition_json', None), None)
     project['status_title'] = STATUS_TITLES.get(project['status'], project['status'])
     return project
 
@@ -104,6 +105,23 @@ def set_instruments(project_id: str, instruments: list[dict], actor: str) -> dic
     execute(
         'UPDATE uug_projects SET instruments_json = ?, history_json = ?, updated_at = ? WHERE project_id = ?',
         (json_dump(instruments), json_dump(history), _now(), project_id),
+    )
+    return get_project(project_id)
+
+
+def set_gas_composition(project_id: str, act: dict, actor: str) -> dict | None:
+    """Прикладывает к проекту акт лабораторного анализа состава газа."""
+    project = get_project(project_id)
+    if not project:
+        return None
+    label = act.get('act_number') or act.get('file_name') or 'без номера'
+    history = [*project['history'], {
+        'at': _now(), 'actor': actor, 'action': 'gas_composition_updated',
+        'comment': f'Приложен акт лабораторного анализа: {label}',
+    }]
+    execute(
+        'UPDATE uug_projects SET gas_composition_json = ?, history_json = ?, updated_at = ? WHERE project_id = ?',
+        (json_dump(act), json_dump(history), _now(), project_id),
     )
     return get_project(project_id)
 

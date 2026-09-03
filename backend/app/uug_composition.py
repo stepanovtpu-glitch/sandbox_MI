@@ -229,8 +229,19 @@ def validate_composition(project: dict) -> dict:
         elif len(entries) > 1:
             errors.append(f'{SLOT_TITLES[slot]}: в измерительной линии одна позиция, выбрано {len(entries)}.')
 
-    if ctx is not None and ctx['request'].medium == GasMedium.PNG and not by_slot.get(InstrumentType.ANALYZER.value):
-        warnings.append('Для попутного нефтяного газа нужен компонентный состав — укажите анализатор или лабораторный контроль.')
+    if ctx is not None and ctx['request'].medium == GasMedium.PNG:
+        act = project.get('gas_composition') or {}
+        has_components = bool(act.get('components'))
+        has_analyzer = bool(by_slot.get(InstrumentType.ANALYZER.value))
+        if not has_components and not has_analyzer:
+            warnings.append(
+                'Для попутного нефтяного газа нужен компонентный состав: приложите акт '
+                'лабораторного анализа или включите в состав средство определения состава.'
+            )
+        elif has_components:
+            total = sum(act['components'].values())
+            if not 95.0 <= total <= 105.0:
+                errors.append(f'Сумма компонентов в акте {total:.2f} % — проверьте акт лабораторного анализа.')
 
     for slot_value, entries in by_slot.items():
         for entry in entries:
