@@ -137,6 +137,34 @@ def conditions_section(flat: str) -> str:
     return ''
 
 
+
+# Единица «м3/ч» после OCR выглядит по-разному: «М`/Ч», «м3/ч», «МЗ/Ч», «м3_ч».
+_FLOW_UNIT = r"[мМmM]\s*[3зЗ³`'^]?\s*[/|_1]\s*[чЧ4]"
+
+
+def declared_flow_range(flat: str, file_name: str) -> tuple[float | None, float | None]:
+    """Диапазон, объявленный в заголовке МИ или в имени файла.
+
+    Заголовок («методика измерений в диапазоне от … до … м3/ч») задаёт область
+    применения методики. Имя файла присваивает специалист, поэтому оно не
+    искажено распознаванием и служит вторым источником.
+    """
+    patterns = [
+        rf'в\s*диапазоне\s*(?:[оo][тt])?\s*{NUM}\s*до\s*{NUM}\s*{_FLOW_UNIT}',
+        rf'реализаци\w*\s*(?:[оo][тt])?\s*{NUM}\s*до\s*{NUM}\s*{_FLOW_UNIT}',
+    ]
+    for source in (file_name, flat):
+        for pattern in patterns:
+            found = re.search(pattern, source, re.IGNORECASE)
+            if not found:
+                continue
+            low, high = _to_float(found.group(1)), _to_float(found.group(2))
+            if low is None or high is None or low >= high or high > 1_000_000:
+                continue
+            return low, high
+    return None, None
+
+
 def extract_fields(text: str, file_name: str) -> dict:
     """Детерминированное извлечение полей МИ регулярными выражениями."""
     flat = re.sub(r'\s+', ' ', text)
@@ -255,11 +283,20 @@ def extract_fields(text: str, file_name: str) -> dict:
                 return low, high
         return None, None
 
-    q_min, q_max = range_near(
-        r'(?:объемн\w*\s+)?расход\w*\s+газа|расход\w*[^.]{0,25}рабоч|объ[её]м\w*\s+газа\s+при\s+стандартн',
-        bounds=(0.001, 1_000_000),
-        not_unit=r'МПа|°\s*[СC]\b',
-    )
+    # Область применения МИ объявлена в её заголовке: «МЕТОДИКА ИЗМЕРЕНИЙ
+    # В ДИАПАЗОНЕ ОТ 267 ДО 20000 м3/ч». Это аттестованный диапазон методики,
+    # и он важнее чисел из таблиц: в тексте попадаются диапазоны конкретного
+    # узла («Учёт газа (от 40 до 7000 м3/ч при рабочих условиях)»), которые
+    # OCR раньше подставлял вместо области применения МИ.
+    q_min, q_max = declared_flow_range(flat, file_name)
+    if q_min is not None:
+        fields['q_range_source'] = 'title'
+    if q_min is None:
+        q_min, q_max = range_near(
+            r'(?:объемн\w*\s+)?расход\w*\s+газа|расход\w*[^.]{0,25}рабоч|объ[её]м\w*\s+газа\s+при\s+стандартн',
+            bounds=(0.001, 1_000_000),
+            not_unit=r'МПа|°\s*[СC]\b',
+        )
     if q_min is None:
         # запасной вариант: «от 40 до 1600 м3/ч» подряд
         direct = re.search(rf'от\s*{NUM}\s*до\s*{NUM}\s*(?:м\s*[3³]?\s*/\s*ч)', flat, re.IGNORECASE)

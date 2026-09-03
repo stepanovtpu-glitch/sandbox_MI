@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardList, RotateCcw, Send, Undo2 } from 'lucide-react';
+import { CheckCircle2, ClipboardList, FileDown, RotateCcw, Send, Undo2 } from 'lucide-react';
 import { ProjectComposer } from './ProjectComposer';
-import { getProjects, moveProject, type SessionUser, type UugProject, type UugProjectStatus } from './api';
+import { downloadUugTask, getProjects, moveProject, type SessionUser, type UugProject, type UugProjectStatus } from './api';
 
 const STATUS_ORDER: UugProjectStatus[] = ['draft', 'review', 'approved', 'rejected'];
 const STATUS_LABELS: Record<UugProjectStatus, string> = {
@@ -70,6 +70,16 @@ export function ProjectsScreen({ session }: { session: SessionUser | null }) {
     });
     return result;
   }, [projects]);
+
+  const exportTask = async (project: UugProject, format: 'pdf' | 'docx') => {
+    setError(null);
+    try {
+      await downloadUugTask(project.project_id, format);
+      setNotice(`Задание на комплектацию сформировано (${format.toUpperCase()}).`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось сформировать задание');
+    }
+  };
 
   const act = async (project: UugProject, action: 'submit' | 'approve' | 'reject' | 'reopen') => {
     let comment: string | undefined;
@@ -140,6 +150,13 @@ export function ProjectsScreen({ session }: { session: SessionUser | null }) {
                 <span className={`status-chip project-status ${project.status}`}>{project.status_title}</span>
               </button>
 
+              {project.status === 'approved' && (
+                <div className="project-approved-note">
+                  Проект утверждён. Дальше: сформируйте задание на комплектацию — по нему служба КИПиА
+                  заказывает средства измерений и выполняет монтаж узла.
+                </div>
+              )}
+
               {project.status === 'rejected' && lastComment && (
                 <div className="project-remark">Замечание метролога: {lastComment}</div>
               )}
@@ -157,6 +174,16 @@ export function ProjectsScreen({ session }: { session: SessionUser | null }) {
                     </button>
                     <button className="ghost-button" onClick={() => act(project, 'reject')} disabled={isBusy}>
                       <Undo2 size={14} /> Вернуть с замечанием
+                    </button>
+                  </>
+                )}
+                {(project.status === 'approved' || project.status === 'review') && (
+                  <>
+                    <button className="primary-button" onClick={() => exportTask(project, 'pdf')}>
+                      <FileDown size={14} /> Задание на комплектацию (PDF)
+                    </button>
+                    <button className="ghost-button" onClick={() => exportTask(project, 'docx')}>
+                      <FileDown size={14} /> DOCX
                     </button>
                   </>
                 )}

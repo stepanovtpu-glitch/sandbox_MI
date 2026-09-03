@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SelectionHistory } from './SelectionHistory';
-import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, HelpCircle, Search, Thermometer, Wrench } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, HelpCircle, Lightbulb, Search, Thermometer, Wrench } from 'lucide-react';
 import { getSelectionHistory, type SelectionHistoryItem, createProject, selectUug, type GasMedium, type MeteringProcess, type UugSelectionResponse } from './api';
 
 const DN_SERIES = [25, 50, 80, 100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000];
@@ -240,10 +240,10 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
                 <div className="uug-clamp-note">
                   <AlertTriangle size={14} />
                   <div>
-                    <b>Диапазон расхода изменён под область применения методики.</b>
+                    <b>Заданный диапазон расхода обеспечивается методикой не полностью.</b>
                     <div>Вы задали {result.input_basis === 'working' ? 'при рабочих условиях' : 'при стандартных условиях'}:{' '}
                       {(result.input.q_input_min ?? 0).toLocaleString('ru-RU')} – {(result.input.q_input_max ?? 0).toLocaleString('ru-RU')} м³/ч.</div>
-                    <div>Принято для узла (ст. у.): {result.adjusted_q.q_min.toLocaleString('ru-RU')} – {result.adjusted_q.q_max.toLocaleString('ru-RU')} м³/ч.</div>
+                    <div>Методика нормирует (ст. у.): {result.adjusted_q.q_min.toLocaleString('ru-RU')} – {result.adjusted_q.q_max.toLocaleString('ru-RU')} м³/ч.</div>
                   </div>
                 </div>
               )}
@@ -251,6 +251,15 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
                 <div className="uug-clamp-note">
                   <AlertTriangle size={14} />
                   <div>{best.caveats.map((item) => <div key={item}>{item}</div>)}</div>
+                </div>
+              )}
+
+              {(result.technologist_advice ?? []).length > 0 && (
+                <div className="panel uug-advice">
+                  <div className="panel-header"><span>Рекомендация технологу</span><strong>Что сделать с режимом</strong></div>
+                  {(result.technologist_advice ?? []).map((item) => (
+                    <div className="uug-advice-row" key={item}><Lightbulb size={14} /> {item}</div>
+                  ))}
                 </div>
               )}
 
@@ -349,7 +358,7 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
                     <div className={`uug-alt ${alternative.status}`} key={alternative.mi_id}>
                       <div className="uug-alt-head"><strong>{alternative.registration_number}</strong><span className={`verdict-chip ${alternative.verdict}`}>{alternative.verdict_title}</span></div>
                       <small>{alternative.title}</small>
-                      <p>{alternative.reasons[0]}</p>
+                      <p>{alternative.flowmeter_note ?? alternative.reasons[0]}</p>
                     </div>
                   ))}
                 </details>

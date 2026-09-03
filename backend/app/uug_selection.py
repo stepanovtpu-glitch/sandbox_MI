@@ -20,6 +20,7 @@ from app.calculation_templates.drg_series import (
 )
 from app.instrument_library import list_instruments
 from app.method_library import list_current_methods
+from app.uug_flowmeters import COVERED, FlowmeterFit, flowmeter_fit
 from app.schemas import (
     ALLOWED_PIPE_DN_MM,
     FlowBasis,
@@ -132,14 +133,20 @@ def _method_pressure_range(method: MeasurementMethod) -> tuple[float, float]:
     return p_min, method.p_max_mpa
 
 
-def _score_method(method: MeasurementMethod, request: UugSelectionRequest, accuracy_limit: float) -> tuple[int, bool, list[str], UugAdjustedRange | None]:
+def _score_method(
+    method: MeasurementMethod,
+    request: UugSelectionRequest,
+    accuracy_limit: float,
+    qw_min: float,
+    qw_max: float,
+) -> tuple[int, bool, list[str], UugAdjustedRange | None, FlowmeterFit | None]:
     reasons: list[str] = []
     score = 100
     applicable = True
     adjusted: UugAdjustedRange | None = None
 
     if method.medium is not None and method.medium != request.medium:
-        return 0, False, [f'МИ предназначена для среды «{MEDIUM_TITLES.get(method.medium, method.medium.value)}», выбрана «{MEDIUM_TITLES[request.medium]}».'], None
+        return 0, False, [f'МИ предназначена для среды «{MEDIUM_TITLES.get(method.medium, method.medium.value)}», выбрана «{MEDIUM_TITLES[request.medium]}».'], None, None
     if method.medium == request.medium:
         reasons.append(f'Среда соответствует МИ: {MEDIUM_TITLES[request.medium]}.')
 
@@ -165,11 +172,22 @@ def _score_method(method: MeasurementMethod, request: UugSelectionRequest, accur
         clamped = q_min != request.q_std_min or q_max != request.q_std_max
         note = None
         if clamped:
-            note = (
-                f'Значения Q при ст. у. приведены к диапазону МИ: {q_min:g}–{q_max:g} м³/ч '
-                f'(запрошено {request.q_std_min:g}–{request.q_std_max:g} м³/ч).'
-            )
-            score -= 12
+            # Обрезка диапазона — это не «приведение», а часть режима, которую МИ
+            # не нормирует. Технологу нужно сказать об этом прямо.
+            gaps: list[str] = []
+            if q_min != request.q_std_min:
+                gaps.append(
+                    f'нижняя граница: заданные {request.q_std_min:g} м³/ч (ст. у.) ниже минимума МИ '
+                    f'{method.q_min:g} м³/ч — при расходе ниже {method.q_min:g} м³/ч методика '
+                    'не нормирует погрешность измерений'
+                )
+            if q_max != request.q_std_max:
+                gaps.append(
+                    f'верхняя граница: заданные {request.q_std_max:g} м³/ч (ст. у.) выше максимума МИ '
+                    f'{method.q_max:g} м³/ч'
+                )
+            note = 'Диапазон расхода узла обеспечивается не полностью — ' + '; '.join(gaps) + '.'
+            score -= 30
             reasons.append(note)
         else:
             reasons.append(f'Расход при ст. у. {q_min:g}–{q_max:g} м³/ч полностью внутри диапазона МИ {method.q_min:g}–{method.q_max:g} м³/ч.')
@@ -200,8 +218,26 @@ def _score_method(method: MeasurementMethod, request: UugSelectionRequest, accur
             score -= 8
             reasons.append(f'Тип расходомера МИ ({method.flowmeter_type}) отличается от предпочтительного.')
 
+    # Парк расходомеров: без прибора нужного DN, диапазона и класса точности
+    # эту МИ на узле не реализовать, сколько бы она ни набрала по остальным
+    # критериям — поэтому проверка идёт здесь, а не только в конструкторе состава.
+    # Проверяем парк по тому расходу, который узел реально будет измерять:
+    # если МИ сузила диапазон, расходомер подбирается под суженный.
+    if adjusted is not None:
+        qw_lo = _working_flow_rate(adjusted.q_min, request.p_abs_mpa, request.t_working_c)
+        qw_hi = _working_flow_rate(adjusted.q_max, request.p_abs_mpa, request.t_working_c)
+    else:
+        qw_lo, qw_hi = qw_min, qw_max
+    fit = flowmeter_fit(method, request, qw_lo, qw_hi)
+    if not fit.ok:
+        score -= 35
+        reasons.extend(fit.problems)
+    elif fit.covering:
+        names = ', '.join(f'«{item.name}»' for item in fit.covering[:2])
+        reasons.append(f'В парке есть расходомер под этот режим: {names}.')
+
     score = max(min(score, 100), 0) if applicable else max(min(score, 65), 0)
-    return score, applicable, reasons, adjusted
+    return score, applicable, reasons, adjusted, fit
 
 
 def _working_flow_rate(q_std: float, p_abs_mpa: float, t_working_c: float) -> float:
@@ -244,6 +280,7 @@ def _instrument_plan(
     request: UugSelectionRequest,
     qw_min: float,
     qw_max: float,
+    fit: FlowmeterFit | None = None,
 ) -> list[UugInstrumentSlot]:
     instruments = [item for item in list_instruments() if item.status == InstrumentStatus.AVAILABLE]
 
@@ -277,7 +314,11 @@ def _instrument_plan(
             required=True,
             requirements=flowmeter_requirements,
             candidates=flowmeter_candidates,
-            note=None if flowmeter_candidates else 'В инвентарной базе нет подходящего расходомера — потребуется закупка.',
+            note=(
+                None if flowmeter_candidates
+                else ' '.join(fit.problems + fit.advice) if fit is not None and fit.problems
+                else 'В инвентарной базе нет подходящего расходомера — потребуется закупка.'
+            ),
         )
     )
 
@@ -371,6 +412,42 @@ def _technologist_params(method: MeasurementMethod, request: UugSelectionRequest
     return params
 
 
+def _technologist_advice(
+    method: MeasurementMethod,
+    request: UugSelectionRequest,
+    adjusted: UugAdjustedRange | None,
+    fit: FlowmeterFit | None,
+    qw_min: float,
+    qw_max: float,
+) -> list[str]:
+    """Что делать технологу, если режим обеспечен не полностью.
+
+    Технологу нужен не факт несоответствия, а решение: какой расход принять,
+    какой прибор существует и что заказывать. Поэтому советы формулируются
+    в величинах режима, а не в терминах базы данных.
+    """
+    advice: list[str] = []
+    if adjusted is not None and adjusted.clamped:
+        if adjusted.q_min != request.q_std_min:
+            qw_limit = _working_flow_rate(method.q_min, request.p_abs_mpa, request.t_working_c)
+            advice.append(
+                f'Нижний расход {request.q_std_min:g} м³/ч (ст. у.) ниже области применения МИ. '
+                f'Методика обеспечивает измерения от {method.q_min:g} м³/ч (ст. у.), это '
+                f'{qw_limit:.1f} м³/ч при рабочих условиях: принимайте эту величину как '
+                'минимальный измеряемый расход узла или подберите МИ с более низким нижним пределом.'
+            )
+        if adjusted.q_max != request.q_std_max:
+            qw_limit = _working_flow_rate(method.q_max, request.p_abs_mpa, request.t_working_c)
+            advice.append(
+                f'Верхний расход {request.q_std_max:g} м³/ч (ст. у.) выше области применения МИ '
+                f'({method.q_max:g} м³/ч ст. у., {qw_limit:.1f} м³/ч раб. у.) — '
+                'нужна методика с большим верхним пределом либо вторая измерительная линия.'
+            )
+    if fit is not None:
+        advice.extend(fit.advice)
+    return advice
+
+
 def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
     basis = request.flow_basis
     request = normalize_flow(request)
@@ -394,27 +471,57 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
             summary='Исходные данные не прошли проверку. Исправьте отмеченные поля и повторите подбор.',
         )
 
-    scored: list[tuple[MeasurementMethod, int, bool, list[str], UugAdjustedRange | None]] = []
-    for method in list_current_methods():
-        score, applicable, reasons, adjusted = _score_method(method, request, accuracy_limit)
-        scored.append((method, score, applicable, reasons, adjusted))
-    scored.sort(key=lambda item: (item[2], item[1]), reverse=True)
+    # Подбор ведётся по расходу при рабочих условиях для приборов и при
+    # стандартных — для методики: это разные величины, и парк проверяется
+    # именно в рабочих.
+    qw_requested_min = _working_flow_rate(request.q_std_min, request.p_abs_mpa, request.t_working_c)
+    qw_requested_max = _working_flow_rate(request.q_std_max, request.p_abs_mpa, request.t_working_c)
 
-    def _verdict(applicable: bool, adjusted: UugAdjustedRange | None, reasons: list[str]) -> tuple[str, str, list[str]]:
+    scored: list[tuple[MeasurementMethod, int, bool, list[str], UugAdjustedRange | None, FlowmeterFit | None]] = []
+    for method in list_current_methods():
+        score, applicable, reasons, adjusted, fit = _score_method(
+            method, request, accuracy_limit, qw_requested_min, qw_requested_max
+        )
+        scored.append((method, score, applicable, reasons, adjusted, fit))
+
+    # «Максимально подходящие» вперёд: сначала применимые, затем те, у которых
+    # диапазон обеспечен целиком, затем обеспеченные парком расходомеров.
+    scored.sort(
+        key=lambda item: (
+            item[2],
+            item[4] is None or not item[4].clamped,
+            item[5] is not None and item[5].ok,
+            item[1],
+        ),
+        reverse=True,
+    )
+
+    def _verdict(
+        applicable: bool,
+        adjusted: UugAdjustedRange | None,
+        reasons: list[str],
+        fit: FlowmeterFit | None,
+    ) -> tuple[str, str, list[str]]:
         """Вердикт словами: технологу нужен ответ, а не баллы."""
         if not applicable:
             return 'not_applicable', 'Не подходит', [item for item in reasons if 'вне ' in item or 'превышает' in item or 'не пересекается' in item]
         caveats: list[str] = []
+        title = 'Подходит с оговорками'
         if adjusted is not None and adjusted.clamped and adjusted.note:
             caveats.append(adjusted.note)
+            title = 'Диапазон обеспечен не полностью'
+        if fit is not None and not fit.ok:
+            caveats.extend(fit.problems)
+            if adjusted is None or not adjusted.clamped:
+                title = 'Нет подходящего расходомера'
         caveats.extend(item for item in reasons if 'близко к границе' in item or 'отличается от предпочтительного' in item)
         if caveats:
-            return 'fits_with_caveats', 'Подходит с оговорками', caveats
+            return 'fits_with_caveats', title, caveats
         return 'fits', 'Подходит', []
 
     matches = []
-    for index, (method, score, applicable, reasons, adjusted_item) in enumerate(scored):
-        verdict, verdict_title, caveats = _verdict(applicable, adjusted_item, reasons)
+    for index, (method, score, applicable, reasons, adjusted_item, fit_item) in enumerate(scored):
+        verdict, verdict_title, caveats = _verdict(applicable, adjusted_item, reasons, fit_item)
         matches.append(
             UugMethodMatch(
                 mi_id=method.mi_id,
@@ -424,6 +531,8 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
                 verdict=verdict,
                 verdict_title=verdict_title,
                 caveats=caveats,
+                flowmeter_status=fit_item.status if fit_item else None,
+                flowmeter_note='; '.join(fit_item.problems) if fit_item and fit_item.problems else None,
                 score=score,
                 reasons=reasons,
             )
@@ -448,7 +557,7 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
             summary='Полностью подходящей МИ в библиотеке нет. Проверьте диапазоны или добавьте новую методику.',
         )
 
-    method, _, _, _, adjusted = best_entry
+    method, _, _, _, adjusted, fit = best_entry
     q_min = adjusted.q_min if adjusted else request.q_std_min
     q_max = adjusted.q_max if adjusted else request.q_std_max
     qw_min = _working_flow_rate(q_min, request.p_abs_mpa, request.t_working_c)
@@ -477,14 +586,13 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
         f'рекомендуется {method.registration_number}: {method.title}.'
     )
 
+    advice = _technologist_advice(method, request, adjusted, fit, qw_requested_min, qw_requested_max)
+
     return UugSelectionResponse(
         input=request,
         input_basis=basis,
         q_requested_std=(request.q_std_min, request.q_std_max),
-        q_requested_working=(
-            _working_flow_rate(request.q_std_min, request.p_abs_mpa, request.t_working_c),
-            _working_flow_rate(request.q_std_max, request.p_abs_mpa, request.t_working_c),
-        ),
+        q_requested_working=(qw_requested_min, qw_requested_max),
         validation_errors=[],
         algorithm_warnings=warnings,
         accuracy_limit_percent=accuracy_limit,
@@ -493,7 +601,8 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
         alternatives=matches[1:],
         adjusted_q=adjusted,
         ranges=ranges,
-        instrument_plan=_instrument_plan(method, request, qw_min, qw_max),
+        instrument_plan=_instrument_plan(method, request, qw_min, qw_max, fit),
         technologist_params=_technologist_params(method, request),
+        technologist_advice=advice,
         summary=summary,
     )

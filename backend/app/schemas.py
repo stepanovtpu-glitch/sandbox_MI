@@ -379,6 +379,11 @@ class UugMethodMatch(BaseModel):
     verdict: Literal['fits', 'fits_with_caveats', 'not_applicable']
     verdict_title: str
     caveats: list[str] = Field(default_factory=list)
+    # Состояние парка расходомеров для этой МИ: covered / lower_gap / upper_gap /
+    # no_accuracy / no_dn. МИ, под которую нечем собрать узел, не может считаться
+    # подходящей, поэтому парк учитывается уже на подборе.
+    flowmeter_status: str | None = None
+    flowmeter_note: str | None = None
     score: int
     reasons: list[str]
 
@@ -425,4 +430,6 @@ class UugSelectionResponse(BaseModel):
     ranges: list[UugOperatingRange] = Field(default_factory=list)
     instrument_plan: list[UugInstrumentSlot] = Field(default_factory=list)
     technologist_params: list[str] = Field(default_factory=list)
+    # Что технологу сделать с режимом, если диапазон обеспечен не полностью
+    technologist_advice: list[str] = Field(default_factory=list)
     summary: str

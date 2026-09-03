@@ -177,6 +177,8 @@ export type UugMethodMatch = {
   verdict: 'fits' | 'fits_with_caveats' | 'not_applicable';
   verdict_title: string;
   caveats: string[];
+  flowmeter_status?: 'covered' | 'lower_gap' | 'upper_gap' | 'no_accuracy' | 'no_dn' | null;
+  flowmeter_note?: string | null;
   score: number;
   reasons: string[];
 };
@@ -205,6 +207,7 @@ export type UugSelectionResponse = {
   ranges: Array<{ label: string; q_min: number; q_max: number; unit: string; note?: string | null }>;
   instrument_plan: UugInstrumentSlot[];
   technologist_params: string[];
+  technologist_advice?: string[];
   summary: string;
 };
 
@@ -403,6 +406,25 @@ export type ProjectCandidates = {
   slots: CandidateSlot[];
 };
 export type CompositionVerdict = { ok: boolean; errors: string[]; warnings: string[] };
+
+export async function downloadUugTask(projectId: string, format: 'pdf' | 'docx'): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/uug/projects/${projectId}/task/${format}`, { headers: authHeaders() });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(typeof detail?.detail === 'string' ? detail.detail : 'Не удалось сформировать задание');
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = match?.[1] ?? `Задание_на_комплектацию_УУГ.${format}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 export async function getProjectCandidates(projectId: string): Promise<ProjectCandidates> {
   return request<ProjectCandidates>(`/api/uug/projects/${projectId}/candidates`);

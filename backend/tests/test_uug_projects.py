@@ -139,3 +139,24 @@ def test_review_queue_lists_incomplete_methods():
     for item in payload['queue']:
         assert item['missing_fields']
         assert len(item['missing_titles']) == len(item['missing_fields'])
+
+
+def test_approved_project_produces_commissioning_task():
+    """После утверждения должен быть документ, по которому работают дальше."""
+    kip, metrologist = _auth('p_kip'), _auth('p_metro')
+    project = _new_project(kip, 'УУГ для задания на комплектацию')
+    project_id = project['project_id']
+
+    # до отправки на согласование задание не формируется
+    early = client.get(f'/api/uug/projects/{project_id}/task/pdf', headers=kip)
+    assert early.status_code == 409
+
+    client.post(f'/api/uug/projects/{project_id}/instruments', json={'instruments': INSTRUMENTS}, headers=kip)
+    client.post(f'/api/uug/projects/{project_id}/submit', json={}, headers=kip)
+    client.post(f'/api/uug/projects/{project_id}/approve', json={'comment': 'Согласовано'}, headers=metrologist)
+
+    for report_format, signature in (('pdf', b'%PDF'), ('docx', b'PK')):
+        response = client.get(f'/api/uug/projects/{project_id}/task/{report_format}', headers=kip)
+        assert response.status_code == 200, response.text
+        assert response.content[:4].startswith(signature)
+        assert len(response.content) > 3000

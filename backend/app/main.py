@@ -70,6 +70,7 @@ from app.uug_projects import (
 from app.compressibility import METHODS as COMPRESSIBILITY_METHODS
 from app.uug_composition import project_candidates, validate_composition
 from app.selection_history import list_queries, remember_query
+from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
@@ -695,6 +696,30 @@ def uug_project_instruments(project_id: str, payload: ProjectInstrumentsPayload,
         raise HTTPException(status_code=404, detail='Проект не найден')
     log_audit_event('compose_uug_project', 'uug_project', project_id, {'instruments': len(payload.instruments)}, actor=_actor(user))
     return project
+
+
+@app.get('/api/uug/projects/{project_id}/task/{report_format}')
+def uug_project_task(project_id: str, report_format: str, user: dict[str, object] = Depends(require_permission('report:export'))):
+    """Задание на комплектацию: документ, по которому работают после утверждения."""
+    if report_format not in {'pdf', 'docx'}:
+        raise HTTPException(status_code=400, detail='Формат должен быть pdf или docx.')
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail='Проект не найден')
+    if project['status'] not in {STATUS_APPROVED, STATUS_REVIEW}:
+        raise HTTPException(
+            status_code=409,
+            detail='Задание формируется по проекту, отправленному на согласование или утверждённому.',
+        )
+
+    path = generate_uug_task_pdf(project) if report_format == 'pdf' else generate_uug_task_docx(project)
+    log_audit_event('uug_task_export', 'uug_project', project_id, {'format': report_format}, actor=_actor(user))
+    media = (
+        'application/pdf'
+        if report_format == 'pdf'
+        else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
+    return FileResponse(path, media_type=media, filename=path.name)
 
 
 @app.get('/api/uug/projects/{project_id}/candidates')

@@ -122,3 +122,64 @@ def test_uug_selection_processing_accuracy_excludes_5_percent_methods():
     assert data['best_method'] is None
     assert data['alternatives']
     assert all(item['status'] == 'not_applicable' for item in data['alternatives'])
+
+
+def test_uug_selection_reports_lower_flow_gap_explicitly():
+    """Нижняя граница вне области применения МИ — это не «приведение», а замечание.
+
+    Технологу нужно прямо сказать, что ниже минимума методика не нормирует
+    погрешность, и подсказать, какой расход принять.
+    """
+    payload = _base_payload(flow_basis='standard', q_std_min=1, q_std_max=100)
+    data = client.post('/api/uug/selection', json=payload).json()
+    assert data['validation_errors'] == []
+    assert data['adjusted_q']['clamped'] is True
+    note = data['adjusted_q']['note']
+    assert 'нижняя граница' in note.lower()
+    assert 'не нормирует погрешность' in note
+    assert data['best_method']['verdict'] == 'fits_with_caveats'
+    assert any('Нижний расход' in item for item in data['technologist_advice'])
+
+
+def test_uug_selection_accounts_for_available_flowmeters():
+    """МИ, под которую в парке нет расходомера, не может считаться подходящей.
+
+    DN 500 при расходе от 60 м³/ч (раб. у.): расходомеры этого диаметра,
+    укладывающиеся в допуск МИ по δQ, начинают измерять только с 500 м³/ч.
+    Подбор обязан это показать и назвать прибор, который диапазон перекрывает.
+    """
+    payload = _base_payload(
+        pipe_dn_mm=500,
+        flow_basis='working',
+        q_input_min=60,
+        q_input_max=1000,
+        q_std_min=60,
+        q_std_max=1000,
+    )
+    data = client.post('/api/uug/selection', json=payload).json()
+    assert data['validation_errors'] == []
+    best = data['best_method']
+    assert best['flowmeter_status'] == 'lower_gap'
+    assert 'не измеряется' in (best['flowmeter_note'] or '')
+    assert any('Либо принять нижний расход' in item for item in data['technologist_advice'])
+    # подсказка о приборе, который диапазон перекрывает, но с большей погрешностью
+    assert any('FLOWSIC100 FLARE' in item for item in data['technologist_advice'])
+    slot = next(item for item in data['instrument_plan'] if item['type'] == 'flowmeter')
+    assert slot['candidates'] == []
+    assert 'не измеряется' in (slot['note'] or '')
+
+
+def test_uug_selection_ranks_realizable_method_first():
+    """Из двух применимых МИ выше идёт та, под которую в парке есть расходомер."""
+    payload = _base_payload(pipe_dn_mm=100, q_std_min=40, q_std_max=700)
+    data = client.post('/api/uug/selection', json=payload).json()
+    assert data['best_method']['flowmeter_status'] == 'covered'
+
+
+def test_uug_selection_advises_when_no_flowmeter_of_this_dn():
+    """DN есть в ряду, но расходомеров такого диаметра в парке нет."""
+    payload = _base_payload(pipe_dn_mm=1000, q_std_min=100, q_std_max=1000)
+    data = client.post('/api/uug/selection', json=payload).json()
+    assert data['validation_errors'] == []
+    assert data['best_method']['flowmeter_status'] == 'no_dn'
+    assert any('Доступные условные диаметры' in item for item in data['technologist_advice'])
