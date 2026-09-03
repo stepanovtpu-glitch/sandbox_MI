@@ -22,22 +22,35 @@ function shortTime(value: string) {
  * История запросов подбора: технолог перебирает режимы и возвращается
  * к предыдущим. Колонка намеренно мелкая — это справка, а не основной экран.
  */
-export function SelectionHistory({ items, onRepeat }: { items: SelectionHistoryItem[]; onRepeat: (item: SelectionHistoryItem) => void }) {
+export function SelectionHistory({
+  items,
+  onRepeat,
+  title = 'История запросов',
+  emptyText = 'Здесь появятся ваши запросы подбора.',
+  hint,
+}: {
+  items: SelectionHistoryItem[];
+  onRepeat: (item: SelectionHistoryItem) => void;
+  title?: string;
+  emptyText?: string;
+  hint?: string;
+}) {
   return (
     <aside className="selection-history">
       <div className="selection-history-head">
         <History size={13} />
-        <span>История запросов</span>
+        <span>{title}</span>
       </div>
 
-      {items.length === 0 && <div className="selection-history-empty">Здесь появятся ваши запросы подбора.</div>}
+      {hint && <div className="selection-history-empty">{hint}</div>}
+      {items.length === 0 && <div className="selection-history-empty">{emptyText}</div>}
 
       <div className="selection-history-list">
         {items.map((item) => {
           const min = item.flow_basis === 'working' ? item.q_input_min : item.q_std_min;
           const max = item.flow_basis === 'working' ? item.q_input_max : item.q_std_max;
           return (
-            <button className="selection-history-item" key={item.query_id} onClick={() => onRepeat(item)} title="Повторить этот запрос">
+            <button className="selection-history-item" key={item.query_id} onClick={() => onRepeat(item)} title="Загрузить режим этого запроса">
               <div className="selection-history-top">
                 <span className="selection-history-time">{shortTime(item.created_at)}</span>
                 <span className={`selection-history-verdict ${item.verdict ?? 'not_applicable'}`}>

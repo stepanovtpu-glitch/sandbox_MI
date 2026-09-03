@@ -12,6 +12,8 @@ import { HistoryScreen } from './HistoryScreen';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
 import { MethodIntakeScreen } from './MethodIntakeScreen';
 import { SystemStatusPanel } from './SystemStatusPanel';
+import { SelectionHistory } from './SelectionHistory';
+import { getSelectionHistory, type SelectionHistoryItem } from './api';
 import { getCurrentUser, logout, setAuthToken, type SessionUser, calculate, downloadReport, getCalculationTemplates, getInstrumentRecommendations, getInstruments, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationRecord, type CalculationResult, type CalculationTemplateCode, type CalculationTemplateInfo, type ErrorContributions, type Instrument, type InstrumentReplacementRecommendation, type InstrumentStatus, type InstrumentType, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = { pipe_dn_mm: 100, flowmeter_dn_mm: 100, straight_before_dn: 10, straight_after_dn: 5, q_min: 40, q_max: 1600, q_unit: 'm3/h', p_min_mpa: 0.12, p_max_mpa: 2.5, t_min_c: -50, t_max_c: 50 };
@@ -52,6 +54,9 @@ function App() {
   const [projectName, setProjectName] = useState('УУГ / расчёт по МИ ДРГ');
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  // Запросы на комплектацию узлов, выполненные ранее: технолог возвращается
+  // к ним, чтобы посчитать погрешность по уже подобранному режиму.
+  const [selectionQueries, setSelectionQueries] = useState<SelectionHistoryItem[]>([]);
   const [activeView, setActiveView] = useState<ActiveView>('constructor');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
@@ -190,10 +195,54 @@ function App() {
   }, [isSessionChecked]);
 
   useEffect(() => {
+    if (!isSessionChecked) return;
+    getSelectionHistory(25).then(setSelectionQueries).catch(() => setSelectionQueries([]));
+  }, [isSessionChecked, activeView]);
+
+  useEffect(() => {
     window.scrollTo(0, 0);
     document.querySelector('.workspace')?.scrollTo(0, 0);
     document.querySelectorAll('.workspace-screen,.left-panel,.center-panel,.right-panel').forEach((element) => element.scrollTo(0, 0));
   }, [activeView]);
+
+
+  /**
+   * Загрузка режима из ранее выполненного запроса на комплектацию.
+   *
+   * Расчёт погрешности ведётся по рабочим условиям, а в запросе расход мог
+   * быть задан в стандартных — тогда пересчитываем обратно (K = 1, как и при
+   * подборе; уточняется по составу газа).
+   */
+  const applySelectionQuery = useCallback((item: SelectionHistoryItem) => {
+    const STANDARD_PRESSURE_MPA = 0.101325;
+    const STANDARD_TEMPERATURE_K = 293.15;
+    const toWorking = (qStandard: number) =>
+      (qStandard * STANDARD_PRESSURE_MPA * (item.t_working_c + 273.15)) / (item.p_abs_mpa * STANDARD_TEMPERATURE_K);
+    const qMin = item.flow_basis === 'working' ? item.q_input_min ?? 0 : toWorking(item.q_std_min ?? 0);
+    const qMax = item.flow_basis === 'working' ? item.q_input_max ?? 0 : toWorking(item.q_std_max ?? 0);
+    setLine((current) => ({
+      ...current,
+      pipe_dn_mm: item.pipe_dn_mm,
+      flowmeter_dn_mm: item.pipe_dn_mm,
+      q_min: Number(qMin.toFixed(2)),
+      q_max: Number(qMax.toFixed(2)),
+      p_min_mpa: item.p_abs_mpa,
+      p_max_mpa: item.p_abs_mpa,
+      t_min_c: item.t_working_c,
+      t_max_c: item.t_working_c,
+    }));
+    setContext((current) => ({
+      ...current,
+      working_flow_rate: Number(qMin.toFixed(2)),
+      gauge_pressure_mpa: Number(Math.max(item.p_abs_mpa - 0.101325, 0).toFixed(6)),
+      temperature_c: item.t_working_c,
+    }));
+    if (item.best_mi_id) setSelectedMethodId(item.best_mi_id);
+    setReportStatus(
+      `Режим загружен из запроса на комплектацию от ${new Date(item.created_at).toLocaleString('ru-RU')}`
+      + (item.best_registration ? ` · МИ ${item.best_registration}` : ''),
+    );
+  }, []);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -345,7 +394,7 @@ function App() {
             <button className="ghost-button theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title={theme === 'dark' ? 'Светлая тема «протокол»' : 'Тёмная тема «диспетчерская»'}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}</button>
           </div>
         </header>
-        {activeView === 'constructor' ? <section className="three-column-layout">
+        {activeView === 'constructor' ? <section className="three-column-layout with-history">
           <aside className="left-panel panel"><div className="panel-header"><strong>Исходные данные</strong></div>
             <FormGroup title="Проект / объект"><TextField label="Название расчёта" value={projectName} onChange={setProjectName} /></FormGroup>
             <FormGroup title="Трубопровод">
@@ -379,6 +428,12 @@ function App() {
           </aside>
           <section className="center-panel panel"><div className="panel-header row"><strong>Результат расчёта</strong><span className={`result-badge ${calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'}`}>{totalStatus}</span></div><div className="pipeline-card"><PipelineScene status={calculation?.status === 'fail' ? 'fail' : calculation?.status === 'pass' ? 'pass' : 'warn'} flowmeterLabel={flowmeterName} /><div className="pipeline-legend"><span>{line.straight_before_dn} Dn до</span><b>{flowmeterName}</b><span>{line.straight_after_dn} Dn после</span></div></div><div className="kpi-grid"><Kpi title="U / δΣ" value={`${deltaTotal.toFixed(3)}%`} status={calculation?.status === 'fail' ? 'danger' : calculation?.status === 'pass' ? 'ok' : 'warn'} /><Kpi title="Qc стандарт." value={formatNumber(qStandard, 1)} status="info" /><Kpi title="K" value={formatNumber(kValue, 4)} status="info" /><Kpi title="P abs / T" value={`${formatNumber(pAbs, 3)} / ${formatNumber(temperatureK, 1)}`} status="info" /></div><div className="chart-card"><div className="chart-title">Структура погрешности</div>{(calculation?.contributions ?? []).map((item) => <div className="bar-row" key={item.code}><div className="bar-label">{item.label}</div><div className="bar-track"><span className={`bar-fill ${item.share_percent > 50 ? 'warn' : 'ok'}`} style={{ width: `${Math.max(item.share_percent, 2)}%` }} /></div><div className="bar-value">{item.weighted_value.toFixed(3)}%</div></div>)}</div><Collapsible title="Показать расчёт" hint="Журнал аудита: исходные величины и промежуточные шаги"><div className="audit-list">{(calculation?.audit_log ?? []).map((row) => <code key={row}>{row}</code>)}</div></Collapsible></section>
           <aside className="right-panel panel"><div className="panel-header"><strong>Итог и подбор МИ</strong></div><div className="donut-card"><div className="donut" style={{ background: `conic-gradient(var(--${calculation?.status === 'fail' ? 'danger' : 'ok'}) 0 ${donutPercent}%, rgba(var(--raise-rgb),0.10) ${donutPercent}% 100%)` }}><span>{deltaTotal.toFixed(2)}%</span></div><div><div className={`result-title ${calculation?.status === 'fail' ? 'danger' : ''}`}>{totalStatus}</div><div className="result-note">Предел выбранной МИ: {limit.toFixed(1)}%</div></div></div>{apiError && <div className="api-error">{apiError}</div>}<ReplacementPanel recommendations={replacementRecommendations} onApply={applyInstrument} /><MethodMatchList items={compatibility} selectedId={selectedMethodId} onSelect={setSelectedMethodId} /></aside>
+          <SelectionHistory
+            items={selectionQueries}
+            onRepeat={applySelectionQuery}
+            title="Запросы на комплектацию"
+            emptyText="Здесь появятся запросы на подбор МИ и состава УУГ — режим можно загрузить в расчёт одним нажатием."
+          />
         </section> : activeView === 'technologist' ? <UugSelectionScreen onApplyMethod={(miId) => { setSelectedMethodId(miId); setActiveView('constructor'); setReportStatus(`МИ применена из подбора УУГ: ${miId}`); }} /> :activeView === 'instruments' ? <InstrumentDatabaseScreen instruments={instruments} selectedInstrumentIds={selectedInstrumentIds} onApply={(instrument) => { applyInstrument(instrument); setActiveView('constructor'); }} /> : activeView === 'methodIntake' ? <MethodIntakeScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'methods' ? <MethodLibraryScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'projects' ? <ProjectsScreen session={session} /> : activeView === 'users' ? <UsersScreen currentLogin={session?.actor} /> : activeView === 'reports' ? <ReportsScreen selectedMethod={selectedMethod} calculation={calculation} reportStatus={reportStatus} onSave={handleSaveCalculation} onDownloadReport={handleDownloadReport} onOpenHistory={() => setIsHistoryOpen(true)} apiBase={apiBase} /> : <SettingsScreen apiBase={apiBase} methodsCount={methods.length} instrumentsCount={instruments.length} />}
       </main>
       <HistoryScreen isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} onLoadRecord={handleLoadHistoryRecord} />

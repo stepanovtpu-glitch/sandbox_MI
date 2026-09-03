@@ -159,38 +159,64 @@ def _score_method(
     else:
         reasons.append(f'Показатель точности выполняется: предел МИ ±{method.delta_total_max:g} % ≤ ±{accuracy_limit:g} %.')
 
-    # Подбор по расходу при стандартных условиях с ограничением диапазоном МИ
-    q_min = max(request.q_std_min, method.q_min)
-    q_max = min(request.q_std_max, method.q_max)
-    if q_min >= q_max:
+    # Диапазон МИ сравнивается с режимом узла в тех же условиях, в которых
+    # он указан в самой методике: у МКАИР (314369) это рабочие условия,
+    # у МЦКЛ (311313) — приведённые к стандартным. Сравнение «через раз»
+    # даёт ошибку в разы: 60 м³/ч раб. у. при 0,5 МПа — это 296 м³/ч ст. у.
+    if method.q_basis == 'working':
+        target_min, target_max = qw_min, qw_max
+        basis_title = 'при рабочих условиях'
+    else:
+        target_min, target_max = request.q_std_min, request.q_std_max
+        basis_title = 'при ст. у.'
+        if method.q_basis is None:
+            score -= 5
+            reasons.append(
+                'В документе МИ не указано, в каких условиях приведён диапазон расхода — '
+                'принят диапазон при стандартных условиях, требуется сверка с бумажной МИ.'
+            )
+
+    q_lo = max(target_min, method.q_min)
+    q_hi = min(target_max, method.q_max)
+    if q_lo >= q_hi:
         applicable = False
         score -= 45
         reasons.append(
-            f'Диапазон расхода при ст. у. {request.q_std_min:g}–{request.q_std_max:g} м³/ч не пересекается с диапазоном МИ {method.q_min:g}–{method.q_max:g} м³/ч.'
+            f'Диапазон расхода {basis_title} {target_min:g}–{target_max:g} м³/ч не пересекается '
+            f'с диапазоном МИ {method.q_min:g}–{method.q_max:g} м³/ч ({basis_title}).'
         )
     else:
-        clamped = q_min != request.q_std_min or q_max != request.q_std_max
+        clamped = q_lo != target_min or q_hi != target_max
         note = None
         if clamped:
             # Обрезка диапазона — это не «приведение», а часть режима, которую МИ
             # не нормирует. Технологу нужно сказать об этом прямо.
             gaps: list[str] = []
-            if q_min != request.q_std_min:
+            if q_lo != target_min:
                 gaps.append(
-                    f'нижняя граница: заданные {request.q_std_min:g} м³/ч (ст. у.) ниже минимума МИ '
+                    f'нижняя граница: заданные {target_min:g} м³/ч ({basis_title}) ниже минимума МИ '
                     f'{method.q_min:g} м³/ч — при расходе ниже {method.q_min:g} м³/ч методика '
                     'не нормирует погрешность измерений'
                 )
-            if q_max != request.q_std_max:
+            if q_hi != target_max:
                 gaps.append(
-                    f'верхняя граница: заданные {request.q_std_max:g} м³/ч (ст. у.) выше максимума МИ '
+                    f'верхняя граница: заданные {target_max:g} м³/ч ({basis_title}) выше максимума МИ '
                     f'{method.q_max:g} м³/ч'
                 )
             note = 'Диапазон расхода узла обеспечивается не полностью — ' + '; '.join(gaps) + '.'
             score -= 30
             reasons.append(note)
         else:
-            reasons.append(f'Расход при ст. у. {q_min:g}–{q_max:g} м³/ч полностью внутри диапазона МИ {method.q_min:g}–{method.q_max:g} м³/ч.')
+            reasons.append(
+                f'Расход {basis_title} {q_lo:g}–{q_hi:g} м³/ч полностью внутри диапазона МИ '
+                f'{method.q_min:g}–{method.q_max:g} м³/ч ({basis_title}).'
+            )
+        # Наружу диапазон отдаётся в стандартных условиях — по ним ведётся учёт
+        if method.q_basis == 'working':
+            q_min = round(standard_flow_from_working(q_lo, request.p_abs_mpa, request.t_working_c), 3)
+            q_max = round(standard_flow_from_working(q_hi, request.p_abs_mpa, request.t_working_c), 3)
+        else:
+            q_min, q_max = q_lo, q_hi
         adjusted = UugAdjustedRange(q_min=q_min, q_max=q_max, clamped=clamped, note=note)
 
     p_min, p_max = _method_pressure_range(method)
@@ -428,19 +454,29 @@ def _technologist_advice(
     """
     advice: list[str] = []
     if adjusted is not None and adjusted.clamped:
+        working_basis = method.q_basis == 'working'
+        # Предел МИ показываем в обоих условиях: технолог задаёт режим
+        # в рабочих, а учёт ведётся в стандартных.
+        if working_basis:
+            mi_min_work, mi_max_work = method.q_min, method.q_max
+            mi_min_std = standard_flow_from_working(method.q_min, request.p_abs_mpa, request.t_working_c)
+            mi_max_std = standard_flow_from_working(method.q_max, request.p_abs_mpa, request.t_working_c)
+        else:
+            mi_min_std, mi_max_std = method.q_min, method.q_max
+            mi_min_work = _working_flow_rate(method.q_min, request.p_abs_mpa, request.t_working_c)
+            mi_max_work = _working_flow_rate(method.q_max, request.p_abs_mpa, request.t_working_c)
+
         if adjusted.q_min != request.q_std_min:
-            qw_limit = _working_flow_rate(method.q_min, request.p_abs_mpa, request.t_working_c)
             advice.append(
-                f'Нижний расход {request.q_std_min:g} м³/ч (ст. у.) ниже области применения МИ. '
-                f'Методика обеспечивает измерения от {method.q_min:g} м³/ч (ст. у.), это '
-                f'{qw_limit:.1f} м³/ч при рабочих условиях: принимайте эту величину как '
-                'минимальный измеряемый расход узла или подберите МИ с более низким нижним пределом.'
+                f'Нижний расход узла {qw_min:.1f} м³/ч (раб. у.; {request.q_std_min:g} м³/ч ст. у.) '
+                f'ниже области применения МИ. Методика нормирует измерения от {mi_min_work:.1f} м³/ч '
+                f'раб. у. ({mi_min_std:.1f} м³/ч ст. у.): принимайте эту величину как минимальный '
+                'измеряемый расход узла или подберите МИ с более низким нижним пределом.'
             )
         if adjusted.q_max != request.q_std_max:
-            qw_limit = _working_flow_rate(method.q_max, request.p_abs_mpa, request.t_working_c)
             advice.append(
-                f'Верхний расход {request.q_std_max:g} м³/ч (ст. у.) выше области применения МИ '
-                f'({method.q_max:g} м³/ч ст. у., {qw_limit:.1f} м³/ч раб. у.) — '
+                f'Верхний расход узла {qw_max:.1f} м³/ч (раб. у.; {request.q_std_max:g} м³/ч ст. у.) '
+                f'выше области применения МИ ({mi_max_work:.1f} м³/ч раб. у.; {mi_max_std:.1f} м³/ч ст. у.) — '
                 'нужна методика с большим верхним пределом либо вторая измерительная линия.'
             )
     if fit is not None:

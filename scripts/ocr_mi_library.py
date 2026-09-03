@@ -165,6 +165,31 @@ def declared_flow_range(flat: str, file_name: str) -> tuple[float | None, float 
     return None, None
 
 
+
+def flow_basis(flat: str, q_min: float, q_max: float) -> str | None:
+    """В каких условиях указан диапазон расхода МИ: рабочих или стандартных.
+
+    Это принципиально: у методик МКАИР (314369) диапазон дан «при рабочих
+    условиях», у методик МЦКЛ (311313) — «приведённых к стандартным условиям».
+    Сравнивать режим узла с диапазоном МИ можно только в одних условиях,
+    поэтому основа извлекается из текста рядом с самим диапазоном.
+    """
+    def _num(value: float) -> str:
+        if float(value).is_integer():
+            return str(int(value))
+        return f'{value:g}'.replace('.', '[,.]')
+
+    pattern = rf'от\s*{_num(q_min)}\s*до\s*{_num(q_max)}'
+    for found in re.finditer(pattern, flat, re.IGNORECASE):
+        before = flat[max(0, found.start() - 260): found.start()].lower()
+        working = before.rfind('рабочих услов')
+        standard = max(before.rfind('стандартным услов'), before.rfind('стандартных услов'))
+        if working < 0 and standard < 0:
+            continue
+        return 'working' if working > standard else 'standard'
+    return None
+
+
 def extract_fields(text: str, file_name: str) -> dict:
     """Детерминированное извлечение полей МИ регулярными выражениями."""
     flat = re.sub(r'\s+', ' ', text)
@@ -304,6 +329,9 @@ def extract_fields(text: str, file_name: str) -> dict:
             q_min, q_max = _to_float(direct.group(1)), _to_float(direct.group(2))
     if q_min is not None and q_max is not None:
         fields['q_min'], fields['q_max'] = q_min, q_max
+        basis = flow_basis(flat, q_min, q_max)
+        if basis:
+            fields['q_basis'] = basis
 
     p_min, p_max = range_near(
         r'давлени\w*\s+газа|абсолютн\w*\s+давлени|давлени\w*[^.]{0,20}МПа',

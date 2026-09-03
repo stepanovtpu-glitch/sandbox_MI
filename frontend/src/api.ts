@@ -8,6 +8,8 @@ export type MeasurementMethod = {
   flowmeter_type?: string | null;
   q_min: number;
   q_max: number;
+  // В каких условиях указан диапазон расхода в самой МИ
+  q_basis?: 'working' | 'standard' | null;
   q_unit: string;
   p_min_mpa: number;
   p_max_mpa: number;
@@ -71,6 +73,7 @@ export type MethodOcrResult = {
     registration_number?: string;
     q_min?: number;
     q_max?: number;
+    q_basis?: 'working' | 'standard';
     q_unit?: string;
     p_min_mpa?: number;
     p_max_mpa?: number;

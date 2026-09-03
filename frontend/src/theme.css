@@ -1177,3 +1177,20 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   margin-top: 2px;
   color: var(--warning, #c98a12);
 }
+
+/* Раздел «Расчёт погрешности»: узкая колонка ранее выполненных запросов
+   на комплектацию — режим загружается в расчёт одним нажатием. */
+.three-column-layout.with-history {
+  grid-template-columns: 300px minmax(420px, 1fr) 280px 184px;
+}
+@media (max-width: 1600px) {
+  .three-column-layout.with-history { grid-template-columns: 300px minmax(400px, 1fr) 268px; }
+  .three-column-layout.with-history > .selection-history {
+    grid-column: 1 / -1;
+    max-height: 190px;
+    position: static;
+  }
+  .three-column-layout.with-history > .selection-history .selection-history-list {
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  }
+}

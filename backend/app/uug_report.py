@@ -26,6 +26,7 @@ from app.instrument_library import list_instruments
 from app.method_library import list_current_methods
 from app.pdf_fonts import apply_cyrillic_styles, register_pdf_fonts
 from app.uug_composition import SLOT_TITLES, required_k_methods, selection_context
+from app.uug_selection import _working_flow_rate as working_flow_rate, standard_flow_from_working
 from app.schemas import InstrumentType
 
 MEDIUM_TITLES = {
@@ -97,7 +98,33 @@ def _method_rows(project: dict) -> list[list[str]]:
     if method is not None:
         rows.append(['Наименование МИ', method.title])
         rows.append(['Предел суммарной погрешности по МИ', f'± {method.delta_total_max:g} %'])
-        rows.append(['Область применения МИ по расходу', f'{method.q_min:g}–{method.q_max:g} м³/ч'])
+        # Диапазон МИ без указания условий читается неоднозначно: у одних
+        # методик он дан при рабочих условиях, у других — приведённым
+        # к стандартным. Поэтому условия названы, а рядом дан пересчёт
+        # для режима этого узла.
+        basis_title = {
+            'working': 'при рабочих условиях',
+            'standard': 'приведённый к стандартным условиям',
+        }.get(method.q_basis or '', 'условия в МИ не указаны, принято приведение к стандартным условиям')
+        flow_row = f'{method.q_min:g}–{method.q_max:g} м³/ч ({basis_title})'
+        selection_input = selection.get('input') or selection
+        p_abs = selection_input.get('p_abs_mpa')
+        t_work = selection_input.get('t_working_c')
+        if p_abs and t_work is not None:
+            if method.q_basis == 'working':
+                other = (
+                    standard_flow_from_working(method.q_min, p_abs, t_work),
+                    standard_flow_from_working(method.q_max, p_abs, t_work),
+                )
+                other_title = 'при ст. у. для режима узла'
+            else:
+                other = (
+                    working_flow_rate(method.q_min, p_abs, t_work),
+                    working_flow_rate(method.q_max, p_abs, t_work),
+                )
+                other_title = 'при рабочих условиях узла'
+            flow_row += chr(10) + f'То же {other_title}: {other[0]:.1f}–{other[1]:.1f} м³/ч'
+        rows.append(['Область применения МИ по расходу', flow_row])
         rows.append(['Область применения МИ по давлению', f'{method.p_min_mpa:g}–{method.p_max_mpa:g} МПа'])
         rows.append(['Область применения МИ по температуре', f'{method.t_min_c:g}…{method.t_max_c:g} °C'])
 

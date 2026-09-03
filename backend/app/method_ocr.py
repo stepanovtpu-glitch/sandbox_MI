@@ -96,6 +96,14 @@ def extract_method_fields(text: str) -> dict[str, Any]:
         fields['q_min'] = _to_float(q_range.group('min'))
         fields['q_max'] = _to_float(q_range.group('max'))
         fields['q_unit'] = 'm3/h'
+        # Одни МИ задают диапазон при рабочих условиях, другие — приведённым
+        # к стандартным. Без этого признака подбор сравнивает режим узла
+        # с чужой основой, поэтому берём ближайшее указание перед диапазоном.
+        before = normalized[max(0, q_range.start() - 260): q_range.start()].lower()
+        working = before.rfind('рабочих услов')
+        standard = max(before.rfind('стандартным услов'), before.rfind('стандартных услов'))
+        if working >= 0 or standard >= 0:
+            fields['q_basis'] = 'working' if working > standard else 'standard'
 
     p_range = _find_range(
         normalized,

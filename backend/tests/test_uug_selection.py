@@ -80,9 +80,12 @@ def test_uug_selection_clamps_q_to_method_range():
     assert data['best_method'] is not None
     assert data['adjusted_q']['clamped'] is True
     assert data['adjusted_q']['note']
-    standard = next(item for item in data['ranges'] if 'стандартных' in item['label'])
-    assert standard['q_min'] >= 10
-    assert standard['q_max'] <= 5000
+    # Диапазон этих МИ задан при рабочих условиях, в них же и ограничивается;
+    # наружу он отдаётся ещё и пересчитанным в стандартные.
+    working = next(item for item in data['ranges'] if 'рабочих' in item['label'])
+    assert working['q_min'] >= 10
+    assert working['q_max'] <= 5000
+    assert next(item for item in data['ranges'] if 'стандартных' in item['label'])
 
 
 def test_uug_selection_rejects_temperature_above_gost_limit():
@@ -183,3 +186,18 @@ def test_uug_selection_advises_when_no_flowmeter_of_this_dn():
     assert data['validation_errors'] == []
     assert data['best_method']['flowmeter_status'] == 'no_dn'
     assert any('Доступные условные диаметры' in item for item in data['technologist_advice'])
+
+
+def test_uug_selection_compares_flow_in_method_own_conditions():
+    """Диапазон МИ сравнивается в тех условиях, в которых он в ней указан.
+
+    Методики МКАИР (314369) задают диапазон при рабочих условиях. Режим
+    40–1600 м³/ч раб. у. при 0,5 МПа — это 197–7895 м³/ч ст. у.: сравнение
+    «через раз» дало бы ложное «не подходит».
+    """
+    data = client.post('/api/uug/selection', json=_base_payload(q_std_min=40, q_std_max=1600)).json()
+    best = data['best_method']
+    assert best['verdict'] == 'fits'
+    assert any('при рабочих условиях' in reason for reason in best['reasons'])
+    standard = next(item for item in data['ranges'] if 'стандартных' in item['label'])
+    assert standard['q_max'] > 1600, 'наружу диапазон отдаётся пересчитанным в стандартные условия'

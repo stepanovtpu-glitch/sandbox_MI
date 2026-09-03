@@ -300,6 +300,7 @@ export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, on
       ...current,
       registration_number: values.registration_number ?? current.registration_number,
       q_min: values.q_min ?? current.q_min,
+      q_basis: (values.q_basis as 'working' | 'standard' | undefined) ?? current.q_basis,
       q_max: values.q_max ?? current.q_max,
       q_unit: values.q_unit ?? current.q_unit,
       p_min_mpa: values.p_min_mpa ?? current.p_min_mpa,
@@ -361,6 +362,17 @@ export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, on
               <TextField label="Тип расходомера" value={draft.flowmeter_type ?? ''} onChange={(value) => setDraftField(setDraft, 'flowmeter_type', value)} />
               <NumberField label="Q min" value={draft.q_min} onChange={(value) => setDraftField(setDraft, 'q_min', value)} />
               <NumberField label="Q max" value={draft.q_max} onChange={(value) => setDraftField(setDraft, 'q_max', value)} />
+              <label className="field">
+                <span>Условия диапазона Q</span>
+                <select
+                  value={draft.q_basis ?? ''}
+                  onChange={(event) => setDraft((current) => ({ ...current, q_basis: (event.target.value || null) as 'working' | 'standard' | null }))}
+                >
+                  <option value="">не указано в МИ</option>
+                  <option value="working">при рабочих условиях</option>
+                  <option value="standard">приведённый к стандартным</option>
+                </select>
+              </label>
               <NumberField label="P min, МПа" value={draft.p_min_mpa} onChange={(value) => setDraftField(setDraft, 'p_min_mpa', value)} />
               <NumberField label="P max, МПа" value={draft.p_max_mpa} onChange={(value) => setDraftField(setDraft, 'p_max_mpa', value)} />
               <NumberField label="T min, °C" value={draft.t_min_c} onChange={(value) => setDraftField(setDraft, 't_min_c', value)} />
