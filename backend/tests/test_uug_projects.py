@@ -119,3 +119,15 @@ def test_projects_can_be_filtered_by_status():
     review = client.get('/api/uug/projects?status=review', headers=metrologist).json()
     assert any(item['project_id'] == project['project_id'] for item in review)
     assert all(item['status'] == 'review' for item in review)
+
+
+def test_review_queue_lists_incomplete_methods():
+    """Очередь проверки показывает, каких полей не хватает в распознанной МИ."""
+    response = client.get('/api/methods/review-queue', headers=_auth('p_metro'))
+    assert response.status_code == 200
+    payload = response.json()
+    assert 'total_methods' in payload
+    assert payload['needs_review'] == len(payload['queue'])
+    for item in payload['queue']:
+        assert item['missing_fields']
+        assert len(item['missing_titles']) == len(item['missing_fields'])

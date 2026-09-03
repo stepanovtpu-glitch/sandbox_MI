@@ -302,6 +302,52 @@ def instrument_recommendations(request: InstrumentRecommendationRequest, user: d
     return recommendations
 
 
+@app.get('/api/methods/review-queue')
+def methods_review_queue(user: dict[str, object] = Depends(require_permission('method:read'))):
+    """Методики, которые распознались не полностью и ждут проверки человеком.
+
+    OCR даёт до 96 % полных карточек, остальное дозаполняет метролог — очередь
+    показывает, что именно осталось подтвердить, чтобы методику можно было
+    применять в подборе.
+    """
+    field_titles = {
+        'q_min': 'нижний предел расхода',
+        'q_max': 'верхний предел расхода',
+        'p_max_mpa': 'верхний предел давления',
+        't_min_c': 'нижний предел температуры',
+        't_max_c': 'верхний предел температуры',
+        'delta_total_max': 'предел погрешности',
+        'medium': 'измеряемая среда',
+    }
+    queue = []
+    for method in list_current_methods():
+        missing = []
+        if not method.q_max or method.q_max <= 0:
+            missing.extend(['q_min', 'q_max'])
+        if not method.p_max_mpa or method.p_max_mpa <= 0:
+            missing.append('p_max_mpa')
+        if method.t_min_c == method.t_max_c:
+            missing.extend(['t_min_c', 't_max_c'])
+        if not method.delta_total_max or method.delta_total_max <= 0:
+            missing.append('delta_total_max')
+        if method.medium is None:
+            missing.append('medium')
+        if missing:
+            queue.append({
+                'mi_id': method.mi_id,
+                'registration_number': method.registration_number,
+                'title': method.title,
+                'source_document': method.source_document,
+                'missing_fields': missing,
+                'missing_titles': [field_titles.get(field, field) for field in missing],
+            })
+    return {
+        'total_methods': len(list_current_methods()),
+        'needs_review': len(queue),
+        'queue': sorted(queue, key=lambda item: len(item['missing_fields']), reverse=True),
+    }
+
+
 @app.get('/api/methods/{mi_id}/versions', response_model=list[MeasurementMethodVersion])
 def method_versions(mi_id: str, user: dict[str, object] = Depends(require_permission('method:read'))):
     versions = list_method_versions(mi_id)
