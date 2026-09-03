@@ -68,6 +68,10 @@ class Instrument(BaseModel):
     warehouse_bin: str | None = None
     notes: str | None = None
     updated_by: str | None = None
+    # Для вычислителей: какие методы расчёта коэффициента сжимаемости реализованы
+    # (GOST_30319_2, GOST_30319_3, VNIC_SMV). МИ предписывает метод, и вычислитель
+    # обязан его поддерживать — иначе узел нельзя укомплектовать этим прибором.
+    compressibility_methods: list[str] = Field(default_factory=list)
 
 
 class LineParameters(BaseModel):
@@ -154,6 +158,8 @@ class MeasurementMethod(BaseModel):
     title: str
     flowmeter_type: str | None = None
     medium: GasMedium | None = None
+    # Метод расчёта коэффициента сжимаемости, предписанный МИ (если указан в документе)
+    compressibility_method: str | None = None
     q_min: float
     q_max: float
     q_unit: str = 'm3/h'

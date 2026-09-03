@@ -40,6 +40,7 @@ def build_method(record: dict) -> dict | None:
         'registration_number': registration,
         'title': title,
         'medium': fields.get('medium'),
+        'compressibility_method': fields.get('compressibility_method'),
         'flowmeter_type': fields.get('flowmeter_type'),
         'q_min': fields.get('q_min'),
         'q_max': fields.get('q_max'),

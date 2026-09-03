@@ -369,3 +369,25 @@ export type MethodReviewQueue = { total_methods: number; needs_review: number; q
 export async function getReviewQueue(): Promise<MethodReviewQueue> {
   return request<MethodReviewQueue>('/api/methods/review-queue');
 }
+
+export type CandidateSlot = {
+  type: InstrumentType;
+  title: string;
+  required: boolean;
+  suitable: Array<{ instrument: Instrument; warnings: string[] }>;
+  rejected: Array<{ instrument: Instrument; reasons: string[] }>;
+};
+export type ProjectCandidates = {
+  has_selection: boolean;
+  k_methods: { allowed: string[]; reason: string } | null;
+  slots: CandidateSlot[];
+};
+export type CompositionVerdict = { ok: boolean; errors: string[]; warnings: string[] };
+
+export async function getProjectCandidates(projectId: string): Promise<ProjectCandidates> {
+  return request<ProjectCandidates>(`/api/uug/projects/${projectId}/candidates`);
+}
+
+export async function getProjectValidation(projectId: string): Promise<CompositionVerdict> {
+  return request<CompositionVerdict>(`/api/uug/projects/${projectId}/validation`);
+}

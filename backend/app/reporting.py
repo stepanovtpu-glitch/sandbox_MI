@@ -11,10 +11,23 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from app.database import DB_DIR
 from app.method_library import list_method_versions
+from app.calculation_templates import TEMPLATE_TITLES
 from app.pdf_fonts import apply_cyrillic_styles, register_pdf_fonts
 from app.schemas import CalculationRequest, CalculationResult
 
 REPORTS_DIR = DB_DIR / 'reports'
+
+
+# Протокол читает человек: коды типов СИ и статусов выводим по-русски
+INSTRUMENT_TYPE_TITLES = {
+    'flowmeter': 'Расходомер',
+    'pressure': 'Датчик давления',
+    'temperature': 'Датчик температуры',
+    'computer': 'Вычислитель',
+    'analyzer': 'Анализатор состава',
+}
+STATUS_TITLES = {'pass': 'соответствует', 'fail': 'не соответствует', 'warn': 'требует проверки'}
+VERSION_STATUS_TITLES = {'active': 'действующая', 'draft': 'черновик', 'archived': 'архивная'}
 
 
 def _safe(value: str) -> str:
@@ -60,7 +73,7 @@ def _rows_from_request(request: CalculationRequest, result: CalculationResult) -
         ['Методика', method.title if method else 'не выбрана'],
         ['Регистрационный номер', method.registration_number if method else '—'],
         ['Версия МИ в библиотеке', version.get('version_id', '—') if version else '—'],
-        ['Статус версии МИ', version.get('status', '—') if version else '—'],
+        ['Статус версии МИ', VERSION_STATUS_TITLES.get(version.get('status', ''), version.get('status', '—')) if version else '—'],
         ['Скан-копия МИ', document_name],
         ['SHA-256 скан-копии', document_sha256],
         ['Путь хранения скан-копии', document_path],
@@ -68,17 +81,17 @@ def _rows_from_request(request: CalculationRequest, result: CalculationResult) -
         ['Диапазон Q, м³/ч', f'{request.line.q_min}–{request.line.q_max}'],
         ['Диапазон P, МПа', f'{request.line.p_min_mpa}–{request.line.p_max_mpa}'],
         ['Диапазон T, °C', f'{request.line.t_min_c}–{request.line.t_max_c}'],
-        ['Расчётный шаблон', request.calculation_template.value if request.calculation_template else 'MANUAL_QUADRATURE'],
+        ['Расчётный шаблон', TEMPLATE_TITLES.get(request.calculation_template.value, request.calculation_template.value) if request.calculation_template else 'Ручное квадратурное суммирование'],
         ['Итоговая U / δΣ, %', str(result.delta_total)],
         ['Предел МИ, %', str(result.limit) if result.limit is not None else '—'],
-        ['Статус', result.status],
+        ['Статус', STATUS_TITLES.get(result.status, result.status)],
         ['Заключение', conclusion],
     ]
     if request.instruments:
         rows.append(['Состав СИ', ''])
         for instrument in request.instruments:
             rows.append([
-                f'СИ: {instrument.type.value}',
+                INSTRUMENT_TYPE_TITLES.get(instrument.type.value, instrument.type.value),
                 (
                     f'{instrument.name}; зав. № {instrument.serial_number or "—"}; '
                     f'δ={instrument.error_percent if instrument.error_percent is not None else "—"}%; '

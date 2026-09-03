@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from reportlab.pdfbase import pdfmetrics
@@ -27,6 +28,10 @@ def register_pdf_fonts() -> tuple[str, str]:
             else:
                 PDF_FONT_BOLD = PDF_FONT
             return PDF_FONT, PDF_FONT_BOLD
+    # Молчать здесь нельзя: без TTF кириллица в протоколе превращается в квадраты
+    logging.getLogger(__name__).error(
+        'Шрифт с кириллицей не найден — PDF-протокол будет нечитаем. Установите fonts-dejavu-core.'
+    )
     return PDF_FONT, PDF_FONT_BOLD
 
 

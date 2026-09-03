@@ -61,6 +61,7 @@ from app.uug_projects import (
     list_projects,
     set_instruments,
 )
+from app.uug_composition import project_candidates, validate_composition
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
@@ -599,8 +600,33 @@ def uug_project_instruments(project_id: str, payload: ProjectInstrumentsPayload,
     return project
 
 
+@app.get('/api/uug/projects/{project_id}/candidates')
+def uug_project_candidates(project_id: str, user: dict[str, object] = Depends(require_permission('uug:select'))):
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail='Проект не найден')
+    return project_candidates(project)
+
+
+@app.get('/api/uug/projects/{project_id}/validation')
+def uug_project_validation(project_id: str, user: dict[str, object] = Depends(require_permission('uug:select'))):
+    project = get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail='Проект не найден')
+    return validate_composition(project)
+
+
 def _apply_status(project_id: str, new_status: str, payload: ProjectStatusPayload, user: dict[str, object]):
     permissions = set(user.get('permissions', []))  # type: ignore[arg-type]
+    if new_status == STATUS_REVIEW:
+        # Несовместимый состав не должен доходить до метролога — проверяем на сервере,
+        # независимо от того, что показал интерфейс.
+        project = get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail='Проект не найден')
+        verdict = validate_composition(project)
+        if not verdict['ok']:
+            raise HTTPException(status_code=409, detail={'message': 'Состав СИ не проходит проверку.', 'errors': verdict['errors'], 'warnings': verdict['warnings']})
     try:
         project = change_status(project_id, new_status, _actor(user), permissions, payload.comment)
     except LookupError as exc:

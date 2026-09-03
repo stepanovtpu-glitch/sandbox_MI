@@ -171,6 +171,19 @@ def extract_fields(text: str, file_name: str) -> dict:
     elif 'природн' in lowered and 'газ' in lowered:
         fields['medium'] = 'pg'
 
+    # Метод расчёта коэффициента сжимаемости, предписанный МИ.
+    # В свидетельствах: «Метод расчёта коэффициента сжимаемости - ГОСТ 30319.3-2015».
+    # По нему проверяется, что вычислитель в составе узла реализует нужный алгоритм.
+    method_match = re.search(r'сжимаемост\w*[^.]{0,60}?ГОСТ\s*30319\.([23])', flat, re.IGNORECASE)
+    if method_match:
+        fields['compressibility_method'] = f'GOST_30319_{method_match.group(1)}'
+    elif re.search(r'ВНИЦ\s*СМВ', flat, re.IGNORECASE):
+        fields['compressibility_method'] = 'VNIC_SMV'
+    elif re.search(r'ГОСТ\s*30319\.3', flat):
+        fields['compressibility_method'] = 'GOST_30319_3'
+    elif re.search(r'ГОСТ\s*30319\.2', flat):
+        fields['compressibility_method'] = 'GOST_30319_2'
+
     # Тип расходомера
     for key, value in (('вихрев', 'vortex'), ('ультразвук', 'ultrasonic'), ('турбинн', 'turbine'), ('ротацион', 'rotary'), ('диафрагм', 'orifice')):
         if key in lowered:

@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from docx import Document
 from docx.shared import Pt
+from app.pdf_fonts import apply_cyrillic_styles, register_pdf_fonts
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
@@ -50,6 +51,7 @@ def generate_readiness_pdf_report() -> Path:
     path = _report_name('pdf')
     doc = SimpleDocTemplate(str(path), pagesize=A4, rightMargin=34, leftMargin=34, topMargin=34, bottomMargin=34)
     styles = getSampleStyleSheet()
+    apply_cyrillic_styles(styles)
     story = [
         Paragraph('GasMeter Pro — отчёт готовности к пилотной эксплуатации', styles['Title']),
         Paragraph(f'Дата формирования: {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}', styles['BodyText']),
@@ -62,6 +64,7 @@ def generate_readiness_pdf_report() -> Path:
     ]
     table = Table(_checks_rows(readiness), colWidths=[150, 70, 35, 35, 205])
     table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), register_pdf_fonts()[0]),
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#DDE9F2')),
         ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
         ('GRID', (0, 0), (-1, -1), 0.45, colors.HexColor('#6A7C86')),

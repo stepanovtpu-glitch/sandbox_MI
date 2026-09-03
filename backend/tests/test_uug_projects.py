@@ -7,12 +7,20 @@ from app.users import create_user, get_user
 
 client = TestClient(app)
 
+# Совместимый состав: сервер теперь отбраковывает несовместимые приборы,
+# поэтому в тестах маршрута используется реальная комплектация из инвентаря.
 SELECTION = {
     'medium': 'png', 'process': 'extraction', 'pipe_dn_mm': 100,
     'straight_before_dn': 10, 'straight_after_dn': 5,
-    'q_std_min': 40, 'q_std_max': 1600, 'p_abs_mpa': 0.5, 't_working_c': 20,
+    'q_std_min': 300, 'q_std_max': 1600, 'p_abs_mpa': 0.5, 't_working_c': 20,
+    'best_method': {'mi_id': 'drg-m-1600-0169'},
 }
-INSTRUMENTS = [{'type': 'flowmeter', 'id': 'fm-1', 'name': 'ДРГ.М-1600'}]
+INSTRUMENTS = [
+    {'type': 'flowmeter', 'id': 'flow-drgm-1600-001', 'name': 'ДРГ.М-1600'},
+    {'type': 'pressure', 'id': 'pressure-eja110e-001', 'name': 'EJA110E'},
+    {'type': 'temperature', 'id': 'temp-metran-286-001', 'name': 'Метран-286'},
+    {'type': 'computer', 'id': 'computer-superflow-001', 'name': 'SuperFlow-21В'},
+]
 
 
 def _ensure(login: str, role: str) -> None:
@@ -43,7 +51,7 @@ def test_cannot_submit_project_without_instruments():
     project = _new_project(_auth('p_kip'))
     response = client.post(f'/api/uug/projects/{project["project_id"]}/submit', json={}, headers=_auth('p_kip'))
     assert response.status_code == 409
-    assert 'состава средств измерений' in response.json()['detail']
+    assert any('Не выбран' in error for error in response.json()['detail']['errors'])
 
 
 def test_full_route_kip_composes_metrologist_approves():
@@ -53,7 +61,7 @@ def test_full_route_kip_composes_metrologist_approves():
 
     composed = client.post(f'/api/uug/projects/{project_id}/instruments', json={'instruments': INSTRUMENTS}, headers=kip)
     assert composed.status_code == 200
-    assert len(composed.json()['instruments']) == 1
+    assert len(composed.json()['instruments']) == 4
 
     submitted = client.post(f'/api/uug/projects/{project_id}/submit', json={}, headers=kip)
     assert submitted.status_code == 200

@@ -19,6 +19,20 @@ const ACTION_LABELS: Record<string, string> = {
   reopened: 'открыт заново',
 };
 
+/** Сервер отвечает 409 со списком причин — показываем их, а не «API 409: {...}». */
+function describeApiError(caught: unknown, fallback: string): string {
+  if (!(caught instanceof Error)) return fallback;
+  const raw = caught.message.replace(/^API \d+:\s*/, '');
+  try {
+    const parsed = JSON.parse(raw) as { detail?: string | { message?: string; errors?: string[]; warnings?: string[] } };
+    if (typeof parsed.detail === 'string') return parsed.detail;
+    if (parsed.detail) return [parsed.detail.message, ...(parsed.detail.errors ?? [])].filter(Boolean).join(' ');
+  } catch {
+    // не JSON — показываем как есть
+  }
+  return caught.message;
+}
+
 function formatDate(value: string) {
   const parsed = new Date(value);
   return Number.isNaN(parsed.valueOf())
@@ -76,7 +90,7 @@ export function ProjectsScreen({ session }: { session: SessionUser | null }) {
       setNotice(`«${updated.name}» — ${updated.status_title.toLowerCase()}`);
       refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось изменить статус проекта');
+      setError(describeApiError(caught, 'Не удалось изменить статус проекта'));
     } finally {
       setIsBusy(false);
     }

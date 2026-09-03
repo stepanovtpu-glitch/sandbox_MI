@@ -1006,3 +1006,27 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   .uug-submit { height: 40px; margin-top: 2px; }
   .panel-header span { font-size: 10px; }
 }
+
+/* Комплектация по слотам: одна позиция на тип, отказы с причинами */
+.composer-k { font-size: 12px; margin-bottom: 10px; padding: 8px 10px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+.composer-k small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.composer-slots { display: grid; gap: 7px; margin-bottom: 10px; }
+.composer-slot { border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 10px; padding: 8px 10px; background: rgba(var(--raise-rgb), 0.025); }
+.composer-slot.filled { border-left-color: var(--ok); }
+.composer-slot.invalid { border-left-color: var(--danger); }
+.composer-slot-head { display: grid; grid-template-columns: 150px 1fr auto; align-items: center; gap: 10px; }
+.composer-slot-head strong { font-size: 12.5px; }
+.composer-slot-head button { width: 30px; padding: 0; display: grid; place-items: center; }
+.composer-empty { font-size: 12px; color: var(--muted); }
+.composer-slot .composer-add { grid-template-columns: 1fr auto; margin: 8px 0 0; }
+.composer-reasons, .composer-rejected { margin: 6px 0 0; padding-left: 16px; font-size: 11.5px; color: var(--danger); display: grid; gap: 3px; }
+.composer-rejected { color: var(--muted); }
+.composer-rejected b { color: var(--text); font-weight: 600; }
+.composer-rejected-toggle { height: auto; padding: 6px 0 0; background: transparent; border: 0; color: var(--muted); font-size: 11.5px; cursor: pointer; }
+.composer-verdict { display: flex; gap: 9px; align-items: flex-start; padding: 9px 12px; border-radius: 10px; font-size: 12.5px; margin-bottom: 8px; }
+.composer-verdict.ok { border: 1px solid var(--border-strong); background: var(--accent-soft); color: var(--accent); }
+.composer-verdict.bad { border: 1px solid rgba(var(--danger-rgb), 0.3); background: rgba(var(--danger-rgb), 0.08); color: var(--danger); }
+.composer-verdict svg { flex: none; margin-top: 2px; }
+.composer-verdict-line { font-size: 12px; margin-top: 3px; }
+.composer-verdict-line.warn { color: var(--warn); }
+@media (max-width: 640px) { .composer-slot-head { grid-template-columns: 1fr auto; } .composer-type { grid-column: 1 / -1; } }

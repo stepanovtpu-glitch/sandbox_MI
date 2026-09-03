@@ -35,8 +35,24 @@ def bootstrap_instrument_library() -> None:
     init_db()
     now = datetime.now(timezone.utc).isoformat()
     for instrument in INSTRUMENTS:
-        row = fetch_one('SELECT instrument_id FROM instruments WHERE instrument_id = ?', (instrument.id,))
+        row = fetch_one('SELECT instrument_json FROM instruments WHERE instrument_id = ?', (instrument.id,))
         if row:
+            # Справочные поля эталонных приборов (паспортное написание, методы расчёта K)
+            # подтягиваются из seed и на уже созданной базе — иначе исправления
+            # в справочнике никогда не доезжают до стенда.
+            stored = json_load(row['instrument_json'], {}) or {}
+            reference = {
+                'name': instrument.name,
+                'manufacturer': instrument.manufacturer,
+                'model': instrument.model,
+                'compressibility_methods': instrument.compressibility_methods,
+            }
+            if any(stored.get(key) != value for key, value in reference.items()):
+                stored.update(reference)
+                execute(
+                    'UPDATE instruments SET name = ?, instrument_json = ?, updated_at = ? WHERE instrument_id = ?',
+                    (instrument.name, json_dump(stored), now, instrument.id),
+                )
             continue
         execute(
             '''
