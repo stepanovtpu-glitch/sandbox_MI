@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ClipboardList, RotateCcw, Send, Undo2 } from 'lucide-react';
+import { ProjectComposer } from './ProjectComposer';
 import { getProjects, moveProject, type SessionUser, type UugProject, type UugProjectStatus } from './api';
 
 const STATUS_ORDER: UugProjectStatus[] = ['draft', 'review', 'approved', 'rejected'];
@@ -152,6 +153,16 @@ export function ProjectsScreen({ session }: { session: SessionUser | null }) {
                   <span className="project-waiting">Ожидает решения метролога</span>
                 )}
               </div>
+
+              {isOpen && can('uug:compose') && (project.status === 'draft' || project.status === 'rejected') && (
+                <ProjectComposer
+                  project={project}
+                  onSaved={(updated) => {
+                    setNotice(`Состав СИ сохранён: ${updated.instruments.length} поз.`);
+                    refresh();
+                  }}
+                />
+              )}
 
               {isOpen && (
                 <div className="project-history">
