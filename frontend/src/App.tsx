@@ -13,6 +13,7 @@ import { MethodLibraryPanel } from './MethodLibraryPanel';
 import { MethodIntakeScreen } from './MethodIntakeScreen';
 import { SystemStatusPanel } from './SystemStatusPanel';
 import { SelectionHistory } from './SelectionHistory';
+import { MethodPicker } from './MethodPicker';
 import { getSelectionHistory, type SelectionHistoryItem } from './api';
 import { getCurrentUser, logout, setAuthToken, type SessionUser, calculate, downloadReport, getCalculationTemplates, getInstrumentRecommendations, getInstruments, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationRecord, type CalculationResult, type CalculationTemplateCode, type CalculationTemplateInfo, type ErrorContributions, type Instrument, type InstrumentReplacementRecommendation, type InstrumentStatus, type InstrumentType, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
@@ -417,7 +418,7 @@ function App() {
             </FormGroup>
             <FormGroup title="Рабочие условия / область МИ"><NumberField label="Q min, м³/ч" value={line.q_min} onChange={(value) => setLine({ ...line, q_min: value })} /><NumberField label="Q max, м³/ч" value={line.q_max} onChange={(value) => setLine({ ...line, q_max: value })} /><NumberField label="P min, МПа" value={line.p_min_mpa} onChange={(value) => setLine({ ...line, p_min_mpa: value })} /><NumberField label="P max, МПа" value={line.p_max_mpa} onChange={(value) => setLine({ ...line, p_max_mpa: value })} /><NumberField label="T min, °C" value={line.t_min_c} onChange={(value) => setLine({ ...line, t_min_c: value })} /><NumberField label="T max, °C" value={line.t_max_c} onChange={(value) => setLine({ ...line, t_max_c: value })} /></FormGroup>
             <Collapsible title="Экспертные параметры расчёта" hint="Точка расчёта PTZ и коэффициенты сжимаемости"><NumberField label="Q рабочий, м³/ч" value={context.working_flow_rate ?? 0} onChange={(value) => setContext({ ...context, working_flow_rate: value })} /><NumberField label="P избыточное, МПа" value={context.gauge_pressure_mpa ?? 0} onChange={(value) => setContext({ ...context, gauge_pressure_mpa: value })} /><NumberField label="Температура, °C" value={context.temperature_c ?? 0} onChange={(value) => setContext({ ...context, temperature_c: value })} /><NumberField label="P атм., МПа" value={context.atmospheric_pressure_mpa ?? 0.101325} onChange={(value) => setContext({ ...context, atmospheric_pressure_mpa: value })} /><NumberField label="Z рабоч." value={context.z_working ?? 1} onChange={(value) => setContext({ ...context, z_working: value })} /><NumberField label="Z станд." value={context.z_standard ?? 1} onChange={(value) => setContext({ ...context, z_standard: value })} /></Collapsible>
-            <FormGroup title="МИ и расчётный шаблон"><label className="field"><span>Методика</span><select value={selectedMethodId} onChange={(event) => setSelectedMethodId(event.target.value)}>{methods.map((method) => <option key={method.mi_id} value={method.mi_id}>{method.registration_number}</option>)}</select></label><label className="field"><span>Шаблон расчёта</span><select value={selectedTemplate} onChange={(event) => setSelectedTemplate(event.target.value as CalculationTemplateCode)}>{templates.map((template) => <option key={template.code} value={template.code}>{template.code} · {template.title}</option>)}</select></label>{selectedTemplateInfo && <div className={`template-hint ${selectedTemplateInfo.status}`}>{selectedTemplateInfo.status === 'ready' ? 'Готов к применению' : 'Черновой шаблон'} · {selectedTemplateInfo.title}</div>}</FormGroup>
+            <FormGroup title="МИ и расчётный шаблон"><MethodPicker methods={methods} selectedId={selectedMethodId} onSelect={setSelectedMethodId} label="Методика" /><label className="field"><span>Шаблон расчёта</span><select value={selectedTemplate} onChange={(event) => setSelectedTemplate(event.target.value as CalculationTemplateCode)}>{templates.map((template) => <option key={template.code} value={template.code}>{template.code} · {template.title}</option>)}</select></label>{selectedTemplateInfo && <div className={`template-hint ${selectedTemplateInfo.status}`}>{selectedTemplateInfo.status === 'ready' ? 'Готов к применению' : 'Черновой шаблон'} · {selectedTemplateInfo.title}</div>}</FormGroup>
             <FormGroup title="Средства измерений из базы">
               <InstrumentSelect title="Расходомер" type="flowmeter" instruments={instrumentsByType.flowmeter} selectedId={selectedInstrumentIds.flowmeter} onChange={(id) => setSelectedInstrumentIds({ ...selectedInstrumentIds, flowmeter: id })} />
               <InstrumentSelect title="Датчик давления" type="pressure" instruments={instrumentsByType.pressure} selectedId={selectedInstrumentIds.pressure} onChange={(id) => setSelectedInstrumentIds({ ...selectedInstrumentIds, pressure: id })} />
@@ -552,6 +553,15 @@ function InstrumentDatabaseScreen({ instruments, selectedInstrumentIds, onApply 
 function MethodLibraryScreen({ methods, selectedMethod, onSelectMethod, onRefreshMethods }: { methods: MeasurementMethod[]; selectedMethod: MeasurementMethod | null; onSelectMethod: (miId: string) => void; onRefreshMethods: () => void }) {
   return (
     <section className="workspace-screen method-library-screen">
+      <div className="screen-intro">
+        <strong>Библиотека методик измерений</strong>
+        <p>Справочник аттестованных МИ: здесь смотрят и правят карточку методики — область применения, показатели точности, скан документа и контрольные примеры. Подбор МИ под режим узла выполняется на экране «Подбор МИ».</p>
+        <ol>
+          <li>Найдите методику в списке — поиск идёт по номеру, наименованию и типу расходомера.</li>
+          <li>Проверьте карточку: диапазоны, условия диапазона расхода, погрешности, PDF-скан.</li>
+          <li>Правки сохраняются новой версией с комментарием — прежняя уходит в архив.</li>
+        </ol>
+      </div>
       <div className="screen-summary">
         <SummaryMetric title="Методик" value={String(methods.length)} />
         <SummaryMetric title="Выбрана" value={selectedMethod?.registration_number ?? '—'} status="info" />

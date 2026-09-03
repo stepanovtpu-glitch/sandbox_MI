@@ -1181,9 +1181,13 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 /* Раздел «Расчёт погрешности»: узкая колонка ранее выполненных запросов
    на комплектацию — режим загружается в расчёт одним нажатием. */
 .three-column-layout.with-history {
-  grid-template-columns: 300px minmax(420px, 1fr) 280px 184px;
+  grid-template-columns: 288px minmax(380px, 1fr) 264px 176px;
 }
-@media (max-width: 1600px) {
+@media (min-width: 1700px) {
+  .three-column-layout.with-history { grid-template-columns: 310px minmax(460px, 1fr) 290px 196px; }
+}
+/* На узких экранах колонка не помещается — уходит компактной полосой вниз */
+@media (max-width: 1340px) {
   .three-column-layout.with-history { grid-template-columns: 300px minmax(400px, 1fr) 268px; }
   .three-column-layout.with-history > .selection-history {
     grid-column: 1 / -1;
@@ -1194,3 +1198,126 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
     grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
   }
 }
+
+/* ============ Выбор МИ окном ============
+   Выпадающий список показывал только регистрационный номер: по нему нельзя
+   понять применимость методики. Триггер показывает номер, наименование
+   и сводку, а выбор идёт в окне с поиском. */
+.method-picker { display: grid; gap: 6px; min-width: 0; }
+.method-picker-label { color: var(--muted); font-size: 11px; }
+.method-picker-trigger {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  height: auto;
+  min-height: 42px;
+  padding: 8px 30px 8px 10px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+}
+.method-picker-trigger:hover { border-color: var(--border-strong); }
+.method-picker-trigger svg { position: absolute; right: 9px; top: 50%; margin-top: -7px; color: var(--muted); }
+.method-picker-number { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+.method-picker-trigger small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.method-picker-trigger .method-picker-summary { color: var(--accent); font-family: var(--font-mono); font-size: 10.5px; -webkit-line-clamp: 2; }
+
+.method-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 10, 14, 0.6);
+  backdrop-filter: blur(3px);
+}
+.method-picker-dialog {
+  width: min(880px, 100%);
+  max-height: min(720px, 88vh);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.method-picker-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.method-picker-head span { color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.method-picker-head strong { display: block; margin-top: 3px; font-size: 15px; letter-spacing: -0.02em; }
+.method-picker-head button { width: 32px; padding: 0; display: grid; place-items: center; }
+.method-picker-list { display: grid; gap: 6px; overflow-y: auto; align-content: start; }
+.method-picker-row {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  height: auto;
+  padding: 9px 11px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(var(--well-rgb), 0.45);
+}
+.method-picker-row:hover { border-color: var(--border-strong); background: var(--accent-soft); }
+.method-picker-row.active { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.1); }
+.method-picker-row b { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.method-picker-row span { font-size: 12px; line-height: 1.35; }
+.method-picker-row small { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
+
+/* ============ Плотность форм карточки МИ ============
+   Числовые поля занимали половину экрана каждое. Ячейка держит ширину
+   по содержимому: числу хватает ~150 px, текстовому полю даём две ячейки. */
+.library-form-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 10px;
+}
+.library-form-grid .field { margin-bottom: 0; }
+.library-form-grid .field.wide { grid-column: span 2; }
+.library-card > .field input,
+.intake-step > .field input { max-width: 520px; }
+
+.intake-card-hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  margin: -4px 0 8px;
+}
+.version-pick small { color: var(--muted); font-size: 10.5px; line-height: 1.35; }
+.version-pick-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.version-pick-top b { font-size: 12px; }
+.version-pick-comment { color: var(--text); opacity: 0.75; }
+.version-state {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(var(--raise-rgb), 0.06);
+}
+.version-state.active { color: var(--ok); background: rgba(var(--ok-rgb), 0.12); }
+.version-state.archived { color: var(--muted); }
+.version-state.draft { color: var(--warn); background: rgba(var(--warn-rgb), 0.12); }
+
+/* Пояснение к экрану: что тут делать */
+.screen-intro {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+  background: rgba(var(--well-rgb), 0.5);
+}
+.screen-intro strong { display: block; font-size: 13px; margin-bottom: 4px; }
+.screen-intro p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.screen-intro ol { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; line-height: 1.6; }

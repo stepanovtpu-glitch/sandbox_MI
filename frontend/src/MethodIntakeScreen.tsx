@@ -75,6 +75,13 @@ const defaultErrors: ErrorContributions = {
 };
 
 import { MethodReviewQueue } from './MethodReviewQueue';
+import { MethodPicker, methodSummary } from './MethodPicker';
+
+const VERSION_STATUS_TITLES: Record<string, string> = {
+  active: 'действующая',
+  draft: 'черновик',
+  archived: 'архив',
+};
 
 export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, onRefreshMethods }: Props) {
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
@@ -320,6 +327,15 @@ export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, on
 
   return (
     <section className="workspace-screen method-intake-screen">
+      <div className="screen-intro">
+        <strong>Добавление и проверка методики измерений</strong>
+        <p>Экран ведёт МИ от скана до применения в расчётах. Работа идёт по шагам ниже: карточка → документ и распознавание → проверка расчёта. Каждое сохранение создаёт версию карточки, действующая версия участвует в подборе.</p>
+        <ol>
+          <li>«Новая МИ» — завести методику с нуля; «Существующая» — открыть уже загруженную для правки или дозаполнения.</li>
+          <li>Заполните карточку и сохраните версию, затем приложите PDF и распознайте его.</li>
+          <li>Сверьте распознанные значения с карточкой, подтвердите проверку и прогоните контрольный пример.</li>
+        </ol>
+      </div>
       <MethodReviewQueue
         refreshToken={versions.length}
         onSelectMethod={(miId) => {
@@ -338,12 +354,19 @@ export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, on
           <button className={mode === 'existing' ? 'active' : ''} onClick={() => setMode('existing')}>Существующая</button>
           <button className={mode === 'new' ? 'active' : ''} onClick={startNewMethod}>Новая МИ</button>
         </div>
-        <label className="field compact">
-          <span>МИ</span>
-          <select value={draft.mi_id} onChange={(event) => { const method = methods.find((item) => item.mi_id === event.target.value); if (method) { setMode('existing'); onSelectMethod(method.mi_id); setDraft({ ...method }); loadVersions(method.mi_id); } }}>
-            {methods.map((method) => <option key={method.mi_id} value={method.mi_id}>{method.registration_number} · {method.title}</option>)}
-          </select>
-        </label>
+        <MethodPicker
+          methods={methods}
+          selectedId={draft.mi_id}
+          label="МИ"
+          onSelect={(miId) => {
+            const method = methods.find((item) => item.mi_id === miId);
+            if (!method) return;
+            setMode('existing');
+            onSelectMethod(method.mi_id);
+            setDraft({ ...method });
+            loadVersions(method.mi_id);
+          }}
+        />
         <label className="field compact">
           <span>Шаблон</span>
           <select value={template} onChange={(event) => setTemplate(event.target.value as CalculationTemplateCode)}>
@@ -356,13 +379,13 @@ export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, on
         <section className="intake-main">
           <IntakeStep title="1. Карточка МИ" status={draft.mi_id && draft.q_max > 0 ? 'ok' : 'warn'}>
             <div className="library-form-grid">
-              <TextField label="ID методики" value={draft.mi_id} onChange={(value) => setDraftField(setDraft, 'mi_id', value)} />
-              <TextField label="Регистрационный номер" value={draft.registration_number} onChange={(value) => setDraftField(setDraft, 'registration_number', value)} />
-              <TextField label="Наименование" value={draft.title} onChange={(value) => setDraftField(setDraft, 'title', value)} />
+              <TextField label="ID методики" value={draft.mi_id} onChange={(value) => setDraftField(setDraft, 'mi_id', value)} wide />
+              <TextField label="Регистрационный номер" value={draft.registration_number} onChange={(value) => setDraftField(setDraft, 'registration_number', value)} wide />
+              <TextField label="Наименование" value={draft.title} onChange={(value) => setDraftField(setDraft, 'title', value)} wide />
               <TextField label="Тип расходомера" value={draft.flowmeter_type ?? ''} onChange={(value) => setDraftField(setDraft, 'flowmeter_type', value)} />
               <NumberField label="Q min" value={draft.q_min} onChange={(value) => setDraftField(setDraft, 'q_min', value)} />
               <NumberField label="Q max" value={draft.q_max} onChange={(value) => setDraftField(setDraft, 'q_max', value)} />
-              <label className="field">
+              <label className="field wide">
                 <span>Условия диапазона Q</span>
                 <select
                   value={draft.q_basis ?? ''}
@@ -449,10 +472,20 @@ export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, on
             {checks.map((check) => <div className={`readiness-row ${check.ok ? 'ok' : 'warn'}`} key={check.label}><span>{check.ok ? '✓' : '!'}</span><b>{check.label}</b></div>)}
           </section>
           <section className="intake-card">
-            <div className="library-card-title">Версии</div>
+            <div className="library-card-title">Версии карточки МИ</div>
+            <div className="intake-card-hint">
+              Каждое сохранение создаёт версию карточки. Действующая применяется в подборе
+              и расчётах, предыдущие остаются в архиве — их можно открыть и сравнить.
+            </div>
             {versions.length === 0 ? <div className="document-empty">Версий пока нет</div> : versions.map((version) => (
               <button className={`version-pick ${selectedVersion?.version_id === version.version_id ? 'active' : ''}`} key={version.version_id} onClick={() => { setActiveVersion(version); setDraft(version.method); }}>
-                <b>v{version.version_number}</b><span>{version.status} · {version.calculation_template}</span>
+                <div className="version-pick-top">
+                  <b>Версия {version.version_number}</b>
+                  <span className={`version-state ${version.status}`}>{VERSION_STATUS_TITLES[version.status] ?? version.status}</span>
+                </div>
+                <small>{new Date(version.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</small>
+                <small>{methodSummary(version.method)}</small>
+                {version.change_comment && <small className="version-pick-comment">{version.change_comment}</small>}
               </button>
             ))}
           </section>
@@ -485,8 +518,8 @@ function setLineField<K extends keyof LineParameters>(setter: React.Dispatch<Rea
   setter((current) => ({ ...current, [field]: value }));
 }
 
-function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="field"><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+function TextField({ label, value, onChange, wide }: { label: string; value: string; onChange: (value: string) => void; wide?: boolean }) {
+  return <label className={`field${wide ? ' wide' : ''}`}><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {

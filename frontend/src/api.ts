@@ -6,6 +6,8 @@ export type MeasurementMethod = {
   registration_number: string;
   title: string;
   flowmeter_type?: string | null;
+  medium?: 'png' | 'pg' | 'sog' | null;
+  compressibility_method?: string | null;
   q_min: number;
   q_max: number;
   // В каких условиях указан диапазон расхода в самой МИ

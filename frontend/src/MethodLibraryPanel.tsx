@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { TestCasePanel } from './TestCasePanel';
+import { methodSummary } from './MethodPicker';
 import {
   createMethodVersion,
   getCalculationTemplates,
@@ -210,9 +211,13 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
           </label>
           <div className="method-selector-grid">
             {visibleMethods.map((method) => (
-              <button key={method.mi_id} className={`method-pill ${selectedMethod.mi_id === method.mi_id ? 'active' : ''}`} onClick={() => onSelectMethod(method.mi_id)}>
-                <span>{method.registration_number}</span>
-                <small className={`quality-dot ${methodQuality(method).status}`}>{methodQuality(method).label}</small>
+              <button key={method.mi_id} className={`method-picker-row ${selectedMethod.mi_id === method.mi_id ? 'active' : ''}`} onClick={() => onSelectMethod(method.mi_id)}>
+                <div className="version-pick-top">
+                  <b>{method.registration_number}</b>
+                  <small className={`quality-dot ${methodQuality(method).status}`}>{methodQuality(method).label}</small>
+                </div>
+                <span>{method.title}</span>
+                <small>{methodSummary(method)}</small>
               </button>
             ))}
             {visibleMethods.length === 0 && <div className="empty-row">Ничего не найдено</div>}
@@ -227,11 +232,13 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
               <small className={`quality-badge ${quality.status}`}>{quality.label}</small>
             </div>
             <div className={`quality-note ${quality.status}`}>{quality.note}</div>
-            <TextField label="ID методики" value={draft.mi_id} onChange={(value) => setDraftField('mi_id', value)} />
-            <TextField label="Регистрационный номер" value={draft.registration_number} onChange={(value) => setDraftField('registration_number', value)} />
-            <TextField label="Наименование" value={draft.title} onChange={(value) => setDraftField('title', value)} />
-            <TextField label="Тип расходомера" value={draft.flowmeter_type ?? ''} onChange={(value) => setDraftField('flowmeter_type', value)} />
-            <TextField label="Статус аттестации / проверки" value={draft.attestation_body ?? ''} onChange={(value) => setDraftField('attestation_body', value)} />
+            <div className="library-form-grid">
+              <TextField label="ID методики" value={draft.mi_id} onChange={(value) => setDraftField('mi_id', value)} wide />
+              <TextField label="Регистрационный номер" value={draft.registration_number} onChange={(value) => setDraftField('registration_number', value)} wide />
+              <TextField label="Наименование" value={draft.title} onChange={(value) => setDraftField('title', value)} wide />
+              <TextField label="Тип расходомера" value={draft.flowmeter_type ?? ''} onChange={(value) => setDraftField('flowmeter_type', value)} />
+              <TextField label="Статус аттестации / проверки" value={draft.attestation_body ?? ''} onChange={(value) => setDraftField('attestation_body', value)} wide />
+            </div>
           </div>
 
           <div className="library-card">
@@ -239,6 +246,14 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
             <div className="library-form-grid">
               <NumberField label="Q min" value={draft.q_min} onChange={(value) => setDraftField('q_min', value)} />
               <NumberField label="Q max" value={draft.q_max} onChange={(value) => setDraftField('q_max', value)} />
+              <label className="field wide">
+                <span>Условия диапазона Q</span>
+                <select value={draft.q_basis ?? ''} onChange={(event) => setDraftField('q_basis', (event.target.value || null) as never)}>
+                  <option value="">не указано в МИ</option>
+                  <option value="working">при рабочих условиях</option>
+                  <option value="standard">приведённый к стандартным</option>
+                </select>
+              </label>
               <NumberField label="P min, МПа" value={draft.p_min_mpa} onChange={(value) => setDraftField('p_min_mpa', value)} />
               <NumberField label="P max, МПа" value={draft.p_max_mpa} onChange={(value) => setDraftField('p_max_mpa', value)} />
               <NumberField label="T min, °C" value={draft.t_min_c} onChange={(value) => setDraftField('t_min_c', value)} />
@@ -465,8 +480,8 @@ function FragmentRow({ label, ocrValue, draftValue }: { label: unknown; ocrValue
   );
 }
 
-function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="field"><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+function TextField({ label, value, onChange, wide }: { label: string; value: string; onChange: (value: string) => void; wide?: boolean }) {
+  return <label className={`field${wide ? ' wide' : ''}`}><span>{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
