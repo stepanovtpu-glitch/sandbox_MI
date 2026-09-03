@@ -16,7 +16,7 @@ export function HistoryScreen({ isOpen, onClose, onLoadRecord }: Props) {
   useEffect(() => {
     if (!isOpen) return;
     getCalculationHistory(200)
-      .then((payload) => { setRecords(payload); if (!selectedRecord && payload.length > 0) setSelectedRecord(payload[0]); })
+      .then((payload) => { setError(null); setRecords(payload); if (!selectedRecord && payload.length > 0) setSelectedRecord(payload[0]); })
       .catch((err: Error) => setError(err.message));
   }, [isOpen]);
 
@@ -77,7 +77,7 @@ export function HistoryScreen({ isOpen, onClose, onLoadRecord }: Props) {
         {verification && <div className={`history-verification ${verification.status}`}>SHA-256: {verification.message}<br />Сохранённый: {selectedRecord?.document_sha256 || 'не указан'}<br />Текущий: {verification.actual_sha256 || 'не определён'}</div>}
         {error && <div className="api-error">{error}</div>}
         <div className="history-screen-layout">
-          <div className="history-table-card"><div className="history-table-head"><span>Дата</span><span>Объект</span><span>МИ</span><span>U/δΣ</span><span>Статус</span></div><div className="history-table-body">{filtered.map((record) => (<button className={`history-table-row ${record.status} ${selectedRecord?.record_id === record.record_id ? 'active' : ''}`} key={record.record_id} onClick={() => openRecord(record.record_id)}><span>{new Date(record.created_at).toLocaleString('ru-RU')}</span><strong>{record.project_name || 'Без названия'}</strong><span>{record.mi_id || '—'}</span><span>{record.delta_total.toFixed(3)}%</span><b>{record.status}</b></button>))}{filtered.length === 0 && <div className="document-empty">Расчёты не найдены</div>}</div></div>
+          <div className="history-table-card"><div className="history-table-head"><span>Дата</span><span>Объект</span><span>МИ</span><span>U/δΣ</span><span>Статус</span></div><div className="history-table-body">{filtered.map((record) => (<button className={`history-table-row ${record.status} ${selectedRecord?.record_id === record.record_id ? 'active' : ''}`} key={record.record_id} onClick={() => openRecord(record.record_id)}><span>{new Date(record.created_at).toLocaleString('ru-RU')}</span><strong>{record.project_name || 'Без названия'}</strong><span>{record.mi_id || '—'}</span><span>{record.delta_total.toFixed(3)}%</span><b>{record.status}</b></button>))}{filtered.length === 0 && <div className="document-empty">{records.length === 0 ? 'Сохранённых расчётов пока нет: выполните расчёт на экране «Расчёт погрешности» и нажмите «Сохранить».' : 'По запросу ничего не найдено'}</div>}</div></div>
           <RecordDetails record={selectedRecord} onLoadRecord={loadRecord} onExportRecord={exportRecord} onVerifyRecord={verifyRecordDocument} verification={verification} />
         </div>
       </section>

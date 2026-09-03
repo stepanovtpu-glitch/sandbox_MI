@@ -1321,3 +1321,39 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .screen-intro strong { display: block; font-size: 13px; margin-bottom: 4px; }
 .screen-intro p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .screen-intro ol { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+/* ============ Очередь приёмки МИ: строка состояния, список по требованию ============
+   Панель со скроллом внутри фиксированной высоты экрана сжималась до одной
+   строки и превращалась в узкое окошко. Теперь высота не ограничивается,
+   а список раскрывается только по запросу и раскладывается сеткой. */
+.review-queue { overflow: visible; min-height: 0; padding: 12px 16px; }
+.review-queue-head {
+  display: grid;
+  grid-template-columns: 1fr 220px auto;
+  gap: 14px;
+  align-items: center;
+}
+.review-queue-title span { display: block; color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.review-queue-title strong { display: block; margin-top: 3px; font-size: 13px; font-weight: 600; }
+.review-queue-title em { font-style: normal; color: var(--warn); }
+.review-queue-head .review-progress-bar { margin: 0; }
+.review-queue-head .ghost-button { width: 32px; padding: 0; display: grid; place-items: center; }
+.review-details { margin-top: 10px; }
+.review-details summary { cursor: pointer; color: var(--muted); font-size: 12px; user-select: none; }
+.review-details summary:hover { color: var(--text); }
+.review-details .review-list {
+  margin-top: 10px;
+  max-height: none;
+  overflow: visible;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.method-intake-screen { align-content: start; grid-auto-rows: max-content; }
+
+/* Плитка отчёта: контекст расчёта внутри, а не отдельной строкой сверху */
+.report-tile-context { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; margin: 4px 0 8px; }
+.report-tile-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 10px; }
+.report-tile-facts div { padding: 8px 10px; border-radius: 10px; background: rgba(var(--raise-rgb), 0.04); border: 1px solid var(--border); }
+.report-tile-facts span { display: block; color: var(--muted); font-size: 10.5px; margin-bottom: 3px; }
+.report-tile-facts b { font-family: var(--font-mono); font-size: 13px; }
+.report-tile-facts b.ok { color: var(--ok); }
+.report-tile-facts b.warn { color: var(--warn); }

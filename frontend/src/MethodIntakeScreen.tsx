@@ -4,7 +4,7 @@ import {
   calculate,
   createMethodVersion,
   getCalculationTemplates,
-  getMethodDocumentUrl,
+  openAuthenticatedFile,
   getMethodVersions,
   recognizeMethodDocument,
   runMethodTestCases,
@@ -426,7 +426,7 @@ export function MethodIntakeScreen({ methods, selectedMethod, onSelectMethod, on
               <button className="ghost-button" onClick={verifyPdf} disabled={!selectedVersion?.document?.file_name || busy === 'verify'}>Проверить SHA</button>
               <button className="primary-button" onClick={runOcr} disabled={!selectedVersion?.document?.file_name || busy === 'ocr'}>{busy === 'ocr' ? 'OCR...' : 'Распознать OCR'}</button>
             </div>
-            {selectedVersion?.document?.file_name && <button className="ghost-button full-width" onClick={() => window.open(getMethodDocumentUrl(draft.mi_id, selectedVersion.version_id), '_blank', 'noopener,noreferrer')}>Открыть PDF</button>}
+            {selectedVersion?.document?.file_name && <button className="ghost-button full-width" onClick={() => openAuthenticatedFile(`/api/methods/${draft.mi_id}/versions/${selectedVersion.version_id}/document`).catch((err: Error) => setError(err.message))}>Открыть PDF</button>}
             {selectedVersion?.document?.ocr && (
               <div className="ocr-compare-grid">
                 <span>Поле</span><span>OCR</span><span>Карточка</span>

@@ -289,6 +289,53 @@ async function downloadRequest(path: string, body: unknown, fallbackName: string
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Файлы с сервера при обязательном входе.
+ *
+ * window.open(url) не передаёт токен, и на стенде такие ссылки отвечали 401 —
+ * кнопки «PDF отчёт» и «Открыть PDF» выглядели неработающими. Файл запрашивается
+ * с заголовком авторизации, а затем отдаётся браузеру как объект.
+ */
+async function fetchAuthenticatedBlob(path: string): Promise<{ blob: Blob; fileName: string | null }> {
+  const response = await fetch(`${API_BASE}${path}`, { headers: { ...authHeaders() } });
+  if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const match = disposition.match(/filename\*?="?(?:UTF-8'')?([^";]+)"?/i);
+  return { blob: await response.blob(), fileName: match?.[1] ? decodeURIComponent(match[1]) : null };
+}
+
+export async function downloadAuthenticatedFile(path: string, fallbackName: string) {
+  const { blob, fileName } = await fetchAuthenticatedBlob(path);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName ?? fallbackName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Открыть файл в новой вкладке. Окно открывается до запроса — иначе браузер блокирует его как всплывающее. */
+export async function openAuthenticatedFile(path: string, onLoaded?: (target: Window) => void) {
+  const target = window.open('', '_blank');
+  if (!target) throw new Error('Браузер заблокировал открытие новой вкладки');
+  target.document.title = 'Загрузка документа…';
+  try {
+    const { blob } = await fetchAuthenticatedBlob(path);
+    const url = URL.createObjectURL(blob);
+    target.location.href = url;
+    if (onLoaded) target.addEventListener('load', () => onLoaded(target));
+  } catch (error) {
+    target.close();
+    throw error;
+  }
+}
+
+export function downloadReadinessReport(format: 'pdf' | 'docx') {
+  return downloadAuthenticatedFile(`/api/system/readiness/report/${format}`, `gasmeter_readiness.${format}`);
+}
+
 export function getSystemInfo() { return request<SystemInfo>('/api/system/info'); }
 export function getPilotReadiness() { return request<PilotReadiness>('/api/system/readiness'); }
 export function getCalculationTemplates() { return request<CalculationTemplateInfo[]>('/api/calculation-templates'); }

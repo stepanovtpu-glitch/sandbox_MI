@@ -5,7 +5,7 @@ import { methodSummary } from './MethodPicker';
 import {
   createMethodVersion,
   getCalculationTemplates,
-  getMethodDocumentUrl,
+  openAuthenticatedFile,
   getMethodVersions,
   recognizeMethodDocument,
   uploadMethodDocument,
@@ -129,13 +129,14 @@ export function MethodLibraryPanel({ methods, selectedMethod, onSelectMethod, on
     }
   };
 
+  const documentPath = (versionId: string) => `/api/methods/${selectedMethod.mi_id}/versions/${versionId}/document`;
+
   const openPdf = (versionId: string) => {
-    window.open(getMethodDocumentUrl(selectedMethod.mi_id, versionId), '_blank', 'noopener,noreferrer');
+    openAuthenticatedFile(documentPath(versionId)).catch((err: Error) => setError(err.message));
   };
 
   const printPdf = (versionId: string) => {
-    const printWindow = window.open(getMethodDocumentUrl(selectedMethod.mi_id, versionId), '_blank', 'noopener,noreferrer');
-    if (printWindow) printWindow.addEventListener('load', () => printWindow.print());
+    openAuthenticatedFile(documentPath(versionId), (target) => target.print()).catch((err: Error) => setError(err.message));
   };
 
   const handleVerifyDocument = async () => {

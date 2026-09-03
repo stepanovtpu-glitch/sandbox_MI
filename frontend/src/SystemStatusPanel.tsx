@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AuditPanel } from './AuditPanel';
-import { getPilotReadiness, getSystemInfo, type PilotReadiness, type SystemInfo } from './api';
+import { downloadReadinessReport as downloadReadinessReportFile, getPilotReadiness, getSystemInfo, type PilotReadiness, type SystemInfo } from './api';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
 
@@ -21,7 +21,7 @@ export function SystemStatusPanel({ defaultExpanded = false }: { defaultExpanded
   }, []);
 
   const downloadReadinessReport = (format: 'pdf' | 'docx') => {
-    window.open(`${API_BASE}/api/system/readiness/report/${format}`, '_blank', 'noopener,noreferrer');
+    downloadReadinessReportFile(format).catch((err: Error) => setError(err.message));
   };
 
   const schemaOk = info?.schema_version === info?.expected_schema_version;

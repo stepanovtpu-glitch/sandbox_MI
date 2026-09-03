@@ -14,7 +14,7 @@ import { MethodIntakeScreen } from './MethodIntakeScreen';
 import { SystemStatusPanel } from './SystemStatusPanel';
 import { SelectionHistory } from './SelectionHistory';
 import { MethodPicker } from './MethodPicker';
-import { getSelectionHistory, type SelectionHistoryItem } from './api';
+import { getSelectionHistory, downloadReadinessReport, type SelectionHistoryItem } from './api';
 import { getCurrentUser, logout, setAuthToken, type SessionUser, calculate, downloadReport, getCalculationTemplates, getInstrumentRecommendations, getInstruments, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationRecord, type CalculationResult, type CalculationTemplateCode, type CalculationTemplateInfo, type ErrorContributions, type Instrument, type InstrumentReplacementRecommendation, type InstrumentStatus, type InstrumentType, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
 const initialLine: LineParameters = { pipe_dn_mm: 100, flowmeter_dn_mm: 100, straight_before_dn: 10, straight_after_dn: 5, q_min: 40, q_max: 1600, q_unit: 'm3/h', p_min_mpa: 0.12, p_max_mpa: 2.5, t_min_c: -50, t_max_c: 50 };
@@ -435,7 +435,7 @@ function App() {
             title="Запросы на комплектацию"
             emptyText="Здесь появятся запросы на подбор МИ и состава УУГ — режим можно загрузить в расчёт одним нажатием."
           />
-        </section> : activeView === 'technologist' ? <UugSelectionScreen onApplyMethod={(miId) => { setSelectedMethodId(miId); setActiveView('constructor'); setReportStatus(`МИ применена из подбора УУГ: ${miId}`); }} /> :activeView === 'instruments' ? <InstrumentDatabaseScreen instruments={instruments} selectedInstrumentIds={selectedInstrumentIds} onApply={(instrument) => { applyInstrument(instrument); setActiveView('constructor'); }} /> : activeView === 'methodIntake' ? <MethodIntakeScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'methods' ? <MethodLibraryScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'projects' ? <ProjectsScreen session={session} /> : activeView === 'users' ? <UsersScreen currentLogin={session?.actor} /> : activeView === 'reports' ? <ReportsScreen selectedMethod={selectedMethod} calculation={calculation} reportStatus={reportStatus} onSave={handleSaveCalculation} onDownloadReport={handleDownloadReport} onOpenHistory={() => setIsHistoryOpen(true)} apiBase={apiBase} /> : <SettingsScreen apiBase={apiBase} methodsCount={methods.length} instrumentsCount={instruments.length} />}
+        </section> : activeView === 'technologist' ? <UugSelectionScreen onApplyMethod={(miId) => { setSelectedMethodId(miId); setActiveView('constructor'); setReportStatus(`МИ применена из подбора УУГ: ${miId}`); }} /> :activeView === 'instruments' ? <InstrumentDatabaseScreen instruments={instruments} selectedInstrumentIds={selectedInstrumentIds} onApply={(instrument) => { applyInstrument(instrument); setActiveView('constructor'); }} /> : activeView === 'methodIntake' ? <MethodIntakeScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'methods' ? <MethodLibraryScreen methods={methods} selectedMethod={selectedMethod} onSelectMethod={setSelectedMethodId} onRefreshMethods={refreshMethods} /> : activeView === 'projects' ? <ProjectsScreen session={session} /> : activeView === 'users' ? <UsersScreen currentLogin={session?.actor} /> : activeView === 'reports' ? <ReportsScreen selectedMethod={selectedMethod} calculation={calculation} reportStatus={reportStatus} onSave={handleSaveCalculation} onDownloadReport={handleDownloadReport} onOpenHistory={() => setIsHistoryOpen(true)} /> : <SettingsScreen apiBase={apiBase} methodsCount={methods.length} instrumentsCount={instruments.length} />}
       </main>
       <HistoryScreen isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} onLoadRecord={handleLoadHistoryRecord} />
     </div>
@@ -571,20 +571,36 @@ function MethodLibraryScreen({ methods, selectedMethod, onSelectMethod, onRefres
   );
 }
 
-function ReportsScreen({ selectedMethod, calculation, reportStatus, onSave, onDownloadReport, onOpenHistory, apiBase }: { selectedMethod: MeasurementMethod | null; calculation: CalculationResult | null; reportStatus: string; onSave: () => void; onDownloadReport: (format: 'pdf' | 'docx') => void; onOpenHistory: () => void; apiBase: string }) {
-  const readinessReport = (format: 'pdf' | 'docx') => window.open(`${apiBase}/api/system/readiness/report/${format}`, '_blank', 'noopener,noreferrer');
+function ReportsScreen({ selectedMethod, calculation, reportStatus, onSave, onDownloadReport, onOpenHistory }: { selectedMethod: MeasurementMethod | null; calculation: CalculationResult | null; reportStatus: string; onSave: () => void; onDownloadReport: (format: 'pdf' | 'docx') => void; onOpenHistory: () => void }) {
+  const [systemReportStatus, setSystemReportStatus] = useState('');
+  // Отчёт запрашивается с токеном: прямая ссылка в новой вкладке отвечала 401
+  const readinessReport = async (format: 'pdf' | 'docx') => {
+    setSystemReportStatus(format === 'pdf' ? 'Формирование PDF…' : 'Формирование DOCX…');
+    try {
+      await downloadReadinessReport(format);
+      setSystemReportStatus(`Отчёт ${format.toUpperCase()} сохранён`);
+    } catch (error) {
+      setSystemReportStatus(error instanceof Error ? error.message : 'Не удалось сформировать отчёт');
+    }
+  };
+  const statusTitle = calculation?.status === 'pass' ? 'соответствует' : calculation?.status === 'fail' ? 'не соответствует' : calculation ? 'требует проверки' : 'расчёт не выполнен';
   return (
     <section className="workspace-screen reports-screen">
-      <div className="screen-summary">
-        <SummaryMetric title="Текущая МИ" value={selectedMethod?.registration_number ?? '—'} status="info" />
-        <SummaryMetric title="Статус расчёта" value={calculation?.status ?? '—'} status={calculation?.status === 'pass' ? 'ok' : 'warn'} />
-        <SummaryMetric title="U / δΣ" value={calculation ? `${calculation.delta_total.toFixed(3)}%` : '—'} status={calculation?.status === 'pass' ? 'ok' : 'warn'} />
+      <div className="screen-intro">
+        <strong>Отчёты и протоколы</strong>
+        <p>Здесь формируются документы по уже выполненной работе: протокол расчёта погрешности для текущей МИ, журнал сохранённых расчётов и служебный отчёт о состоянии системы. Задание на комплектацию узла формируется на экране «Проекты УУГ» после утверждения проекта.</p>
       </div>
       <div className="report-grid">
         <section className="report-tile">
-          <div className="rec-label">Протокол текущего расчёта</div>
-          <strong>{selectedMethod?.title ?? 'Методика не выбрана'}</strong>
-          <p>Формирует протокол расчёта с выбранной МИ, версией документа, SHA-256, PTZ-параметрами и вкладом составляющих.</p>
+          <div className="rec-label">Протокол расчёта погрешности</div>
+          <strong>{selectedMethod ? selectedMethod.registration_number : 'Методика не выбрана'}</strong>
+          {selectedMethod && <small className="report-tile-context">{selectedMethod.title}</small>}
+          <div className="report-tile-facts">
+            <div><span>Результат</span><b className={calculation?.status === 'pass' ? 'ok' : calculation ? 'warn' : ''}>{statusTitle}</b></div>
+            <div><span>U / δΣ</span><b>{calculation ? `${calculation.delta_total.toFixed(3)} %` : '—'}</b></div>
+            <div><span>Предел МИ</span><b>{selectedMethod ? `${selectedMethod.delta_total_max} %` : '—'}</b></div>
+          </div>
+          <p>Протокол по текущему расчёту с экрана «Расчёт погрешности»: МИ и её версия, SHA-256 документа, PTZ-параметры и вклад составляющих. «Сохранить» кладёт расчёт в журнал.</p>
           <div className="library-actions three">
             <button className="ghost-button" onClick={onSave} disabled={!selectedMethod}>Сохранить</button>
             <button className="ghost-button" onClick={() => onDownloadReport('docx')} disabled={!selectedMethod}>DOCX</button>
@@ -593,19 +609,20 @@ function ReportsScreen({ selectedMethod, calculation, reportStatus, onSave, onDo
           {reportStatus && <small>{reportStatus}</small>}
         </section>
         <section className="report-tile">
-          <div className="rec-label">Готовность к альфа-тесту</div>
-          <strong>Системный отчёт готовности</strong>
-          <p>Проверяет базу МИ, документы, контрольные примеры, историю расчётов, аудит, OCR и инвентарную базу СИ.</p>
-          <div className="library-actions two">
-            <button className="ghost-button" onClick={() => readinessReport('docx')}>DOCX отчёт</button>
-            <button className="primary-button" onClick={() => readinessReport('pdf')}>PDF отчёт</button>
-          </div>
+          <div className="rec-label">Журнал расчётов</div>
+          <strong>Сохранённые расчёты</strong>
+          <p>Все сохранённые расчёты с привязкой к версии МИ и SHA-256 документа. Любой можно открыть, загрузить обратно в форму и выгрузить протокол заново.</p>
+          <button className="primary-button full-width" onClick={onOpenHistory}>Открыть журнал</button>
         </section>
         <section className="report-tile">
-          <div className="rec-label">Журнал расчётов</div>
-          <strong>История и воспроизводимость</strong>
-          <p>Открывает сохранённые расчёты, привязанные версии МИ, SHA документов, результат и заключение.</p>
-          <button className="ghost-button full-width" onClick={onOpenHistory}>Открыть журнал</button>
+          <div className="rec-label">Состояние системы</div>
+          <strong>Служебный отчёт</strong>
+          <p>Для администратора: проверка базы МИ, документов, контрольных примеров, аудита, OCR и базы СИ. К работе технолога не относится.</p>
+          <div className="library-actions two">
+            <button className="ghost-button" onClick={() => readinessReport('docx')}>DOCX</button>
+            <button className="ghost-button" onClick={() => readinessReport('pdf')}>PDF</button>
+          </div>
+          {systemReportStatus && <small>{systemReportStatus}</small>}
         </section>
       </div>
     </section>
