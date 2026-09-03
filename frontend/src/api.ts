@@ -298,3 +298,28 @@ export function getCalculationRecord(recordId: string) { return request<Calculat
 export function downloadReport(format: 'pdf' | 'docx', line: LineParameters, errors: ErrorContributions, method: MeasurementMethod | null, calculationTemplate: CalculationTemplateCode = 'DRG_SERIES', context: CalculationContext = {}, instruments: Instrument[] = []) { return downloadRequest(`/api/reports/${format}`, makeCalculationRequest(line, errors, method, calculationTemplate, context, instruments), `gasmeter_protocol.${format}`); }
 export function scoreMethods(line: LineParameters, calculation: CalculationResult | null) { return request<MethodCompatibility[]>('/api/methods/score', { method: 'POST', body: JSON.stringify({ line, calculation }) }); }
 export function getInstrumentRecommendations(line: LineParameters, method: MeasurementMethod, errors: ErrorContributions) { return request<InstrumentReplacementRecommendation[]>('/api/instruments/recommendations', { method: 'POST', body: JSON.stringify({ line, method, errors }) }); }
+
+export type ManagedUser = {
+  login: string;
+  full_name: string;
+  role: UserRole;
+  position?: string | null;
+  is_active: number;
+  created_at: string;
+};
+
+export async function getUsers(): Promise<ManagedUser[]> {
+  return request<ManagedUser[]>('/api/users');
+}
+
+export async function createUser(payload: { login: string; password: string; full_name: string; role: UserRole; position?: string | null }): Promise<ManagedUser> {
+  return request<ManagedUser>('/api/users', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function setUserPassword(login: string, password: string): Promise<void> {
+  await request(`/api/users/${encodeURIComponent(login)}/password`, { method: 'POST', body: JSON.stringify({ password }) });
+}
+
+export async function setUserActive(login: string, isActive: boolean): Promise<void> {
+  await request(`/api/users/${encodeURIComponent(login)}/active?is_active=${isActive}`, { method: 'POST' });
+}

@@ -109,3 +109,35 @@ def test_password_is_not_returned():
     users = client.get('/api/users', headers=_auth(_token('admin2'))).json()
     assert users
     assert all('password_hash' not in account for account in users)
+
+
+def test_admin_can_create_and_block_user():
+    """Администратор заводит сотрудников и закрывает доступ — без командной строки."""
+    _ensure_user('admin3', 'admin')
+    admin = _auth(_token('admin3'))
+
+    created = client.post(
+        '/api/users',
+        json={'login': 'newcomer', 'password': 'temporary-2026', 'full_name': 'Новичок Н. Н.', 'role': 'kip'},
+        headers=admin,
+    )
+    assert created.status_code in (200, 409)
+
+    assert client.post('/api/auth/login', json={'login': 'newcomer', 'password': 'temporary-2026'}).status_code == 200
+
+    client.post('/api/users/newcomer/active?is_active=false', headers=admin)
+    assert client.post('/api/auth/login', json={'login': 'newcomer', 'password': 'temporary-2026'}).status_code == 401
+
+    client.post('/api/users/newcomer/active?is_active=true', headers=admin)
+    client.post('/api/users/newcomer/password', json={'password': 'another-pass-2026'}, headers=admin)
+    assert client.post('/api/auth/login', json={'login': 'newcomer', 'password': 'another-pass-2026'}).status_code == 200
+
+
+def test_short_password_is_rejected():
+    _ensure_user('admin4', 'admin')
+    response = client.post(
+        '/api/users',
+        json={'login': 'weakpass', 'password': 'short', 'full_name': 'Слабый Пароль', 'role': 'viewer'},
+        headers=_auth(_token('admin4')),
+    )
+    assert response.status_code == 400

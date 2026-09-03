@@ -694,3 +694,56 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
     transition-duration: 0.001s !important;
   }
 }
+
+/* ============ Пользователи и роли ============ */
+.users-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.users-form { padding: 16px; }
+.users-list { padding: 16px; }
+.users-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  margin-top: 6px;
+}
+.users-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.user-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.user-row:last-child { border-bottom: 0; }
+.user-row.inactive { opacity: 0.55; }
+.user-main { display: grid; min-width: 0; }
+.user-main strong { font-size: 13.5px; }
+.user-main span { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.user-role { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.user-actions { display: flex; gap: 6px; }
+.user-actions button { width: 32px; padding: 0; display: grid; place-items: center; }
+
+@media (max-width: 1100px) {
+  .users-layout { grid-template-columns: 1fr; }
+  .user-row { grid-template-columns: 1fr auto; row-gap: 6px; }
+  .user-role, .user-actions { grid-column: span 2; }
+  .user-actions { justify-content: flex-start; }
+}
