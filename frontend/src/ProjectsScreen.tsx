@@ -111,7 +111,9 @@ export function ProjectsScreen({ session }: { session: SessionUser | null }) {
       <div className="project-list">
         {visible.map((project) => {
           const isOpen = openId === project.project_id;
-          const lastComment = [...project.history].reverse().find((entry) => entry.comment)?.comment;
+          // Именно замечание метролога, а не любая последняя запись:
+          // иначе в поле попадала служебная строка об обновлении состава СИ.
+          const lastComment = [...project.history].reverse().find((entry) => entry.action === 'rejected' && entry.comment)?.comment;
           return (
             <article className={`panel project-card ${project.status}`} key={project.project_id}>
               <button className="project-head" onClick={() => setOpenId(isOpen ? null : project.project_id)}>

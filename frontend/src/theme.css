@@ -921,3 +921,88 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   .composer-item { grid-template-columns: 1fr auto; }
   .composer-type { grid-column: 1 / -1; }
 }
+
+/* ============ Плотность интерфейса ============
+   Формы и списки были рассчитаны на широкий экран: поля по 60 px на строку,
+   фильтры в три ряда. На рабочем месте это съедало половину экрана,
+   поэтому вся вертикальная метрика уплотнена. */
+.field { gap: 4px; margin-bottom: 8px; }
+.field span { font-size: 10.5px; }
+.field input, .field select { height: 30px; font-size: 12px; }
+.form-group { padding: 10px 11px; margin-bottom: 9px; }
+.form-group h3 { margin-bottom: 8px; font-size: 12.5px; }
+.field-hint { font-size: 11px; margin: -2px 0 8px; }
+.panel-header { margin-bottom: 10px; }
+.panel-header strong { font-size: 14.5px; }
+.left-panel, .right-panel { padding: 12px; }
+.center-panel { padding: 13px; }
+.three-column-layout { gap: 11px; padding: 11px; }
+.kpi { padding: 10px 12px; }
+.kpi span { font-size: 10.5px; margin-bottom: 5px; }
+.kpi strong { font-size: 17px; }
+.kpi-grid { gap: 8px; margin-bottom: 11px; }
+.chart-card { padding: 12px; }
+.bar-row { margin-bottom: 8px; }
+.donut-card { padding: 11px; margin-bottom: 11px; gap: 11px; }
+.donut { width: 72px; height: 72px; }
+.collapsible { margin-bottom: 9px; }
+.collapsible-head { min-height: 36px; padding: 8px 11px; }
+
+/* Фильтры проектов — одна строка с горизонтальной прокруткой вместо трёх рядов */
+.project-filters {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 6px;
+  margin-bottom: 11px;
+  padding-bottom: 2px;
+}
+.project-filters::-webkit-scrollbar { display: none; }
+.project-filter { height: 30px; padding: 0 11px; font-size: 12.5px; flex: none; gap: 6px; }
+.project-filter span { font-size: 10.5px; padding: 0 5px; }
+.project-card { padding: 11px 13px; }
+.project-title strong { font-size: 13.5px; }
+.project-title span { font-size: 11px; }
+.project-actions { margin-top: 9px; gap: 6px; }
+.project-remark { margin-top: 8px; padding: 7px 10px; font-size: 12px; }
+.project-list { gap: 9px; }
+.composer-item { padding: 6px 9px; }
+.composer-items { gap: 5px; }
+.review-item { padding: 8px 10px; }
+.review-list { gap: 6px; }
+.uug-form-panel { padding: 12px; }
+.user-row { padding: 9px 0; }
+
+/* На телефоне ещё плотнее: базовый шрифт меньше, отступы минимальные */
+@media (max-width: 640px) {
+  body { font-size: 14px; }
+  .workspace-screen { padding: 10px; }
+  .three-column-layout { padding: 10px; gap: 10px; }
+  .field input, .field select { height: 34px; font-size: 13px; }
+  .field span { font-size: 11px; }
+  .project-filter { height: 32px; font-size: 13px; }
+  .project-title strong { font-size: 14px; }
+  .project-actions button, .composer-save { height: 36px; font-size: 13px; }
+  .panel-header strong { font-size: 15px; }
+  .screen-summary { gap: 8px; }
+  .summary-metric { padding: 9px 11px; }
+  .summary-metric strong { font-size: 16px; }
+}
+
+/* Парные величины (Q min/max, участки до/после, P и T) ставим в ряд:
+   значения короткие, а вертикали экономится вдвое. */
+@media (max-width: 640px) {
+  .field-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .field-hint {
+    font-size: 10.5px;
+    line-height: 1.35;
+    margin: -2px 0 7px;
+    color: var(--muted);
+  }
+  .form-group { padding: 9px 10px; margin-bottom: 8px; }
+  .form-group h3 { font-size: 12.5px; margin-bottom: 7px; }
+  .field { margin-bottom: 7px; }
+  .uug-form-panel { padding: 11px; }
+  .uug-submit { height: 40px; margin-top: 2px; }
+  .panel-header span { font-size: 10px; }
+}
