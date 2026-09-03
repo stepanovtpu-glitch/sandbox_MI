@@ -1088,3 +1088,58 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .gas-act-file input { display: none; }
 .gas-act-actions { display: flex; gap: 8px; }
 .gas-act-actions button { display: inline-flex; align-items: center; gap: 7px; }
+
+/* Колонка истории запросов подбора — справочная, поэтому мелкий шрифт */
+.uug-screen .uug-layout { grid-template-columns: 340px 1fr 210px; }
+.selection-history {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(var(--surface-rgb), 0.9);
+  padding: 10px;
+  position: sticky;
+  top: 62px;
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+}
+.selection-history-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.selection-history-head svg { color: var(--accent); }
+.selection-history-empty { font-size: 11px; color: var(--muted); line-height: 1.45; }
+.selection-history-list { display: grid; gap: 5px; overflow-y: auto; }
+.selection-history-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  height: auto;
+  padding: 7px 8px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.selection-history-item:hover { border-color: var(--border-strong); background: var(--accent-soft); }
+.selection-history-top { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
+.selection-history-time { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+.selection-history-verdict { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+.selection-history-verdict.fits { color: var(--ok); }
+.selection-history-verdict.fits_with_caveats { color: var(--warn); }
+.selection-history-verdict.not_applicable { color: var(--danger); }
+.selection-history-params { font-size: 10.5px; color: var(--muted); line-height: 1.35; }
+.selection-history-mi { font-family: var(--font-mono); font-size: 9.5px; color: var(--accent); overflow-wrap: anywhere; }
+
+@media (max-width: 1400px) {
+  .uug-screen .uug-layout { grid-template-columns: 320px 1fr; }
+  .selection-history { grid-column: 1 / -1; position: static; max-height: 220px; }
+  .selection-history-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}

@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { SelectionHistory } from './SelectionHistory';
 import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, HelpCircle, Search, Thermometer, Wrench } from 'lucide-react';
-import { createProject, selectUug, type GasMedium, type MeteringProcess, type UugSelectionResponse } from './api';
+import { getSelectionHistory, type SelectionHistoryItem, createProject, selectUug, type GasMedium, type MeteringProcess, type UugSelectionResponse } from './api';
 
 const DN_SERIES = [25, 50, 80, 100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000];
 
@@ -51,6 +52,26 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
   const [apiError, setApiError] = useState<string | null>(null);
   const [audience, setAudience] = useState<'kip' | 'tech'>('kip');
   const [projectNotice, setProjectNotice] = useState<string | null>(null);
+  const [history, setHistory] = useState<SelectionHistoryItem[]>([]);
+
+  const refreshHistory = () => {
+    getSelectionHistory().then(setHistory).catch(() => setHistory([]));
+  };
+  useEffect(() => { refreshHistory(); }, []);
+
+  /** Повтор запроса из истории: подставляем параметры и сразу выполняем подбор. */
+  const repeatQuery = (item: SelectionHistoryItem) => {
+    setMedium(item.medium);
+    setProcess(item.process);
+    setPipeDn(item.pipe_dn_mm);
+    setFlowBasis(item.flow_basis);
+    const min = item.flow_basis === 'working' ? item.q_input_min : item.q_std_min;
+    const max = item.flow_basis === 'working' ? item.q_input_max : item.q_std_max;
+    if (min != null) setQInputMin(min);
+    if (max != null) setQInputMax(max);
+    setPAbs(item.p_abs_mpa);
+    setTWorking(item.t_working_c);
+  };
 
   /** Подбор — начало проекта УУГ: дальше состав комплектует КИПиА, утверждает метролог. */
   const startProject = async () => {
@@ -99,6 +120,7 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
         t_working_c: tWorking,
       });
       setResult(response);
+      refreshHistory();
     } catch (error) {
       setApiError(error instanceof Error ? error.message : 'Ошибка подбора');
     } finally {
@@ -336,6 +358,8 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
           )}
         </div>
       </div>
+
+      <SelectionHistory items={history} onRepeat={repeatQuery} />
     </section>
   );
 }

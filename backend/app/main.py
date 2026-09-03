@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,7 +15,7 @@ from app.audit_log import list_audit_events, log_audit_event
 from app.calculation import calculate
 from app.calculation_history import get_calculation_record, list_calculation_records, save_calculation_record
 from app.calculation_templates import TEMPLATE_TITLES
-from app.database import DB_PATH, SCHEMA_VERSION, get_schema_version
+from app.database import DB_PATH, SCHEMA_VERSION, database_url, get_schema_version, uses_postgres
 from app.document_storage import get_method_document, save_method_document, verify_method_document
 from app.instrument_library import bootstrap_instrument_library, list_instruments, recommend_replacements, upsert_instrument
 from app.method_library import (
@@ -68,6 +69,7 @@ from app.uug_projects import (
 )
 from app.compressibility import METHODS as COMPRESSIBILITY_METHODS
 from app.uug_composition import project_candidates, validate_composition
+from app.selection_history import list_queries, remember_query
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
@@ -220,14 +222,27 @@ def security_roles(user: dict[str, object] = Depends(require_permission('system:
 
 @app.get('/api/system/info')
 def system_info(user: dict[str, object] = Depends(require_permission('system:read'))):
+    # Показываем реальный движок: раньше здесь всегда стоял путь к файлу SQLite,
+    # и после перехода на PostgreSQL экран вводил в заблуждение.
+    postgres = uses_postgres()
+    if postgres:
+        # адрес без пароля: логин и хост полезны, секрет — нет
+        url = re.sub(r'//[^@]*@', '//', database_url())
+        storage = {'database_engine': 'PostgreSQL', 'database_location': url, 'database_exists': True}
+    else:
+        storage = {
+            'database_engine': 'SQLite',
+            'database_location': str(DB_PATH),
+            'database_exists': DB_PATH.exists(),
+        }
     return {
         'status': 'ok',
         'application': 'GasMeter Pro',
         'version': APP_VERSION,
         'schema_version': get_schema_version(),
         'expected_schema_version': SCHEMA_VERSION,
-        'database_path': str(DB_PATH),
-        'database_exists': DB_PATH.exists(),
+        'database_path': storage['database_location'],
+        **storage,
         'actor': user.get('actor'),
         'role': user.get('role'),
     }
@@ -327,7 +342,8 @@ def methods_review_queue(user: dict[str, object] = Depends(require_permission('m
         'medium': 'измеряемая среда',
     }
     queue = []
-    for method in list_current_methods():
+    methods_snapshot = list_current_methods()
+    for method in methods_snapshot:
         missing = []
         if not method.q_max or method.q_max <= 0:
             missing.extend(['q_min', 'q_max'])
@@ -349,7 +365,7 @@ def methods_review_queue(user: dict[str, object] = Depends(require_permission('m
                 'missing_titles': [field_titles.get(field, field) for field in missing],
             })
     return {
-        'total_methods': len(list_current_methods()),
+        'total_methods': len(methods_snapshot),
         'needs_review': len(queue),
         'queue': sorted(queue, key=lambda item: len(item['missing_fields']), reverse=True),
     }
@@ -758,7 +774,14 @@ def uug_selection(request: UugSelectionRequest, user: dict[str, object] = Depend
         },
         actor=_actor(user),
     )
+    remember_query(request.model_dump(mode='json'), response.best_method.model_dump() if response.best_method else None, actor=_actor(user))
     return response
+
+
+@app.get('/api/uug/selection/history')
+def uug_selection_history(limit: int = 40, user: dict[str, object] = Depends(require_permission('uug:select'))):
+    """Свои запросы подбора: технолог возвращается к перебранным режимам."""
+    return list_queries(_actor(user), limit=limit)
 
 
 @app.post('/api/technology/recommendations', response_model=TechnologyRecommendationResponse)

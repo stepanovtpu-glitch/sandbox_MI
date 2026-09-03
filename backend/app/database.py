@@ -1,5 +1,19 @@
+"""Доступ к базе данных: PostgreSQL в работе, SQLite для локальной разработки и тестов.
+
+Движок выбирается переменной окружения `GASMETER_DATABASE_URL`:
+задан `postgresql://…` — работаем с PostgreSQL, пусто — с файлом SQLite.
+Остальной код этого не видит: он пользуется `fetch_all` / `fetch_one` /
+`execute` и плейсхолдерами `?`, которые адаптер подставляет под нужный движок.
+
+Схема ведётся нумерованными миграциями в `schema_migrations`; DDL написан
+на подмножестве SQL, понятном обоим движкам.
+"""
+
+from __future__ import annotations
+
 import json
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -7,14 +21,131 @@ from typing import Any, Iterator
 
 DB_DIR = Path(os.environ.get('GASMETER_DB_DIR', Path(__file__).resolve().parents[1] / 'data'))
 DB_PATH = DB_DIR / 'gasmeter.db'
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
+
+
+def database_url() -> str:
+    """Читается при каждом обращении: тесты меняют окружение на лету."""
+    return os.environ.get('GASMETER_DATABASE_URL', '').strip()
+
+
+def uses_postgres() -> bool:
+    return database_url().startswith('postgres')
+
+
+def _adapt(query: str) -> str:
+    """Плейсхолдеры `?` → `%s` и SQLite-специфичный синтаксис → PostgreSQL."""
+    if not uses_postgres():
+        return query
+    # знак вопроса внутри строкового литерала не является плейсхолдером
+    adapted = re.sub(r"\?(?=(?:[^']*'[^']*')*[^']*$)", '%s', query)
+    if 'INSERT OR IGNORE INTO' in adapted:
+        adapted = adapted.replace('INSERT OR IGNORE INTO', 'INSERT INTO')
+        if 'ON CONFLICT' not in adapted:
+            adapted = adapted.rstrip().rstrip(';') + ' ON CONFLICT DO NOTHING'
+    return adapted
+
+
+def _ddl(script: str) -> str:
+    """Типы, различающиеся между движками."""
+    if not uses_postgres():
+        return script
+    return script.replace(' REAL ', ' DOUBLE PRECISION ').replace(' REAL,', ' DOUBLE PRECISION,')
+
+
+class _Row(dict):
+    """Строка результата: работает и как dict, и как sqlite3.Row."""
+
+    def __getattr__(self, item: str) -> Any:
+        try:
+            return self[item]
+        except KeyError as exc:
+            raise AttributeError(item) from exc
+
+
+class _Cursor:
+    def __init__(self, cursor: Any, postgres: bool) -> None:
+        self._cursor = cursor
+        self._postgres = postgres
+
+    def fetchone(self) -> _Row | None:
+        row = self._cursor.fetchone()
+        return None if row is None else _Row(row if self._postgres else dict(row))
+
+    def fetchall(self) -> list[_Row]:
+        return [_Row(row if self._postgres else dict(row)) for row in self._cursor.fetchall()]
+
+    def __iter__(self) -> Iterator[_Row]:
+        return iter(self.fetchall())
+
+
+class _Connection:
+    """Единое поведение соединения для SQLite и PostgreSQL."""
+
+    def __init__(self, raw: Any, postgres: bool) -> None:
+        self._raw = raw
+        self._postgres = postgres
+
+    def execute(self, query: str, params: tuple[Any, ...] | list[Any] = ()) -> _Cursor:
+        cursor = self._raw.cursor()
+        cursor.execute(_adapt(query), tuple(params))
+        return _Cursor(cursor, self._postgres)
+
+    def executescript(self, script: str) -> None:
+        """Несколько операторов подряд: у psycopg нет executescript."""
+        if not self._postgres:
+            self._raw.executescript(script)
+            return
+        cursor = self._raw.cursor()
+        for statement in (item.strip() for item in _ddl(script).split(';')):
+            if statement:
+                cursor.execute(_adapt(statement))
+
+    def commit(self) -> None:
+        self._raw.commit()
+
+    def close(self) -> None:
+        self._raw.close()
+
+
+_POOL: Any = None
+
+
+def _postgres_pool() -> Any:
+    """Пул соединений PostgreSQL.
+
+    Без пула каждый запрос открывал бы TCP-соединение и проходил
+    аутентификацию заново: для SQLite это бесплатно, для PostgreSQL —
+    десятки миллисекунд на каждое обращение к базе.
+    """
+    global _POOL
+    if _POOL is None:
+        from psycopg.rows import dict_row
+        from psycopg_pool import ConnectionPool
+
+        _POOL = ConnectionPool(
+            database_url(),
+            min_size=1,
+            max_size=int(os.environ.get('GASMETER_DB_POOL_SIZE', '8')),
+            kwargs={'row_factory': dict_row},
+            open=True,
+        )
+    return _POOL
 
 
 @contextmanager
-def get_connection() -> Iterator[sqlite3.Connection]:
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH)
-    connection.row_factory = sqlite3.Row
+def get_connection() -> Iterator[_Connection]:
+    if uses_postgres():
+        with _postgres_pool().connection() as raw:
+            connection = _Connection(raw, postgres=True)
+            yield connection
+            connection.commit()
+        return
+    else:
+        DB_DIR.mkdir(parents=True, exist_ok=True)
+        raw = sqlite3.connect(DB_PATH)
+        raw.row_factory = sqlite3.Row
+        connection = _Connection(raw, postgres=False)
     try:
         yield connection
         connection.commit()
@@ -49,8 +180,7 @@ def init_db() -> None:
                 method_json TEXT NOT NULL,
                 change_comment TEXT,
                 test_cases_json TEXT NOT NULL DEFAULT '[]',
-                document_json TEXT,
-                FOREIGN KEY(mi_id) REFERENCES measurement_methods(mi_id)
+                document_json TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_method_versions_mi_id
@@ -82,7 +212,7 @@ def init_db() -> None:
         _ensure_schema_version(connection)
 
 
-def _ensure_schema_version(connection: sqlite3.Connection) -> None:
+def _ensure_schema_version(connection: _Connection) -> None:
     current_version = _current_schema_version(connection)
     if current_version < 1:
         connection.execute(
@@ -153,8 +283,7 @@ def _ensure_schema_version(connection: sqlite3.Connection) -> None:
                 token TEXT PRIMARY KEY,
                 login TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                FOREIGN KEY(login) REFERENCES users(login)
+                expires_at TEXT NOT NULL
             );
 
             CREATE INDEX IF NOT EXISTS idx_user_sessions_login
@@ -190,22 +319,57 @@ def _ensure_schema_version(connection: sqlite3.Connection) -> None:
             (5, 'UUG projects: composition by KIP, approval by metrologist'),
         )
     if current_version < 6:
+        _add_column_if_missing(connection, 'uug_projects', 'gas_composition_json', 'TEXT')
+        connection.execute(
+            'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+            (6, 'Gas composition act attached to UUG project (lab analysis instead of on-line chromatograph)'),
+        )
+    if current_version < 7:
         connection.executescript(
             '''
-            ALTER TABLE uug_projects ADD COLUMN gas_composition_json TEXT;
+            CREATE TABLE IF NOT EXISTS uug_selection_history (
+                query_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                medium TEXT NOT NULL,
+                process TEXT NOT NULL,
+                pipe_dn_mm REAL NOT NULL,
+                flow_basis TEXT NOT NULL,
+                q_input_min REAL,
+                q_input_max REAL,
+                q_std_min REAL,
+                q_std_max REAL,
+                p_abs_mpa REAL NOT NULL,
+                t_working_c REAL NOT NULL,
+                best_mi_id TEXT,
+                best_registration TEXT,
+                verdict TEXT,
+                request_json TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_selection_history_actor
+                ON uug_selection_history(actor, created_at DESC);
             '''
         )
         connection.execute(
             'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
-            (6, 'Gas composition act attached to UUG project (lab analysis instead of on-line chromatograph)'),
+            (7, 'History of MI selection queries per user'),
         )
     if _current_schema_version(connection) > SCHEMA_VERSION:
         raise RuntimeError('Database schema is newer than this application version')
 
 
-def _current_schema_version(connection: sqlite3.Connection) -> int:
+def _add_column_if_missing(connection: _Connection, table: str, column: str, column_type: str) -> None:
+    """ALTER TABLE ADD COLUMN, безопасный при повторном запуске на обоих движках."""
+    try:
+        connection.execute(f'ALTER TABLE {table} ADD COLUMN {column} {column_type}')
+    except Exception:  # noqa: BLE001 — столбец уже существует
+        pass
+
+
+def _current_schema_version(connection: _Connection) -> int:
     row = connection.execute('SELECT MAX(version) AS version FROM schema_migrations').fetchone()
-    return int(row['version'] or 0)
+    return int((row['version'] if row else 0) or 0)
 
 
 def get_schema_version() -> int:
@@ -223,12 +387,12 @@ def get_schema_version() -> int:
         return _current_schema_version(connection)
 
 
-def fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+def fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[_Row]:
     with get_connection() as connection:
-        return list(connection.execute(query, params).fetchall())
+        return connection.execute(query, params).fetchall()
 
 
-def fetch_one(query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
+def fetch_one(query: str, params: tuple[Any, ...] = ()) -> _Row | None:
     with get_connection() as connection:
         return connection.execute(query, params).fetchone()
 
@@ -245,4 +409,6 @@ def json_dump(value: Any) -> str:
 def json_load(value: str | None, default: Any = None) -> Any:
     if value is None:
         return default
+    if isinstance(value, (dict, list)):
+        return value
     return json.loads(value)

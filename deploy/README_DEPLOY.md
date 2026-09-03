@@ -10,10 +10,35 @@ HTTPS от Let's Encrypt, открывается в том числе с тел�
 ```text
 /opt/gasmeter/
   docker-compose.yaml     запуск (frontend слушает 127.0.0.1:8090)
+  .env                    GASMETER_DB_PASSWORD — пароль базы, права 600
   src/                    исходники версии, из которой собраны образы
-  data/                   SQLite, скан-копии МИ, протоколы (сохраняется при обновлении)
+  pgdata/                 данные PostgreSQL
+  data/                   скан-копии МИ, протоколы, акты анализа газа
   mi_library/             библиотека сканов МИ
 ```
+
+## База данных
+
+Рабочая СУБД — **PostgreSQL 16** в отдельном контейнере `gasmeter-postgres-1`
+(соседние сервисы сервера используют свои базы, смешивать не следует).
+Локально и в тестах используется SQLite: движок выбирается переменной
+`GASMETER_DATABASE_URL`, код от этого не зависит.
+
+Резервная копия базы:
+
+```bash
+ssh -i ~/.ssh/personal_assistant_server root@77.95.203.87   "cd /opt/gasmeter && docker compose exec -T postgres pg_dump -U gasmeter gasmeter"   > backup/gasmeter-$(date +%Y%m%d).sql
+```
+
+Восстановление:
+
+```bash
+cat backup/gasmeter-YYYYMMDD.sql | ssh -i ~/.ssh/personal_assistant_server root@77.95.203.87   "cd /opt/gasmeter && docker compose exec -T postgres psql -U gasmeter -d gasmeter"
+```
+
+Перенос данных из SQLite (выполнен 03.09.2026, 781 строка) — на случай повторения:
+`scripts/migrate_sqlite_to_postgres.py <путь к gasmeter.db>` при заданном
+`GASMETER_DATABASE_URL`.
 
 Наружу порт не публикуется: системный nginx проксирует
 `gasmeter.77-95-203-87.sslip.io` → `127.0.0.1:8090`

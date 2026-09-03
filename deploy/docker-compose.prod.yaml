@@ -1,8 +1,25 @@
 # GasMeter Pro — производственный запуск.
 # Наружу порт не публикуется: доступ идёт через системный nginx
 # (gasmeter.77-95-203-87.sslip.io → 127.0.0.1:8090).
-# Данные (SQLite, сканы МИ, протоколы) — в ./data и ./mi_library рядом с этим файлом.
+# База — собственный экземпляр PostgreSQL: соседние сервисы на этом сервере
+# используют свои базы, и смешивать их не следует.
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=gasmeter
+      - POSTGRES_USER=gasmeter
+      - POSTGRES_PASSWORD=${GASMETER_DB_PASSWORD:?требуется GASMETER_DB_PASSWORD в .env}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=C
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gasmeter -d gasmeter']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend:
     image: gasmeter-backend:latest
     restart: unless-stopped
@@ -11,9 +28,13 @@ services:
       - GASMETER_DB_DIR=/app/data
       # На сервере вход обязателен: роль определяется сессией, а не заголовком запроса
       - GASMETER_REQUIRE_AUTH=1
+      - GASMETER_DATABASE_URL=postgresql://gasmeter:${GASMETER_DB_PASSWORD}@postgres:5432/gasmeter
     volumes:
       - ./data:/app/data
       - ./mi_library:/app/mi_library
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   frontend:
     image: gasmeter-frontend:latest

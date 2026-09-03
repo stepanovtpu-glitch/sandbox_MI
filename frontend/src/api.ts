@@ -139,6 +139,8 @@ export type SystemInfo = {
   expected_schema_version: number;
   database_path: string;
   database_exists: boolean;
+  database_engine?: string;
+  database_location?: string;
 };
 
 export type ReadinessCheck = { code: string; title: string; status: 'pass' | 'partial' | 'fail' | string; weight: number; details: string; score: number };
@@ -436,4 +438,27 @@ export async function uploadGasCompositionAct(
 
 export async function getProjectValidation(projectId: string): Promise<CompositionVerdict> {
   return request<CompositionVerdict>(`/api/uug/projects/${projectId}/validation`);
+}
+
+export type SelectionHistoryItem = {
+  query_id: string;
+  created_at: string;
+  medium: GasMedium;
+  process: MeteringProcess;
+  pipe_dn_mm: number;
+  flow_basis: FlowBasis;
+  q_input_min?: number | null;
+  q_input_max?: number | null;
+  q_std_min?: number | null;
+  q_std_max?: number | null;
+  p_abs_mpa: number;
+  t_working_c: number;
+  best_mi_id?: string | null;
+  best_registration?: string | null;
+  verdict?: string | null;
+  request: Record<string, unknown>;
+};
+
+export async function getSelectionHistory(limit = 40): Promise<SelectionHistoryItem[]> {
+  return request<SelectionHistoryItem[]>(`/api/uug/selection/history?limit=${limit}`);
 }

@@ -67,7 +67,8 @@ export function SystemStatusPanel({ defaultExpanded = false }: { defaultExpanded
               <div><span>API</span><b>{info.status}</b></div>
               <div><span>Версия БД</span><b>{info.schema_version} / {info.expected_schema_version}</b></div>
               <div><span>Файл БД</span><b>{info.database_exists ? 'найден' : 'не найден'}</b></div>
-              <div><span>Путь</span><b>{info.database_path}</b></div>
+              <div><span>СУБД</span><b>{info.database_engine ?? 'SQLite'}</b></div>
+              <div><span>Хранилище</span><b>{info.database_location ?? info.database_path}</b></div>
             </>
           )}
           {readiness && (

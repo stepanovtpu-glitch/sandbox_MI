@@ -25,11 +25,21 @@ def _version_to_api(row: Any) -> dict[str, Any]:
     }
 
 
-def bootstrap_method_library() -> None:
+# Библиотека засевается один раз за время жизни процесса: до этого
+# каждое обращение к списку методик перечитывало все версии и досоздавало
+# контрольные примеры, что давало секунды задержки на каждый запрос.
+_LIBRARY_READY = False
+
+
+def bootstrap_method_library(force: bool = False) -> None:
+    global _LIBRARY_READY
+    if _LIBRARY_READY and not force:
+        return
     init_db()
     existing = fetch_one('SELECT COUNT(*) AS cnt FROM measurement_methods')
     if existing and existing['cnt'] > 0:
         ensure_default_method_test_cases()
+        _LIBRARY_READY = True
         return
     now = _now_iso()
     for method in MEASUREMENT_METHODS:
@@ -59,6 +69,7 @@ def bootstrap_method_library() -> None:
             ),
         )
     ensure_default_method_test_cases()
+    _LIBRARY_READY = True
 
 
 def ensure_default_method_test_cases() -> int:
@@ -92,10 +103,12 @@ def list_current_methods() -> list[MeasurementMethod]:
         FROM measurement_methods m
         JOIN measurement_method_versions v ON v.version_id = m.current_version_id
         WHERE v.status = 'active'
-        ORDER BY json_extract(v.method_json, '$.q_max') ASC
         '''
     )
-    return [MeasurementMethod(**json_load(row['method_json'], {})) for row in rows]
+    # Сортировка по диапазону расхода делается в коде: функции работы с JSON
+    # у SQLite и PostgreSQL называются по-разному, а объём выборки невелик.
+    methods = [MeasurementMethod(**json_load(row['method_json'], {})) for row in rows]
+    return sorted(methods, key=lambda item: item.q_max)
 
 
 def list_method_versions(mi_id: str) -> list[dict[str, Any]]:
@@ -116,7 +129,14 @@ def get_method_version(mi_id: str, version_id: str) -> dict[str, Any] | None:
     return _version_to_api(row) if row else None
 
 
+def invalidate_library_cache() -> None:
+    """Сбрасывает признак инициализации: библиотека изменилась."""
+    global _LIBRARY_READY
+    _LIBRARY_READY = False
+
+
 def create_method_version(mi_id: str, method: MeasurementMethod, calculation_template: str, change_comment: str) -> dict[str, Any]:
+    invalidate_library_cache()
     bootstrap_method_library()
     now = _now_iso()
     current = fetch_one('SELECT MAX(version_number) AS max_version FROM measurement_method_versions WHERE mi_id = ?', (mi_id,))
