@@ -379,7 +379,7 @@ export type CandidateSlot = {
 };
 export type ProjectCandidates = {
   has_selection: boolean;
-  k_methods: { allowed: string[]; reason: string } | null;
+  k_methods: { allowed: string[]; titles?: string[]; reason: string } | null;
   slots: CandidateSlot[];
 };
 export type CompositionVerdict = { ok: boolean; errors: string[]; warnings: string[] };

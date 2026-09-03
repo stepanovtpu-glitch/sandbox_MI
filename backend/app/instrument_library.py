@@ -31,9 +31,44 @@ LIMIT_BY_TYPE = {
 }
 
 
+# Приборы, которые были в демонстрационном наборе до перехода на реальный парк
+# узлов учёта ИНК. Их не удаляем (они могут стоять в старых проектах),
+# но выводим из эксплуатации, чтобы не предлагались при комплектации.
+LEGACY_INSTRUMENT_IDS = (
+    'computer-spg742-001',
+    'computer-superflow-001',
+    'pressure-eja110e-001',
+    'pressure-metran-150-001',
+    'temp-trm-010-001',
+    'flow-drgmzl-200-001',
+    'flow-drgmzl-250-001',
+    'flow-drgmzl-300-001',
+    'flow-drgmzl-400-001',
+    'analyzer-gas-001',
+)
+
+
+def retire_legacy_instruments() -> None:
+    """Демонстрационные приборы переводятся в «выведен из эксплуатации»."""
+    for instrument_id in LEGACY_INSTRUMENT_IDS:
+        row = fetch_one('SELECT instrument_json FROM instruments WHERE instrument_id = ?', (instrument_id,))
+        if not row:
+            continue
+        stored = json_load(row['instrument_json'], {}) or {}
+        if stored.get('status') == 'decommissioned':
+            continue
+        stored['status'] = 'decommissioned'
+        stored['notes'] = 'Демонстрационная запись: заменена реальным парком СИ ИНК.'
+        execute(
+            'UPDATE instruments SET status = ?, instrument_json = ?, updated_at = ? WHERE instrument_id = ?',
+            ('decommissioned', json_dump(stored), datetime.now(timezone.utc).isoformat(), instrument_id),
+        )
+
+
 def bootstrap_instrument_library() -> None:
     init_db()
     now = datetime.now(timezone.utc).isoformat()
+    retire_legacy_instruments()
     for instrument in INSTRUMENTS:
         row = fetch_one('SELECT instrument_json FROM instruments WHERE instrument_id = ?', (instrument.id,))
         if row:

@@ -17,9 +17,9 @@ SELECTION = {
 }
 INSTRUMENTS = [
     {'type': 'flowmeter', 'id': 'flow-drgm-1600-001', 'name': 'ДРГ.М-1600'},
-    {'type': 'pressure', 'id': 'pressure-eja110e-001', 'name': 'EJA110E'},
+    {'type': 'pressure', 'id': 'pressure-metran-150tg-001', 'name': 'Метран-150TG'},
     {'type': 'temperature', 'id': 'temp-metran-286-001', 'name': 'Метран-286'},
-    {'type': 'computer', 'id': 'computer-superflow-001', 'name': 'SuperFlow-21В'},
+    {'type': 'computer', 'id': 'computer-uvp-280a-001', 'name': 'УВП-280А.01'},
 ]
 
 

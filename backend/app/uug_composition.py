@@ -18,7 +18,8 @@ from __future__ import annotations
 from app.instrument_library import list_instruments
 from app.method_library import list_current_methods
 from app.schemas import GasMedium, Instrument, InstrumentStatus, InstrumentType, UugSelectionRequest
-from app.uug_selection import GOST_30319_2_P_MAX_MPA, _covers, _working_flow_rate
+from app.compressibility import METHODS, applicable_methods, check_method_range, equivalent_methods, method_title
+from app.uug_selection import _covers, _working_flow_rate
 
 REQUIRED_SLOTS: tuple[InstrumentType, ...] = (
     InstrumentType.FLOWMETER,
@@ -33,11 +34,7 @@ SLOT_TITLES = {
     InstrumentType.COMPUTER: 'Вычислитель',
     InstrumentType.ANALYZER: 'Анализатор состава',
 }
-METHOD_TITLES = {
-    'GOST_30319_2': 'ГОСТ 30319.2-2015 (по плотности, N₂ и CO₂)',
-    'GOST_30319_3': 'ГОСТ 30319.3-2015 (по компонентному составу)',
-    'VNIC_SMV': 'ВНИЦ СМВ (попутный нефтяной газ)',
-}
+
 
 
 def selection_context(project: dict) -> dict | None:
@@ -68,23 +65,36 @@ def selection_context(project: dict) -> dict | None:
 
 
 def required_k_methods(ctx: dict) -> tuple[set[str], str]:
-    """Допустимые методы расчёта коэффициента сжимаемости для узла и обоснование."""
+    """Допустимые методы расчёта коэффициента сжимаемости для узла и обоснование.
+
+    Ограничения берутся из трёх источников: что предписала МИ, что применимо
+    к среде и что допускает область применения самого метода по давлению
+    и температуре (у вычислителей она бывает уже, чем у ГОСТ).
+    """
     method = ctx['method']
     request: UugSelectionRequest = ctx['request']
+    fitting = set(applicable_methods(request.medium, request.p_abs_mpa, request.t_working_c))
+
     if method is not None and method.compressibility_method:
-        title = METHOD_TITLES.get(method.compressibility_method, method.compressibility_method)
-        return {method.compressibility_method}, f'МИ предписывает {title}'
-    if request.p_abs_mpa > GOST_30319_2_P_MAX_MPA:
-        return {'GOST_30319_3'}, (
-            f'при давлении выше {GOST_30319_2_P_MAX_MPA:g} МПа применим только расчёт '
-            'по компонентному составу (ГОСТ 30319.3-2015)'
+        prescribed = equivalent_methods(method.compressibility_method)
+        title = method_title(method.compressibility_method)
+        allowed = prescribed & fitting if prescribed & fitting else prescribed
+        limits = check_method_range(method.compressibility_method, request.p_abs_mpa, request.t_working_c, request.medium)
+        reason = f'МИ предписывает {title}'
+        if limits:
+            reason += '. ' + ' '.join(limits)
+        return allowed, reason
+
+    if not fitting:
+        media_title = {'png': 'попутного нефтяного газа', 'pg': 'природного газа', 'sog': 'сухого отбензиненного газа'}
+        return set(), (
+            f'для {media_title.get(request.medium.value, request.medium.value)} при {request.p_abs_mpa:g} МПа '
+            f'и {request.t_working_c:g} °C нет метода расчёта в пределах области применения'
         )
-    if request.medium == GasMedium.PNG:
-        return {'GOST_30319_3', 'VNIC_SMV'}, (
-            'для попутного нефтяного газа — расчёт по компонентному составу '
-            '(ГОСТ 30319.3-2015) или ВНИЦ СМВ'
-        )
-    return {'GOST_30319_2', 'GOST_30319_3'}, 'для природного газа — ГОСТ 30319.2-2015 или ГОСТ 30319.3-2015'
+
+    titles = ' или '.join(sorted(method_title(code, short=True) for code in fitting))
+    media_title = {'png': 'попутного нефтяного газа', 'pg': 'природного газа', 'sog': 'сухого отбензиненного газа'}
+    return fitting, f'для {media_title.get(request.medium.value, request.medium.value)} применимы {titles}'
 
 
 def _tolerance_error(name: str, label: str, value: float | None, limit: float | None) -> str | None:
@@ -150,9 +160,14 @@ def check_instrument(slot: InstrumentType, instrument: Instrument, ctx: dict) ->
                 f'{name}: методы расчёта коэффициента сжимаемости в карточке прибора не указаны — '
                 'сверить по описанию типа СИ.'
             )
-        elif not (supported & allowed):
-            implemented = ', '.join(METHOD_TITLES.get(item, item) for item in sorted(supported))
-            errors.append(f'{name}: реализует {implemented}, а {reason}.')
+        else:
+            # Учитываем и синонимы: МИ ссылается на документ, прибор — на алгоритм внутри него
+            supported_expanded = {alias for code in supported for alias in equivalent_methods(code)}
+            if not (supported_expanded & allowed):
+                implemented = ', '.join(method_title(item, short=True) for item in sorted(supported))
+                errors.append(f'{name}: реализует {implemented}, а {reason}.')
+            elif not instrument.methods_verified:
+                warnings.append(f'{name}: перечень методов расчёта K не сверен с описанием типа СИ.')
 
     return errors, warnings
 
@@ -183,7 +198,11 @@ def project_candidates(project: dict) -> dict:
     k_methods = None
     if ctx is not None:
         allowed, reason = required_k_methods(ctx)
-        k_methods = {'allowed': sorted(allowed), 'reason': reason}
+        k_methods = {
+            'allowed': sorted(allowed),
+            'titles': [method_title(code, short=True) for code in sorted(allowed)],
+            'reason': reason,
+        }
     return {'has_selection': ctx is not None, 'k_methods': k_methods, 'slots': slots}
 
 

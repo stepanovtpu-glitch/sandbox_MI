@@ -61,6 +61,7 @@ from app.uug_projects import (
     list_projects,
     set_instruments,
 )
+from app.compressibility import METHODS as COMPRESSIBILITY_METHODS
 from app.uug_composition import project_candidates, validate_composition
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
@@ -566,6 +567,27 @@ class ProjectInstrumentsPayload(BaseModel):
 
 class ProjectStatusPayload(BaseModel):
     comment: str | None = None
+
+
+@app.get('/api/compressibility-methods')
+def compressibility_methods(user: dict[str, object] = Depends(require_permission('method:read'))):
+    """Справочник методов расчёта K с областями применения — их задают ГОСТ и вычислители."""
+    return [
+        {
+            'code': method.code,
+            'title': method.title,
+            'short_title': method.short_title,
+            'document': method.document,
+            'media': [item.value for item in method.media],
+            'p_min_mpa': method.p_min_mpa,
+            'p_max_mpa': method.p_max_mpa,
+            't_min_c': method.t_min_c,
+            't_max_c': method.t_max_c,
+            'requires_composition': method.requires_composition,
+            'note': method.note,
+        }
+        for method in COMPRESSIBILITY_METHODS.values()
+    ]
 
 
 @app.get('/api/uug/projects')

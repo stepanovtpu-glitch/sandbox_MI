@@ -13,12 +13,6 @@ import {
 
 type ComposedItem = { type: InstrumentType; id: string; name: string };
 
-const K_METHOD_TITLES: Record<string, string> = {
-  GOST_30319_2: 'ГОСТ 30319.2-2015',
-  GOST_30319_3: 'ГОСТ 30319.3-2015',
-  VNIC_SMV: 'ВНИЦ СМВ',
-};
-
 /**
  * Комплектация проекта средствами измерений — работа службы КИПиА.
  *
@@ -76,7 +70,7 @@ export function ProjectComposer({ project, onSaved }: { project: UugProject; onS
       )}
       {candidates?.k_methods && (
         <div className="composer-k">
-          Расчёт коэффициента сжимаемости: {candidates.k_methods.allowed.map((method) => K_METHOD_TITLES[method] ?? method).join(' или ')}
+          Расчёт коэффициента сжимаемости: {(candidates.k_methods.titles ?? candidates.k_methods.allowed).join(' или ')}
           <small>{candidates.k_methods.reason}</small>
         </div>
       )}

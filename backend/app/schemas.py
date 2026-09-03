@@ -72,6 +72,10 @@ class Instrument(BaseModel):
     # (GOST_30319_2, GOST_30319_3, VNIC_SMV). МИ предписывает метод, и вычислитель
     # обязан его поддерживать — иначе узел нельзя укомплектовать этим прибором.
     compressibility_methods: list[str] = Field(default_factory=list)
+    # Списки методов сверены с описанием типа / руководством по эксплуатации
+    methods_verified: bool = False
+    # Метрологические характеристики подтверждены таблицей СИ главного метролога
+    specs_verified: bool = False
 
 
 class LineParameters(BaseModel):
