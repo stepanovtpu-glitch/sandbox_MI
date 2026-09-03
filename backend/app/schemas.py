@@ -341,14 +341,32 @@ class UugSelectionRequest(BaseModel):
     q_input_max: float | None = Field(default=None, gt=0)
     q_std_min: float = Field(ge=0)
     q_std_max: float = Field(gt=0)
+    # Давление и температура задаются диапазоном рабочего режима.
+    # p_abs_mpa / t_working_c — нижняя граница (и единственное значение,
+    # если режим задан точкой), *_max_* — верхняя. Так сохраняются
+    # ранее сохранённые проекты и запросы, где границы не было.
     p_abs_mpa: float = Field(gt=0)
+    p_abs_max_mpa: float | None = Field(default=None, gt=0)
     t_working_c: float
+    t_working_max_c: float | None = None
     preferred_flowmeter_type: str | None = None
+
+    @property
+    def p_range(self) -> tuple[float, float]:
+        return self.p_abs_mpa, self.p_abs_max_mpa if self.p_abs_max_mpa is not None else self.p_abs_mpa
+
+    @property
+    def t_range(self) -> tuple[float, float]:
+        return self.t_working_c, self.t_working_max_c if self.t_working_max_c is not None else self.t_working_c
 
     @model_validator(mode='after')
     def q_range_must_be_ordered(self):
         if self.q_std_min > self.q_std_max:
             raise ValueError('q_std_min must be less than or equal to q_std_max')
+        if self.p_abs_max_mpa is not None and self.p_abs_max_mpa < self.p_abs_mpa:
+            raise ValueError('p_abs_max_mpa must be greater than or equal to p_abs_mpa')
+        if self.t_working_max_c is not None and self.t_working_max_c < self.t_working_c:
+            raise ValueError('t_working_max_c must be greater than or equal to t_working_c')
         return self
 
 

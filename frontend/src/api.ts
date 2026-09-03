@@ -169,8 +169,12 @@ export type UugSelectionRequest = {
   q_input_max?: number;
   q_std_min: number;
   q_std_max: number;
+  // Режим задаётся диапазоном: p_abs_mpa / t_working_c — нижняя граница,
+  // *_max_* — верхняя (может отсутствовать, если режим задан точкой)
   p_abs_mpa: number;
+  p_abs_max_mpa?: number | null;
   t_working_c: number;
+  t_working_max_c?: number | null;
   preferred_flowmeter_type?: string | null;
 };
 

@@ -64,6 +64,15 @@ def _date(value: str | None) -> str:
         return value
 
 
+def _range_title(low, high, unit: str, dash: str = '–') -> str:
+    """Величина режима: точкой или диапазоном, если задана верхняя граница."""
+    if low is None:
+        return '—'
+    if high is None or high == low:
+        return f'{low:g} {unit}'
+    return f'{low:g}{dash}{high:g} {unit}'
+
+
 def _mode_rows(project: dict) -> list[list[str]]:
     selection = project.get('selection') or {}
     ctx = selection_context(project)
@@ -73,8 +82,8 @@ def _mode_rows(project: dict) -> list[list[str]]:
         ['Условный диаметр трубопровода', f"DN {selection.get('pipe_dn_mm', '—')} мм"],
         ['Прямой участок до расходомера', f"не менее {selection.get('straight_before_dn', '—')} Dn"],
         ['Прямой участок после расходомера', f"не менее {selection.get('straight_after_dn', '—')} Dn"],
-        ['Абсолютное давление среды', f"{selection.get('p_abs_mpa', '—')} МПа"],
-        ['Температура среды', f"{selection.get('t_working_c', '—')} °C"],
+        ['Абсолютное давление среды', _range_title(selection.get('p_abs_mpa'), selection.get('p_abs_max_mpa'), 'МПа')],
+        ['Температура среды', _range_title(selection.get('t_working_c'), selection.get('t_working_max_c'), '°C', '…')],
     ]
     if ctx is not None:
         rows.append([

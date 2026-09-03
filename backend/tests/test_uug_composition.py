@@ -151,7 +151,9 @@ def test_methods_catalogue_endpoint():
     codes = {item['code'] for item in methods}
     assert {'NX19', 'GERG_91', 'AGA8_92DC', 'GOST_30319_2', 'GOST_30319_3', 'GSSSD_MR_113_03'} <= codes
     nx19 = next(item for item in methods if item['code'] == 'NX19')
-    assert nx19['p_max_mpa'] == 12.0 and nx19['t_max_c'] == 66.0
+    # Где ГОСТ и руководство прибора расходятся, принимается более узкая граница:
+    # давление — по ГОСТ 30319.2-2015 (7,5 МПа), температура — по УВП-280 (+66 °C)
+    assert nx19['p_max_mpa'] == 7.5 and nx19['t_max_c'] == 66.0
 
 
 def test_gas_composition_act_replaces_chromatograph():

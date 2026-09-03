@@ -13,6 +13,8 @@
 - температура: ПНГ >= -10 C, ПГ/СОГ >= -23 C и внутри диапазона МИ.
 """
 
+import re
+
 from app.calculation_templates.drg_series import (
     STANDARD_PRESSURE_MPA,
     STANDARD_TEMPERATURE_K,
@@ -20,6 +22,7 @@ from app.calculation_templates.drg_series import (
 )
 from app.instrument_library import list_instruments
 from app.method_library import list_current_methods
+from app.compressibility import excluded_by_pressure, medium_limits, methods_for_medium
 from app.uug_flowmeters import COVERED, FlowmeterFit, flowmeter_fit
 from app.schemas import (
     ALLOWED_PIPE_DN_MM,
@@ -79,6 +82,20 @@ ACCURACY_RULES: dict[tuple[GasMedium, MeteringProcess], tuple[float, str]] = {
 }
 
 
+def _method_year(method: MeasurementMethod) -> int:
+    """Год методики — для приоритета более новых МИ при прочих равных.
+
+    Берётся из даты введения, а если её нет — из регистрационного номера:
+    «0139.RA.RU.314369/2024» и «RA.RU.311313/МИ-262-2023».
+    """
+    if method.valid_from:
+        match = re.search(r'(19|20)\d{2}', method.valid_from)
+        if match:
+            return int(match.group(0))
+    years = re.findall(r'(?:19|20)\d{2}', method.registration_number or '')
+    return int(years[-1]) if years else 0
+
+
 def _validate(request: UugSelectionRequest) -> list[str]:
     errors: list[str] = []
     if request.pipe_dn_mm not in ALLOWED_PIPE_DN_MM:
@@ -88,42 +105,79 @@ def _validate(request: UugSelectionRequest) -> list[str]:
         errors.append(f'Прямой участок до расходомера должен быть не менее {MIN_STRAIGHT_BEFORE_DN} Dn.')
     if request.straight_after_dn < MIN_STRAIGHT_AFTER_DN:
         errors.append(f'Прямой участок после расходомера должен быть не менее {MIN_STRAIGHT_AFTER_DN} Dn.')
-    if request.p_abs_mpa < MIN_ABSOLUTE_PRESSURE_MPA:
+
+    p_min, p_max = request.p_range
+    t_min, t_max = request.t_range
+
+    # Границы берём по методам расчёта, применимым к ЭТОЙ среде: для попутного
+    # нефтяного газа методы ГОСТ 30319.2 (по плотности, азоту и диоксиду
+    # углерода) не применяются вообще, и ссылаться на их 7,5 МПа нельзя.
+    _, medium_p_max, _, medium_t_max = medium_limits(request.medium)
+    documents = ', '.join(sorted({method.document for method in methods_for_medium(request.medium)}))
+
+    if p_min < MIN_ABSOLUTE_PRESSURE_MPA:
         errors.append('Абсолютное давление не может принимать значение меньше 0,1 МПа.')
-    elif request.p_abs_mpa > GOST_30319_3_P_MAX_MPA:
+    if p_max > medium_p_max:
         errors.append(
-            f'Абсолютное давление {request.p_abs_mpa:g} МПа выходит за верхнюю границу методов расчёта '
-            f'физических свойств газа: по ГОСТ 30319.3-2015 допускается до {GOST_30319_3_P_MAX_MPA:g} МПа.'
+            f'Абсолютное давление {p_max:g} МПа выходит за область применения методов расчёта '
+            f'для среды «{MEDIUM_TITLES[request.medium]}»: допускается до {medium_p_max:g} МПа '
+            f'({documents}).'
         )
 
-    t_min = MIN_TEMPERATURE_C[request.medium]
-    if request.t_working_c < t_min:
+    t_limit = MIN_TEMPERATURE_C[request.medium]
+    if t_min < t_limit:
         if request.medium == GasMedium.PNG:
             errors.append('Температура ПНГ не может принимать значение меньше минус 10 °С.')
         else:
             errors.append('Температура ПГ не может принимать значение меньше минус 23 °С.')
-    elif request.t_working_c > GOST_30319_T_MAX_C:
+    if t_max > medium_t_max:
         errors.append(
-            f'Температура {request.t_working_c:g} °С выходит за верхнюю границу методов расчёта: '
-            f'по ГОСТ 30319-2015 расчёт выполняется до {GOST_30319_T_MAX_K:g} К '
-            f'({GOST_30319_T_MAX_C:.1f} °С).'
+            f'Температура {t_max:g} °С выходит за область применения методов расчёта '
+            f'для среды «{MEDIUM_TITLES[request.medium]}»: допускается до {medium_t_max:g} °С '
+            f'({documents}).'
         )
     return errors
 
 
 def _algorithm_warnings(request: UugSelectionRequest) -> list[str]:
-    """Предупреждения о применимости алгоритмов расчёта — не блокируют подбор."""
+    """Какие алгоритмы расчёта отпадают на этом режиме. Подбор не блокируют.
+
+    Предупреждение выдаётся только про методы, которые вообще применяются
+    к выбранной среде: ссылаться на предел ГОСТ 30319.2 при подборе для
+    попутного нефтяного газа неверно — этот метод для ПНГ не применяется.
+    """
     warnings: list[str] = []
-    if GOST_30319_2_P_MAX_MPA < request.p_abs_mpa <= GOST_30319_3_P_MAX_MPA:
+    p_min, p_max = request.p_range
+    t_min, t_max = request.t_range
+
+    # Перечисляем конкретные алгоритмы: у ГОСТ 30319.3 области применения
+    # AGA8-92DC (до 12 МПа) и расчёта по компонентному составу (до 30 МПа)
+    # различаются, и обобщение до названия документа скрыло бы разницу.
+    dropped = [method for method in methods_for_medium(request.medium) if p_max > method.p_max_mpa]
+    remaining = [method for method in methods_for_medium(request.medium) if p_max <= method.p_max_mpa]
+    if dropped and remaining:
+        dropped_titles = ', '.join(sorted({method.short_title for method in dropped}))
+        remaining_titles = ' или '.join(sorted({method.short_title for method in remaining}))
         warnings.append(
-            f'При давлении выше {GOST_30319_2_P_MAX_MPA:g} МПа расчёт по ГОСТ 30319.2-2015 '
-            '(по плотности, азоту и диоксиду углерода) неприменим — вычислитель должен '
-            'работать по ГОСТ 30319.3-2015 на основании компонентного состава газа.'
+            f'При давлении {p_max:g} МПа неприменим расчёт по {dropped_titles} — '
+            f'вычислитель должен работать по {remaining_titles}.'
         )
-    if request.t_working_c < GOST_30319_T_MIN_C:
+
+    hot = [method for method in methods_for_medium(request.medium) if t_max > method.t_max_c]
+    hot_remaining = [method for method in methods_for_medium(request.medium) if t_max <= method.t_max_c]
+    if hot and hot_remaining:
+        hot_titles = ', '.join(sorted({method.short_title for method in hot}))
+        left_titles = ' или '.join(sorted({method.short_title for method in hot_remaining}))
         warnings.append(
-            f'Температура ниже {GOST_30319_T_MIN_K:g} К ({GOST_30319_T_MIN_C:.1f} °С) — '
-            'граница методов расчёта по ГОСТ 30319-2015.'
+            f'При температуре {t_max:g} °C неприменим расчёт по {hot_titles} — остаётся {left_titles}.'
+        )
+
+    cold = [method for method in methods_for_medium(request.medium) if t_min < method.t_min_c]
+    cold_remaining = [method for method in methods_for_medium(request.medium) if t_min >= method.t_min_c]
+    if cold and cold_remaining:
+        cold_titles = ', '.join(sorted({method.short_title for method in cold}))
+        warnings.append(
+            f'При температуре {t_min:g} °C неприменим расчёт по {cold_titles}.'
         )
     return warnings
 
@@ -213,26 +267,32 @@ def _score_method(
             )
         # Наружу диапазон отдаётся в стандартных условиях — по ним ведётся учёт
         if method.q_basis == 'working':
-            q_min = round(standard_flow_from_working(q_lo, request.p_abs_mpa, request.t_working_c), 3)
-            q_max = round(standard_flow_from_working(q_hi, request.p_abs_mpa, request.t_working_c), 3)
+            q_min_raw, q_max_raw = standard_flow_bounds(q_lo, q_hi, request)
+            q_min, q_max = round(q_min_raw, 3), round(q_max_raw, 3)
         else:
             q_min, q_max = q_lo, q_hi
         adjusted = UugAdjustedRange(q_min=q_min, q_max=q_max, clamped=clamped, note=note)
 
+    # Режим задан диапазоном: МИ должна накрывать обе границы, иначе часть
+    # рабочего режима остаётся вне области применения методики.
     p_min, p_max = _method_pressure_range(method)
-    if not (p_min <= request.p_abs_mpa <= p_max):
+    p_work_min, p_work_max = request.p_range
+    p_title = f'{p_work_min:g} МПа' if p_work_min == p_work_max else f'{p_work_min:g}–{p_work_max:g} МПа'
+    if p_work_min < p_min or p_work_max > p_max:
         applicable = False
         score -= 25
-        reasons.append(f'Абсолютное давление {request.p_abs_mpa:g} МПа вне диапазона МИ {p_min:g}–{p_max:g} МПа.')
+        reasons.append(f'Абсолютное давление {p_title} выходит за диапазон МИ {p_min:g}–{p_max:g} МПа.')
     else:
-        reasons.append(f'Абсолютное давление {request.p_abs_mpa:g} МПа внутри диапазона МИ {p_min:g}–{p_max:g} МПа.')
+        reasons.append(f'Абсолютное давление {p_title} внутри диапазона МИ {p_min:g}–{p_max:g} МПа.')
 
-    if not (method.t_min_c <= request.t_working_c <= method.t_max_c):
+    t_work_min, t_work_max = request.t_range
+    t_title = f'{t_work_min:g} °C' if t_work_min == t_work_max else f'{t_work_min:g}…{t_work_max:g} °C'
+    if t_work_min < method.t_min_c or t_work_max > method.t_max_c:
         applicable = False
         score -= 20
-        reasons.append(f'Температура {request.t_working_c:g} °C вне диапазона МИ {method.t_min_c:g}–{method.t_max_c:g} °C.')
+        reasons.append(f'Температура {t_title} выходит за диапазон МИ {method.t_min_c:g}…{method.t_max_c:g} °C.')
     else:
-        reasons.append(f'Температура {request.t_working_c:g} °C внутри диапазона МИ.')
+        reasons.append(f'Температура {t_title} внутри диапазона МИ {method.t_min_c:g}…{method.t_max_c:g} °C.')
 
     required_before = method.straight_before_dn or MIN_STRAIGHT_BEFORE_DN
     if request.straight_before_dn < required_before:
@@ -250,8 +310,7 @@ def _score_method(
     # Проверяем парк по тому расходу, который узел реально будет измерять:
     # если МИ сузила диапазон, расходомер подбирается под суженный.
     if adjusted is not None:
-        qw_lo = _working_flow_rate(adjusted.q_min, request.p_abs_mpa, request.t_working_c)
-        qw_hi = _working_flow_rate(adjusted.q_max, request.p_abs_mpa, request.t_working_c)
+        qw_lo, qw_hi = working_view(request, adjusted.q_min, adjusted.q_max)
     else:
         qw_lo, qw_hi = qw_min, qw_max
     fit = flowmeter_fit(method, request, qw_lo, qw_hi)
@@ -278,6 +337,49 @@ def standard_flow_from_working(q_working: float, p_abs_mpa: float, t_working_c: 
     return q_working * (p_abs_mpa * STANDARD_TEMPERATURE_K) / (STANDARD_PRESSURE_MPA * temperature_k)
 
 
+def standard_flow_bounds(q_work_min: float, q_work_max: float, request: UugSelectionRequest) -> tuple[float, float]:
+    """Расход при ст. у. по всему диапазону рабочих давления и температуры.
+
+    Приведение зависит от P и T, поэтому при заданном диапазоне режима берётся
+    наихудший угол: наименьший расход — при минимальном давлении и максимальной
+    температуре, наибольший — наоборот. Так узел остаётся в области применения
+    МИ на всём режиме, а не только в одной точке.
+    """
+    p_min, p_max = request.p_range
+    t_min, t_max = request.t_range
+    return (
+        standard_flow_from_working(q_work_min, p_min, t_max),
+        standard_flow_from_working(q_work_max, p_max, t_min),
+    )
+
+
+def working_flow_bounds(q_std_min: float, q_std_max: float, request: UugSelectionRequest) -> tuple[float, float]:
+    """Обратный пересчёт диапазона: тот же принцип наихудшего угла."""
+    p_min, p_max = request.p_range
+    t_min, t_max = request.t_range
+    return (
+        _working_flow_rate(q_std_min, p_max, t_min),
+        _working_flow_rate(q_std_max, p_min, t_max),
+    )
+
+
+def working_view(request: UugSelectionRequest, q_std_min: float, q_std_max: float) -> tuple[float, float]:
+    """Диапазон расхода при рабочих условиях для показа и подбора приборов.
+
+    Если технолог задал расход в рабочих условиях, именно он и есть истина:
+    обратный пересчёт по наихудшим углам режима раздул бы диапазон второй раз
+    (60–325 м³/ч превращались в 18–16 197). Поэтому пересчитанные границы
+    пересекаются с заданными.
+    """
+    low, high = working_flow_bounds(q_std_min, q_std_max, request)
+    if request.flow_basis == FlowBasis.WORKING and request.q_input_min is not None and request.q_input_max is not None:
+        low = max(low, request.q_input_min)
+        high = min(high, request.q_input_max)
+        if low > high:
+            low, high = request.q_input_min, request.q_input_max
+    return low, high
+
+
 def normalize_flow(request: UugSelectionRequest) -> UugSelectionRequest:
     """Приводит заданный расход к стандартным условиям, сохраняя исходный ввод."""
     if request.flow_basis != FlowBasis.WORKING:
@@ -287,11 +389,12 @@ def normalize_flow(request: UugSelectionRequest) -> UugSelectionRequest:
         })
     q_work_min = request.q_input_min if request.q_input_min is not None else request.q_std_min
     q_work_max = request.q_input_max if request.q_input_max is not None else request.q_std_max
+    q_std_min, q_std_max = standard_flow_bounds(q_work_min, q_work_max, request)
     return request.model_copy(update={
         'q_input_min': q_work_min,
         'q_input_max': q_work_max,
-        'q_std_min': round(standard_flow_from_working(q_work_min, request.p_abs_mpa, request.t_working_c), 3),
-        'q_std_max': round(standard_flow_from_working(q_work_max, request.p_abs_mpa, request.t_working_c), 3),
+        'q_std_min': round(q_std_min, 3),
+        'q_std_max': round(q_std_max, 3),
     })
 
 
@@ -348,13 +451,18 @@ def _instrument_plan(
         )
     )
 
-    pressure_requirements = [f'Диапазон охватывает рабочее давление {request.p_abs_mpa:g} МПа (абс.)']
+    p_work_min, p_work_max = request.p_range
+    t_work_min, t_work_max = request.t_range
+    p_title = f'{p_work_min:g} МПа' if p_work_min == p_work_max else f'{p_work_min:g}–{p_work_max:g} МПа'
+    t_title = f'{t_work_min:g} °C' if t_work_min == t_work_max else f'{t_work_min:g}…{t_work_max:g} °C'
+
+    pressure_requirements = [f'Диапазон охватывает рабочее давление {p_title} (абс.)']
     if method.delta_p_max is not None:
         pressure_requirements.append(f'Погрешность δP ≤ {method.delta_p_max:g} %')
     pressure_candidates = [
         item
         for item in by_type(InstrumentType.PRESSURE)
-        if _covers(item.range_min, item.range_max, request.p_abs_mpa, request.p_abs_mpa)
+        if _covers(item.range_min, item.range_max, p_work_min, p_work_max)
         and (method.delta_p_max is None or item.error_percent is None or item.error_percent <= method.delta_p_max)
     ]
     slots.append(
@@ -368,13 +476,13 @@ def _instrument_plan(
         )
     )
 
-    temperature_requirements = [f'Диапазон охватывает рабочую температуру {request.t_working_c:g} °C']
+    temperature_requirements = [f'Диапазон охватывает рабочую температуру {t_title}']
     if method.delta_t_max is not None:
         temperature_requirements.append(f'Погрешность δT ≤ {method.delta_t_max:g} %')
     temperature_candidates = [
         item
         for item in by_type(InstrumentType.TEMPERATURE)
-        if _covers(item.range_min, item.range_max, request.t_working_c, request.t_working_c)
+        if _covers(item.range_min, item.range_max, t_work_min, t_work_max)
         and (method.delta_t_max is None or item.error_percent is None or item.error_percent <= method.delta_t_max)
     ]
     slots.append(
@@ -459,12 +567,10 @@ def _technologist_advice(
         # в рабочих, а учёт ведётся в стандартных.
         if working_basis:
             mi_min_work, mi_max_work = method.q_min, method.q_max
-            mi_min_std = standard_flow_from_working(method.q_min, request.p_abs_mpa, request.t_working_c)
-            mi_max_std = standard_flow_from_working(method.q_max, request.p_abs_mpa, request.t_working_c)
+            mi_min_std, mi_max_std = standard_flow_bounds(method.q_min, method.q_max, request)
         else:
             mi_min_std, mi_max_std = method.q_min, method.q_max
-            mi_min_work = _working_flow_rate(method.q_min, request.p_abs_mpa, request.t_working_c)
-            mi_max_work = _working_flow_rate(method.q_max, request.p_abs_mpa, request.t_working_c)
+            mi_min_work, mi_max_work = working_flow_bounds(method.q_min, method.q_max, request)
 
         if adjusted.q_min != request.q_std_min:
             advice.append(
@@ -496,10 +602,7 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
             input=request,
             input_basis=basis,
             q_requested_std=(request.q_std_min, request.q_std_max),
-            q_requested_working=(
-                _working_flow_rate(request.q_std_min, request.p_abs_mpa, request.t_working_c),
-                _working_flow_rate(request.q_std_max, request.p_abs_mpa, request.t_working_c),
-            ),
+            q_requested_working=working_view(request, request.q_std_min, request.q_std_max),
             validation_errors=validation_errors,
             algorithm_warnings=warnings,
             accuracy_limit_percent=accuracy_limit,
@@ -510,8 +613,7 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
     # Подбор ведётся по расходу при рабочих условиях для приборов и при
     # стандартных — для методики: это разные величины, и парк проверяется
     # именно в рабочих.
-    qw_requested_min = _working_flow_rate(request.q_std_min, request.p_abs_mpa, request.t_working_c)
-    qw_requested_max = _working_flow_rate(request.q_std_max, request.p_abs_mpa, request.t_working_c)
+    qw_requested_min, qw_requested_max = working_view(request, request.q_std_min, request.q_std_max)
 
     scored: list[tuple[MeasurementMethod, int, bool, list[str], UugAdjustedRange | None, FlowmeterFit | None]] = []
     for method in list_current_methods():
@@ -527,6 +629,7 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
             item[2],
             item[4] is None or not item[4].clamped,
             item[5] is not None and item[5].ok,
+            _method_year(item[0]),
             item[1],
         ),
         reverse=True,
@@ -580,10 +683,7 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
             input=request,
             input_basis=basis,
             q_requested_std=(request.q_std_min, request.q_std_max),
-            q_requested_working=(
-                _working_flow_rate(request.q_std_min, request.p_abs_mpa, request.t_working_c),
-                _working_flow_rate(request.q_std_max, request.p_abs_mpa, request.t_working_c),
-            ),
+            q_requested_working=working_view(request, request.q_std_min, request.q_std_max),
             validation_errors=[],
             algorithm_warnings=warnings,
             accuracy_limit_percent=accuracy_limit,
@@ -596,8 +696,7 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
     method, _, _, _, adjusted, fit = best_entry
     q_min = adjusted.q_min if adjusted else request.q_std_min
     q_max = adjusted.q_max if adjusted else request.q_std_max
-    qw_min = _working_flow_rate(q_min, request.p_abs_mpa, request.t_working_c)
-    qw_max = _working_flow_rate(q_max, request.p_abs_mpa, request.t_working_c)
+    qw_min, qw_max = working_view(request, q_min, q_max)
 
     ranges = [
         UugOperatingRange(
@@ -608,7 +707,15 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
             note=adjusted.note if adjusted else None,
         ),
         UugOperatingRange(
-            label=f'Расход при рабочих условиях (P = {request.p_abs_mpa:g} МПа; T = {request.t_working_c:g} °C)',
+            label=(
+                'Расход при рабочих условиях ('
+                + (f'P = {request.p_range[0]:g} МПа' if request.p_range[0] == request.p_range[1]
+                   else f'P = {request.p_range[0]:g}–{request.p_range[1]:g} МПа')
+                + '; '
+                + (f'T = {request.t_range[0]:g} °C' if request.t_range[0] == request.t_range[1]
+                   else f'T = {request.t_range[0]:g}…{request.t_range[1]:g} °C')
+                + ')'
+            ),
             q_min=round(qw_min, 2),
             q_max=round(qw_max, 2),
             unit='м³/ч',
@@ -618,7 +725,9 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
 
     summary = (
         f'Для {MEDIUM_TITLES[request.medium]} (Dn {request.pipe_dn_mm:g} мм, '
-        f'Q ст. у. {q_min:g}–{q_max:g} м³/ч, P {request.p_abs_mpa:g} МПа, T {request.t_working_c:g} °C) '
+        f'Q ст. у. {q_min:g}–{q_max:g} м³/ч, '
+        f'P {request.p_range[0]:g}' + ('' if request.p_range[0] == request.p_range[1] else f'–{request.p_range[1]:g}') + ' МПа, '
+        f'T {request.t_range[0]:g}' + ('' if request.t_range[0] == request.t_range[1] else f'…{request.t_range[1]:g}') + ' °C) '
         f'рекомендуется {method.registration_number}: {method.title}.'
     )
 

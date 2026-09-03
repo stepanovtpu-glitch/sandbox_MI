@@ -46,25 +46,27 @@ METHODS: dict[str, CompressibilityMethod] = {
         code='NX19',
         title='NX19 мод. (ГОСТ 30319.2, по плотности, азоту и диоксиду углерода)',
         short_title='NX19',
-        document='ГОСТ 30319.2',
+        document='ГОСТ 30319.2-2015',
         media=(GasMedium.PG, GasMedium.SOG),
-        p_min_mpa=0.1, p_max_mpa=12.0, t_min_c=-23.0, t_max_c=66.0,
-        note='Природный газ. Диапазон по руководству вычислителей УВП-280.',
+        p_min_mpa=0.1, p_max_mpa=7.5, t_min_c=-23.0, t_max_c=66.0,
+        note='Природный газ. Давление — по ГОСТ 30319.2-2015 (до 7,5 МПа), '
+             'температура — по руководству вычислителей УВП-280 (уже границ ГОСТ). '
+             'Где документы расходятся, принимается более узкая граница.',
     ),
     'GERG_91': CompressibilityMethod(
         code='GERG_91',
         title='GERG-91 мод. (ГОСТ 30319.2, по плотности, азоту и диоксиду углерода)',
         short_title='GERG-91',
-        document='ГОСТ 30319.2',
+        document='ГОСТ 30319.2-2015',
         media=(GasMedium.PG, GasMedium.SOG),
-        p_min_mpa=0.1, p_max_mpa=12.0, t_min_c=-23.0, t_max_c=66.0,
-        note='Природный газ.',
+        p_min_mpa=0.1, p_max_mpa=7.5, t_min_c=-23.0, t_max_c=66.0,
+        note='Природный газ. Давление по ГОСТ 30319.2-2015, температура по руководству УВП-280.',
     ),
     'AGA8_92DC': CompressibilityMethod(
         code='AGA8_92DC',
         title='AGA8-92DC (ГОСТ 30319.3, по компонентному составу)',
         short_title='AGA8-92DC',
-        document='ГОСТ 30319.3',
+        document='ГОСТ 30319.3-2015',
         media=(GasMedium.PG, GasMedium.SOG, GasMedium.PNG),
         p_min_mpa=0.1, p_max_mpa=12.0, t_min_c=-23.0, t_max_c=66.0,
         note='Требует компонентного состава газа.',
@@ -177,4 +179,43 @@ def applicable_methods(medium: GasMedium, p_abs_mpa: float, t_working_c: float) 
         method.code
         for method in methods_for_medium(medium)
         if not check_method_range(method.code, p_abs_mpa, t_working_c, medium)
+    ]
+
+
+def medium_limits(medium: GasMedium) -> tuple[float, float, float, float]:
+    """Границы режима по методам расчёта, применимым к этой среде.
+
+    Возвращает (p_min, p_max, t_min, t_max) — объединение областей применения.
+    Для попутного нефтяного газа методы ГОСТ 30319.2 (по плотности, азоту
+    и диоксиду углерода) неприменимы вообще, поэтому его границы задают
+    ГОСТ 30319.3, ГСССД МР 113-03 и ВНИЦ СМВ, а не ограничение 7,5 МПа.
+    """
+    methods = methods_for_medium(medium)
+    if not methods:
+        return 0.1, 30.0, -23.15, 76.85
+    return (
+        min(method.p_min_mpa for method in methods),
+        max(method.p_max_mpa for method in methods),
+        min(method.t_min_c for method in methods),
+        max(method.t_max_c for method in methods),
+    )
+
+
+def limiting_documents(medium: GasMedium, p_abs_mpa: float, t_working_c: float) -> list[str]:
+    """Документы, чьи области применения накрывают режим — для обоснования."""
+    return sorted({
+        METHODS[code].document
+        for code in applicable_methods(medium, p_abs_mpa, t_working_c)
+    })
+
+
+def excluded_by_pressure(medium: GasMedium, p_abs_mpa: float) -> list[CompressibilityMethod]:
+    """Методы этой среды, которые не работают при таком давлении.
+
+    Нужны для предупреждения технологу: какой алгоритм отпадает и какой
+    остаётся. Для сред, где метод и так не применяется, ничего не вернётся.
+    """
+    return [
+        method for method in methods_for_medium(medium)
+        if p_abs_mpa > method.p_max_mpa
     ]

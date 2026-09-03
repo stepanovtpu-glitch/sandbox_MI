@@ -45,8 +45,12 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
   const [flowBasis, setFlowBasis] = useState<'working' | 'standard'>('working');
   const [qInputMin, setQInputMin] = useState(60);
   const [qInputMax, setQInputMax] = useState(325);
+  // Рабочий режим — диапазон: узел должен оставаться в области применения МИ
+  // и на минимуме, и на максимуме давления и температуры
   const [pAbs, setPAbs] = useState(0.5);
+  const [pAbsMax, setPAbsMax] = useState(0.5);
   const [tWorking, setTWorking] = useState(20);
+  const [tWorkingMax, setTWorkingMax] = useState(20);
   const [result, setResult] = useState<UugSelectionResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -71,6 +75,9 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
     if (max != null) setQInputMax(max);
     setPAbs(item.p_abs_mpa);
     setTWorking(item.t_working_c);
+    const stored = (item.request ?? {}) as { p_abs_max_mpa?: number | null; t_working_max_c?: number | null };
+    setPAbsMax(stored.p_abs_max_mpa ?? item.p_abs_mpa);
+    setTWorkingMax(stored.t_working_max_c ?? item.t_working_c);
   };
 
   /** Подбор — начало проекта УУГ: дальше состав комплектует КИПиА, утверждает метролог. */
@@ -89,7 +96,7 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
           flow_basis: flowBasis, q_input_min: qInputMin, q_input_max: qInputMax,
           q_std_min: result?.input.q_std_min ?? qInputMin,
           q_std_max: result?.input.q_std_max ?? qInputMax,
-          p_abs_mpa: pAbs, t_working_c: tWorking,
+          p_abs_mpa: pAbs, p_abs_max_mpa: pAbsMax, t_working_c: tWorking, t_working_max_c: tWorkingMax,
           best_method: result?.best_method ?? null,
         },
       });
@@ -116,8 +123,10 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
         q_input_max: qInputMax,
         q_std_min: qInputMin,
         q_std_max: qInputMax,
-        p_abs_mpa: pAbs,
-        t_working_c: tWorking,
+        p_abs_mpa: Math.min(pAbs, pAbsMax),
+        p_abs_max_mpa: Math.max(pAbs, pAbsMax),
+        t_working_c: Math.min(tWorking, tWorkingMax),
+        t_working_max_c: Math.max(tWorking, tWorkingMax),
       });
       setResult(response);
       refreshHistory();
@@ -200,12 +209,22 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
             </div>
             <div className="field-row">
               <label className="field">
-                <span>P абсолютное, МПа <Hint text="Не менее 0,1 МПа. Если в МИ не задан минимум давления, минимальным считается 0,1 МПа." /></span>
+                <span>P абс. от, МПа <Hint text="Диапазон рабочего давления. Не менее 0,1 МПа. МИ и приборы подбираются так, чтобы обе границы были в области применения. Если давление постоянное — задайте одинаковые значения." /></span>
                 <input type="number" step="any" value={pAbs} onChange={(event) => setPAbs(Number(event.target.value))} className={pAbs < 0.1 ? 'invalid' : ''} />
               </label>
               <label className="field">
-                <span>T рабочая, °C <Hint text="ПНГ: не ниже −10 °C. ПГ и СОГ: не ниже −23 °C." /></span>
+                <span>P абс. до, МПа</span>
+                <input type="number" step="any" value={pAbsMax} onChange={(event) => setPAbsMax(Number(event.target.value))} className={pAbsMax < pAbs ? 'invalid' : ''} />
+              </label>
+            </div>
+            <div className="field-row">
+              <label className="field">
+                <span>T рабочая от, °C <Hint text="Диапазон рабочей температуры. ПНГ: не ниже −10 °C. ПГ и СОГ: не ниже −23 °C. Верхняя граница проверяется по методам расчёта, применимым к выбранной среде." /></span>
                 <input type="number" step="any" value={tWorking} onChange={(event) => setTWorking(Number(event.target.value))} className={tWorking < (medium === 'png' ? -10 : -23) ? 'invalid' : ''} />
+              </label>
+              <label className="field">
+                <span>T рабочая до, °C</span>
+                <input type="number" step="any" value={tWorkingMax} onChange={(event) => setTWorkingMax(Number(event.target.value))} className={tWorkingMax < tWorking ? 'invalid' : ''} />
               </label>
             </div>
           </section>

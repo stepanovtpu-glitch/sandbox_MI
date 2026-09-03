@@ -88,11 +88,20 @@ def test_uug_selection_clamps_q_to_method_range():
     assert next(item for item in data['ranges'] if 'стандартных' in item['label'])
 
 
-def test_uug_selection_rejects_temperature_above_gost_limit():
-    """ГОСТ 30319-2015: методы расчёта применимы до 350 К (+76,85 °С)."""
-    data = client.post('/api/uug/selection', json=_base_payload(t_working_c=90)).json()
-    assert any('30319' in error and '350' in error for error in data['validation_errors'])
-    assert data['best_method'] is None
+def test_uug_selection_temperature_limit_follows_medium_methods():
+    """Границы режима задают методы, применимые к среде, а не ГОСТ 30319 «вообще».
+
+    Для ПНГ профильный метод ГСССД МР 113-03 работает до +226 °C, поэтому 90 °C
+    не ошибка; программа лишь предупреждает, какие алгоритмы отпадают.
+    Для природного газа выше +76,85 °C методов расчёта нет — это ошибка.
+    """
+    png = client.post('/api/uug/selection', json=_base_payload(t_working_c=90)).json()
+    assert png['validation_errors'] == []
+    assert any('ГСССД МР 113-03' in warning for warning in png['algorithm_warnings'])
+
+    pg = client.post('/api/uug/selection', json=_base_payload(medium='pg', t_working_c=90)).json()
+    assert any('76.85' in error or '76,85' in error for error in pg['validation_errors'])
+    assert pg['best_method'] is None
 
 
 def test_uug_selection_rejects_pressure_above_gost_limit():
@@ -101,11 +110,19 @@ def test_uug_selection_rejects_pressure_above_gost_limit():
     assert any('30319.3' in error for error in data['validation_errors'])
 
 
-def test_uug_selection_warns_about_density_method_limit():
-    """Выше 7,5 МПа метод по плотности (ГОСТ 30319.2) неприменим — это предупреждение, не ошибка."""
-    data = client.post('/api/uug/selection', json=_base_payload(p_abs_mpa=10)).json()
-    assert data['validation_errors'] == []
-    assert any('30319.2' in warning for warning in data['algorithm_warnings'])
+def test_uug_selection_density_method_warning_only_for_natural_gas():
+    """Предел 7,5 МПа по ГОСТ 30319.2 к попутному нефтяному газу не относится.
+
+    Метод по плотности, азоту и диоксиду углерода для ПНГ не применяется вообще,
+    поэтому ссылаться на его границу в подборе для ПНГ неверно.
+    """
+    png = client.post('/api/uug/selection', json=_base_payload(p_abs_mpa=10)).json()
+    assert png['validation_errors'] == []
+    assert not any('30319.2' in warning for warning in png['algorithm_warnings'])
+
+    pg = client.post('/api/uug/selection', json=_base_payload(medium='pg', p_abs_mpa=10)).json()
+    assert pg['validation_errors'] == []
+    assert any('30319.2' in warning for warning in pg['algorithm_warnings'])
 
 
 def test_uug_selection_flowmeter_requirements_show_both_conditions():
@@ -201,3 +218,41 @@ def test_uug_selection_compares_flow_in_method_own_conditions():
     assert any('при рабочих условиях' in reason for reason in best['reasons'])
     standard = next(item for item in data['ranges'] if 'стандартных' in item['label'])
     assert standard['q_max'] > 1600, 'наружу диапазон отдаётся пересчитанным в стандартные условия'
+
+
+def test_uug_selection_checks_whole_pressure_and_temperature_range():
+    """Режим задан диапазоном: МИ должна накрывать обе границы.
+
+    Давление 0,5–3,0 МПа выходит за верх области применения МИ ДРГ (2,5 МПа),
+    и это должно быть видно в причинах, а не спрятано за средней точкой.
+    """
+    data = client.post('/api/uug/selection', json=_base_payload(p_abs_mpa=0.5, p_abs_max_mpa=3.0)).json()
+    assert data['validation_errors'] == []
+    texts = ' '.join(
+        reason for item in [data['best_method'], *data['alternatives']] if item for reason in item['reasons']
+    )
+    assert '0.5–3 МПа' in texts
+
+
+def test_uug_selection_converts_flow_over_the_whole_mode():
+    """Приведение к ст. у. берёт наихудший угол диапазона P и T.
+
+    При 0,5–1,0 МПа верхняя граница расхода в ст. у. считается по 1,0 МПа,
+    иначе часть режима осталась бы вне проверки.
+    """
+    point = client.post('/api/uug/selection', json=_base_payload(p_abs_mpa=0.5)).json()
+    ranged = client.post('/api/uug/selection', json=_base_payload(p_abs_mpa=0.5, p_abs_max_mpa=1.0)).json()
+    assert ranged['q_requested_std'][1] > point['q_requested_std'][1]
+    assert ranged['q_requested_std'][0] == point['q_requested_std'][0]
+
+
+def test_uug_selection_prefers_newer_method():
+    """При прочих равных первой идёт более новая методика."""
+    data = client.post('/api/uug/selection', json=_base_payload()).json()
+    ordered = [item for item in [data['best_method'], *data['alternatives']] if item['verdict'] != 'not_applicable']
+    years = [
+        int(item['registration_number'].split('/')[-1].split('-')[-1])
+        for item in ordered
+        if item['registration_number'].split('/')[-1].split('-')[-1].isdigit()
+    ]
+    assert years == sorted(years, reverse=True) or years[0] == max(years)

@@ -19,7 +19,7 @@ from app.instrument_library import list_instruments
 from app.method_library import list_current_methods
 from app.schemas import GasMedium, Instrument, InstrumentStatus, InstrumentType, UugSelectionRequest
 from app.compressibility import METHODS, applicable_methods, check_method_range, equivalent_methods, method_title
-from app.uug_selection import _covers, _working_flow_rate
+from app.uug_selection import _covers, working_view
 
 REQUIRED_SLOTS: tuple[InstrumentType, ...] = (
     InstrumentType.FLOWMETER,
@@ -49,18 +49,25 @@ def selection_context(project: dict) -> dict | None:
         pipe_dn_mm=selection['pipe_dn_mm'],
         straight_before_dn=selection.get('straight_before_dn', 10),
         straight_after_dn=selection.get('straight_after_dn', 5),
+        flow_basis=selection.get('flow_basis', 'working'),
+        q_input_min=selection.get('q_input_min'),
+        q_input_max=selection.get('q_input_max'),
         q_std_min=selection['q_std_min'],
         q_std_max=selection['q_std_max'],
         p_abs_mpa=selection['p_abs_mpa'],
+        # Режим может быть задан диапазоном; у проектов, созданных до этого,
+        # верхних границ нет — тогда диапазон вырождается в точку.
+        p_abs_max_mpa=selection.get('p_abs_max_mpa'),
         t_working_c=selection['t_working_c'],
+        t_working_max_c=selection.get('t_working_max_c'),
     )
     best = selection.get('best_method') or {}
     method = next((item for item in list_current_methods() if item.mi_id == best.get('mi_id')), None)
     return {
         'request': request,
         'method': method,
-        'qw_min': _working_flow_rate(request.q_std_min, request.p_abs_mpa, request.t_working_c),
-        'qw_max': _working_flow_rate(request.q_std_max, request.p_abs_mpa, request.t_working_c),
+        'qw_min': working_view(request, request.q_std_min, request.q_std_max)[0],
+        'qw_max': working_view(request, request.q_std_min, request.q_std_max)[1],
     }
 
 
@@ -73,13 +80,22 @@ def required_k_methods(ctx: dict) -> tuple[set[str], str]:
     """
     method = ctx['method']
     request: UugSelectionRequest = ctx['request']
-    fitting = set(applicable_methods(request.medium, request.p_abs_mpa, request.t_working_c))
+    # Метод должен работать на всём режиме: проверяем обе границы диапазона
+    p_min, p_max = request.p_range
+    t_min, t_max = request.t_range
+    fitting = set(applicable_methods(request.medium, p_min, t_min)) & set(
+        applicable_methods(request.medium, p_max, t_max)
+    )
 
     if method is not None and method.compressibility_method:
         prescribed = equivalent_methods(method.compressibility_method)
         title = method_title(method.compressibility_method)
         allowed = prescribed & fitting if prescribed & fitting else prescribed
-        limits = check_method_range(method.compressibility_method, request.p_abs_mpa, request.t_working_c, request.medium)
+        limits = (
+            check_method_range(method.compressibility_method, p_min, t_min, request.medium)
+            + check_method_range(method.compressibility_method, p_max, t_max, request.medium)
+        )
+        limits = list(dict.fromkeys(limits))
         reason = f'МИ предписывает {title}'
         if limits:
             reason += '. ' + ' '.join(limits)
@@ -88,8 +104,8 @@ def required_k_methods(ctx: dict) -> tuple[set[str], str]:
     if not fitting:
         media_title = {'png': 'попутного нефтяного газа', 'pg': 'природного газа', 'sog': 'сухого отбензиненного газа'}
         return set(), (
-            f'для {media_title.get(request.medium.value, request.medium.value)} при {request.p_abs_mpa:g} МПа '
-            f'и {request.t_working_c:g} °C нет метода расчёта в пределах области применения'
+            f'для {media_title.get(request.medium.value, request.medium.value)} при {p_min:g}–{p_max:g} МПа '
+            f'и {t_min:g}…{t_max:g} °C нет метода расчёта в пределах области применения'
         )
 
     titles = ' или '.join(sorted(method_title(code, short=True) for code in fitting))
@@ -136,15 +152,23 @@ def check_instrument(slot: InstrumentType, instrument: Instrument, ctx: dict) ->
             errors.append(error)
 
     elif slot == InstrumentType.PRESSURE:
-        if not _covers(instrument.range_min, instrument.range_max, request.p_abs_mpa, request.p_abs_mpa):
-            errors.append(f'{name}: диапазон {rng} МПа не охватывает рабочее давление {request.p_abs_mpa:g} МПа.')
+        p_min, p_max = request.p_range
+        if not _covers(instrument.range_min, instrument.range_max, p_min, p_max):
+            errors.append(
+                f'{name}: диапазон {rng} МПа не охватывает рабочее давление '
+                + (f'{p_min:g} МПа.' if p_min == p_max else f'{p_min:g}–{p_max:g} МПа.')
+            )
         error = _tolerance_error(name, 'δP', instrument.error_percent, method.delta_p_max if method else None)
         if error:
             errors.append(error)
 
     elif slot == InstrumentType.TEMPERATURE:
-        if not _covers(instrument.range_min, instrument.range_max, request.t_working_c, request.t_working_c):
-            errors.append(f'{name}: диапазон {rng} °C не охватывает рабочую температуру {request.t_working_c:g} °C.')
+        t_min, t_max = request.t_range
+        if not _covers(instrument.range_min, instrument.range_max, t_min, t_max):
+            errors.append(
+                f'{name}: диапазон {rng} °C не охватывает рабочую температуру '
+                + (f'{t_min:g} °C.' if t_min == t_max else f'{t_min:g}…{t_max:g} °C.')
+            )
         error = _tolerance_error(name, 'δT', instrument.error_percent, method.delta_t_max if method else None)
         if error:
             errors.append(error)
