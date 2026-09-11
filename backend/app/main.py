@@ -34,6 +34,7 @@ from app.schemas import (
     CalculationRequest,
     CalculationResult,
     CalculationTemplate,
+    GasCompressibilityRequest,
     Instrument,
     InstrumentRecommendationRequest,
     InstrumentReplacementRecommendation,
@@ -68,6 +69,7 @@ from app.uug_projects import (
     set_instruments,
 )
 from app.compressibility import METHODS as COMPRESSIBILITY_METHODS
+from app.gas_physics import k_ratio_from_composition
 from app.uug_composition import project_candidates, validate_composition
 from app.selection_history import list_queries, remember_query
 from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
@@ -610,6 +612,48 @@ def compressibility_methods(user: dict[str, object] = Depends(require_permission
         }
         for method in COMPRESSIBILITY_METHODS.values()
     ]
+
+
+@app.post('/api/gas-physics/compressibility')
+def gas_physics_compressibility(
+    payload: GasCompressibilityRequest,
+    user: dict[str, object] = Depends(require_permission('method:read')),
+):
+    """Коэффициент сжимаемости K по составу газа — инженерная проверка/мониторинг.
+
+    Расчёт по корреляции Дранчука—Абу-Кассема (см. app/gas_physics.py),
+    не аттестованная замена ГОСТ 30319.3 или ГСССД МР 113-03: для
+    коммерческого учёта результат сверяется с сертифицированным вычислителем.
+    """
+    try:
+        ratio = k_ratio_from_composition(
+            payload.components,
+            p_working_mpa=payload.p_abs_mpa,
+            t_working_c=payload.t_working_c,
+            p_standard_mpa=payload.p_standard_mpa,
+            t_standard_c=payload.t_standard_c,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+    return {
+        'k': ratio.k,
+        'z_working': ratio.working.z,
+        'z_standard': ratio.standard.z,
+        'method': ratio.working.method,
+        'standard_compliant': ratio.working.standard_compliant,
+        'working': {
+            'ppr': ratio.working.ppr,
+            'tpr': ratio.working.tpr,
+            'in_range': ratio.working.in_range,
+        },
+        'pseudo_critical': {
+            'apparent_molar_mass': ratio.working.pseudo_critical.apparent_molar_mass,
+            'relative_density': ratio.working.pseudo_critical.relative_density,
+            'critical_temperature_k': ratio.working.pseudo_critical.critical_temperature_k,
+            'critical_pressure_mpa': ratio.working.pseudo_critical.critical_pressure_mpa,
+        },
+        'warnings': ratio.warnings,
+    }
 
 
 @app.get('/api/uug/projects')

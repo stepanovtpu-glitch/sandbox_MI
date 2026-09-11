@@ -110,7 +110,37 @@ export type MeasurementMethodVersion = {
 
 export type LineParameters = { pipe_dn_mm: number; flowmeter_dn_mm: number; straight_before_dn: number; straight_after_dn: number; q_min: number; q_max: number; q_unit: string; p_min_mpa: number; p_max_mpa: number; t_min_c: number; t_max_c: number; };
 export type ErrorContributions = { delta_q: number; delta_p: number; delta_t: number; delta_vc: number; delta_c: number; kp: number; kt: number; kc: number; };
-export type CalculationContext = { working_flow_rate?: number; gauge_pressure_mpa?: number; temperature_c?: number; atmospheric_pressure_mpa?: number; z_working?: number; z_standard?: number; compressibility_ratio?: number; };
+export type CalculationContext = {
+  working_flow_rate?: number; gauge_pressure_mpa?: number; temperature_c?: number; atmospheric_pressure_mpa?: number;
+  z_working?: number; z_standard?: number; compressibility_ratio?: number;
+  // Состав газа (моль %, ключи — как в акте лабораторного анализа): если задан
+  // и z_working/z_standard/compressibility_ratio не введены вручную, K считает
+  // сервер по составу (инженерная корреляция, см. backend/app/gas_physics.py)
+  // вместо прежнего K = 1.
+  gas_composition?: Record<string, number>;
+};
+
+export type GasCompressibilityResult = {
+  k: number;
+  z_working: number;
+  z_standard: number;
+  method: string;
+  standard_compliant: boolean;
+  working: { ppr: number; tpr: number; in_range: boolean };
+  pseudo_critical: { apparent_molar_mass: number; relative_density: number; critical_temperature_k: number; critical_pressure_mpa: number };
+  warnings: string[];
+};
+
+/**
+ * Коэффициент сжимаемости K по составу газа — инженерная корреляция для
+ * независимой проверки, не аттестованная замена ГОСТ 30319.3/ГСССД МР 113-03.
+ */
+export function getGasCompressibility(components: Record<string, number>, pAbsMpa: number, tWorkingC: number, pStandardMpa = 0.101325, tStandardC = 20) {
+  return request<GasCompressibilityResult>('/api/gas-physics/compressibility', {
+    method: 'POST',
+    body: JSON.stringify({ components, p_abs_mpa: pAbsMpa, t_working_c: tWorkingC, p_standard_mpa: pStandardMpa, t_standard_c: tStandardC }),
+  });
+}
 
 export type CalculationResult = {
   delta_total: number;

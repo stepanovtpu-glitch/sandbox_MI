@@ -1,6 +1,7 @@
 from math import sqrt
 from typing import Any
 
+from app.gas_physics import k_ratio_from_composition
 from app.schemas import CalculationRequest, CalculationResult, ContributionResult
 
 STANDARD_TEMPERATURE_K = 293.15
@@ -44,14 +45,32 @@ def calculate_drg_series(request: CalculationRequest, context: dict[str, Any] | 
     z_working = context.get('z_working')
     z_standard = context.get('z_standard')
     k = context.get('compressibility_ratio')
+    gas_composition = context.get('gas_composition')  # dict[str, float] из акта лабораторного анализа
 
     pressure_abs = absolute_pressure_mpa(gauge_pressure, atmospheric_pressure)
     temperature_k = thermodynamic_temperature_k(temperature_c)
-    compressibility = compressibility_ratio(
-        z_working=float(z_working) if z_working is not None else None,
-        z_standard=float(z_standard) if z_standard is not None else None,
-        k=float(k) if k is not None else None,
-    )
+
+    k_source = 'default'
+    k_warnings: list[str] = []
+    if z_working is not None or z_standard is not None or k is not None:
+        # Введено вручную — приоритет над расчётом по составу
+        compressibility = compressibility_ratio(
+            z_working=float(z_working) if z_working is not None else None,
+            z_standard=float(z_standard) if z_standard is not None else None,
+            k=float(k) if k is not None else None,
+        )
+        if z_working is not None or z_standard is not None:
+            k_source = 'z_manual'
+    elif gas_composition:
+        # K не задан вручную, но есть состав газа — считаем по составу вместо K = 1.
+        # Инженерная корреляция DAK, не аттестованный расчёт по ГОСТ 30319.3
+        # или ГСССД МР 113-03 — см. app/gas_physics.py.
+        ratio = k_ratio_from_composition(gas_composition, p_working_mpa=pressure_abs, t_working_c=temperature_c)
+        compressibility = ratio.k
+        k_source = 'composition'
+        k_warnings = ratio.warnings
+    else:
+        compressibility = compressibility_ratio()
     q_standard = standard_flow_rate(
         working_flow_rate=flow_rate,
         absolute_pressure=pressure_abs,
@@ -108,7 +127,8 @@ def calculate_drg_series(request: CalculationRequest, context: dict[str, Any] | 
         f'p_abs={round(pressure_abs, 6)}',
         f't_c={temperature_c}',
         f'T={round(temperature_k, 6)}',
-        f'K={round(compressibility, 9)}',
+        f'K={round(compressibility, 9)}; источник={k_source}',
+        *(f'K: {warning}' for warning in k_warnings),
         f'Q_standard={round(q_standard, 6)}',
         f'delta_q={errors.delta_q}',
         f'delta_p={errors.delta_p}; kp={errors.kp}; weighted_delta_p={weighted["delta_p"]}',

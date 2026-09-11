@@ -438,6 +438,21 @@ class GasCompositionAct(BaseModel):
         return sum(self.components.values())
 
 
+class GasCompressibilityRequest(BaseModel):
+    """Запрос расчёта коэффициента сжимаемости газа по составу (app.gas_physics).
+
+    Расчёт — инженерная корреляция Дранчука—Абу-Кассема для независимой
+    проверки и мониторинга, не аттестованная замена ГОСТ 30319.3 или
+    ГСССД МР 113-03 (см. app/gas_physics.py).
+    """
+
+    components: dict[str, float] = Field(min_length=1)
+    p_abs_mpa: float = Field(gt=0)
+    t_working_c: float
+    p_standard_mpa: float = Field(default=0.101325, gt=0)
+    t_standard_c: float = 20.0
+
+
 class UugSelectionResponse(BaseModel):
     input: UugSelectionRequest
     # Что ввёл пользователь и во что это пересчитано — чтобы приведение к
