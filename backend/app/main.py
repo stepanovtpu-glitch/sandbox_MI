@@ -73,6 +73,7 @@ from app.uug_projects import (
 from app.compressibility import METHODS as COMPRESSIBILITY_METHODS
 from app.gas_physics import k_ratio_from_composition
 from app.llm_client import LlmClient, LlmNotConfigured, explain_selection
+from app.yandex_messenger import MessengerCourier, notify_project_event
 from app.uug_composition import project_candidates, validate_composition
 from app.selection_history import list_queries, remember_query
 from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
@@ -673,6 +674,12 @@ def llm_status(user: dict[str, object] = Depends(require_permission('system:read
     }
 
 
+@app.get('/api/messenger/status')
+def messenger_status(user: dict[str, object] = Depends(require_permission('system:read'))):
+    """Подключён ли канал Яндекс Мессенджера. Токен наружу не отдаётся."""
+    return MessengerCourier().status()
+
+
 @app.post('/api/llm/explain-selection')
 def llm_explain_selection(payload: LlmExplainRequest, user: dict[str, object] = Depends(require_permission('method:read'))):
     """Связный текст по готовому результату подбора — для служебной записки.
@@ -680,15 +687,18 @@ def llm_explain_selection(payload: LlmExplainRequest, user: dict[str, object] = 
     Вердикт и числа модель получает готовыми; если LLM не настроена — 503,
     а не молчаливая заглушка.
     """
+    llm = LlmClient()
+    if llm.settings.configured and not llm.available():
+        raise HTTPException(status_code=503, detail='Корпоративная LLM сейчас недоступна с этого узла. Работа продолжается без неё.')
     try:
-        reply = explain_selection(LlmClient(), payload.selection, payload.audience)
+        reply = explain_selection(llm, payload.selection, payload.audience)
     except LlmNotConfigured as error:
         raise HTTPException(status_code=503, detail=str(error))
     except Exception as error:  # noqa: BLE001 — шлюз внешний, причина уходит в журнал
         logging.getLogger(__name__).warning('LLM explain failed: %s', error)
         raise HTTPException(status_code=502, detail='Корпоративная LLM не ответила. Повторите позже.')
     log_audit_event('llm_explain_selection', 'uug_selection', payload.audience, {'model': reply.model}, actor=_actor(user))
-    return {'text': reply.text, 'model': reply.model}
+    return {'text': reply.text, 'model': reply.model, 'notes': reply.notes}
 
 
 @app.get('/api/uug/projects')
@@ -837,6 +847,10 @@ def _apply_status(project_id: str, new_status: str, payload: ProjectStatusPayloa
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     log_audit_event(f'uug_project_{new_status}', 'uug_project', project_id, {'comment': payload.comment}, actor=_actor(user))
+    # Уведомление в Яндекс Мессенджер — канал рабочей переписки; отказ канала действие не ломает
+    event = {STATUS_REVIEW: 'submitted', STATUS_APPROVED: 'approved', STATUS_REJECTED: 'rejected', STATUS_DRAFT: 'reopened'}.get(new_status)
+    if event:
+        notify_project_event(project, event, _actor(user), payload.comment)
     return project
 
 

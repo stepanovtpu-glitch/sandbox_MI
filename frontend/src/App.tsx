@@ -369,7 +369,7 @@ function App() {
       <aside className="side-nav"><div className="brand"><img className="brand-logo" src={brandLogo(theme)} alt={BRAND.logoAlt} /><div><div className="brand-title">{BRAND.productName}</div><div className="brand-subtitle">{BRAND.companyName}</div></div></div><nav className="nav-list">{visibleNavItems.map((item) => (
         <button key={item.view} className={`nav-item nav-button ${activeView === item.view ? 'active' : ''}`} onClick={() => setActiveView(item.view)}>{item.icon} {item.label}</button>
       ))}
-      {can('calculation:create') && <button className="nav-item nav-button" onClick={() => setIsHistoryOpen(true)}><History size={18} /> История</button>}</nav></aside>
+      {can('calculation:create') && <button className="nav-item nav-button" onClick={() => setIsHistoryOpen(true)}><History size={18} /> История</button>}</nav><div className="photo-credit">{BRAND.photoCredit}</div></aside>
       <main className="workspace">
         <header className="topbar">
           <h1>{viewCopy[activeView].title}</h1>

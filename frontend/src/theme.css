@@ -6,45 +6,48 @@
 */
 
 :root {
-  /* Бренд */
-  --ink-green: #006654;
+  /* Бренд — палитра корпоративного портала «Архимед» (app/static/styles.css, решение Р-81):
+     фирменный зелёный ИНК #026958, латунь #c8a468, графитовые панели, сталь для справочного. */
+  --ink-green: #026958;
   --ink-slate: #344855;
+  --brass: #c8a468;
+  --brass-2: #e8d3a8;
 
-  /* Тёмная тема (по умолчанию) */
-  --bg: #0b141b;
-  --bg-deep: #070e13;
-  --surface: #10202a;
-  --surface-2: #142835;
-  --surface-3: #18303f;
-  --border: rgba(140, 170, 188, 0.16);
-  --border-strong: rgba(46, 176, 143, 0.45);
-  --text: #e9f1f4;
-  --muted: #93aab8;
-  --accent: #2eb08f;          /* зелёный ИНК, осветлён для тёмного фона */
-  --accent-strong: #43c9a6;
-  --accent-soft: rgba(46, 176, 143, 0.14);
-  --ok: #46b578;
-  --warn: #d4a041;
-  --danger: #e06e63;
-  --info: #4f9dc9;
-  --orange: #d4a041;          /* прежний оранжевый канал уводим в янтарный */
-  --shadow: 0 22px 70px rgba(2, 8, 12, 0.5);
+  /* Тёмная тема (по умолчанию) — «Архимед» */
+  --bg: #0c0e13;
+  --bg-deep: #07080b;
+  --surface: #10131a;
+  --surface-2: #141822;
+  --surface-3: #191e2a;
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(200, 164, 104, 0.45);
+  --text: #e9e6df;
+  --muted: #9aa3ae;            /* контраст к панели 7,6 — норма Р-81 не ниже 4,5 */
+  --accent: #c8a468;           /* латунь — акцент интерфейса */
+  --accent-strong: #e8d3a8;
+  --accent-soft: rgba(200, 164, 104, 0.14);
+  --ok: #93bfa6;
+  --warn: #d3b071;
+  --danger: #c88585;
+  --info: #8fa5b8;             /* сталь */
+  --orange: #d3b071;
+  --shadow: 0 42px 72px -34px rgba(0, 0, 0, 0.92), 0 12px 26px -18px rgba(0, 0, 0, 0.7);
 
-  --photo-overlay: linear-gradient(180deg, rgba(7, 14, 19, 0.72), rgba(7, 14, 19, 0.9));
-  --surface-rgb: 16, 32, 42;
-  --font-sans: 'Golos Text', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'IBM Plex Mono', Consolas, monospace;
+  --photo-overlay: linear-gradient(100deg, rgba(4, 7, 11, 0.86), rgba(4, 7, 11, 0.62) 40%, rgba(5, 9, 14, 0.5));
+  --surface-rgb: 16, 19, 26;
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', 'Golos Text', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Mono', 'IBM Plex Mono', Consolas, monospace;
 
   /* rgb-триплеты для полупрозрачных заливок в существующих стилях */
-  --accent-rgb: 46, 176, 143;
-  --ok-rgb: 70, 181, 120;
-  --warn-rgb: 212, 160, 65;
-  --danger-rgb: 224, 110, 99;
-  --info-rgb: 79, 157, 201;
+  --accent-rgb: 200, 164, 104;
+  --ok-rgb: 147, 191, 166;
+  --warn-rgb: 211, 176, 113;
+  --danger-rgb: 200, 133, 133;
+  --info-rgb: 143, 165, 184;
   --raise-rgb: 255, 255, 255;      /* «подсветка» поверх тёмных панелей */
-  --well-rgb: 6, 13, 18;           /* «углубление» — тёмные вставки */
-  --chrome-rgb: 14, 26, 34;        /* топбар и служебные полосы */
-  --accent-contrast: #04211a;      /* текст на акцентной кнопке */
+  --well-rgb: 7, 8, 11;            /* «углубление» — тёмные вставки */
+  --chrome-rgb: 11, 13, 18;        /* топбар и служебные полосы */
+  --accent-contrast: #14110a;      /* текст на латунной кнопке */
 }
 
 html[data-theme='light'] {
@@ -54,12 +57,12 @@ html[data-theme='light'] {
   --surface-2: #f2f6f8;
   --surface-3: #e9f0f3;
   --border: rgba(52, 72, 85, 0.16);
-  --border-strong: rgba(0, 102, 84, 0.45);
+  --border-strong: rgba(2, 105, 88, 0.45);
   --text: #17242e;
   --muted: #5c7180;
-  --accent: #006654;          /* фирменный зелёный как есть */
+  --accent: #026958;          /* фирменный зелёный ИНК («Архимед») */
   --accent-strong: #0a7a66;
-  --accent-soft: rgba(0, 102, 84, 0.1);
+  --accent-soft: rgba(2, 105, 88, 0.1);
   --ok: #1e7d4f;
   --warn: #9a6b12;
   --danger: #b04545;
@@ -70,7 +73,7 @@ html[data-theme='light'] {
   --photo-overlay: linear-gradient(180deg, rgba(238, 242, 244, 0.88), rgba(238, 242, 244, 0.96));
   --surface-rgb: 255, 255, 255;
 
-  --accent-rgb: 0, 102, 84;
+  --accent-rgb: 2, 105, 88;
   --ok-rgb: 30, 125, 79;
   --warn-rgb: 154, 107, 18;
   --danger-rgb: 176, 69, 69;
@@ -98,7 +101,7 @@ body::before {
   position: fixed;
   inset: 0;
   z-index: -1;
-  background-image: var(--photo-overlay), url('./assets/photos/baikal-winter-ice.jpg');
+  background-image: var(--photo-overlay), url('./assets/photos/baikal-ice.jpg');
   background-size: cover;
   background-position: center 30%;
   background-attachment: fixed;
@@ -282,7 +285,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 }
 .session-name { font-size: 12.5px; font-weight: 600; }
 .session-role {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--accent);
   font-family: var(--font-mono);
   text-transform: uppercase;
@@ -425,7 +428,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .uug-slot { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: rgba(var(--raise-rgb), 0.03); }
 .uug-slot.required { border-left: 3px solid var(--accent); }
 .uug-slot-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 7px; }
-.uug-slot-head .pill { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; border-radius: 999px; padding: 3px 9px; }
+.uug-slot-head .pill { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; border-radius: 999px; padding: 3px 9px; }
 .uug-slot-head .pill.must { color: var(--accent); background: var(--accent-soft); }
 .uug-slot-head .pill.opt { color: var(--muted); background: rgba(var(--raise-rgb), 0.06); }
 .uug-slot-reqs { margin: 0 0 8px; padding-left: 18px; font-size: 12.5px; color: var(--muted); display: grid; gap: 3px; }
@@ -606,7 +609,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   color: var(--muted);
 }
 .method-reasons.problem li { color: var(--warn); }
-.method-reasons.problem li::before { content: '✕'; font-size: 9px; top: 1px; color: var(--warn); }
+.method-reasons.problem li::before { content: '✕'; font-size: 11px; top: 1px; color: var(--warn); }
 .method-card.not_applicable .method-reasons.problem li,
 .method-card.not_applicable .method-reasons.problem li::before { color: var(--danger); }
 .method-reasons-toggle {
@@ -927,7 +930,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
    фильтры в три ряда. На рабочем месте это съедало половину экрана,
    поэтому вся вертикальная метрика уплотнена. */
 .field { gap: 4px; margin-bottom: 8px; }
-.field span { font-size: 10.5px; }
+.field span { font-size: 11px; }
 .field input, .field select { height: 30px; font-size: 12px; }
 .form-group { padding: 10px 11px; margin-bottom: 9px; }
 .form-group h3 { margin-bottom: 8px; font-size: 12.5px; }
@@ -938,7 +941,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .center-panel { padding: 13px; }
 .three-column-layout { gap: 11px; padding: 11px; }
 .kpi { padding: 10px 12px; }
-.kpi span { font-size: 10.5px; margin-bottom: 5px; }
+.kpi span { font-size: 11px; margin-bottom: 5px; }
 .kpi strong { font-size: 17px; }
 .kpi-grid { gap: 8px; margin-bottom: 11px; }
 .chart-card { padding: 12px; }
@@ -959,7 +962,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 }
 .project-filters::-webkit-scrollbar { display: none; }
 .project-filter { height: 30px; padding: 0 11px; font-size: 12.5px; flex: none; gap: 6px; }
-.project-filter span { font-size: 10.5px; padding: 0 5px; }
+.project-filter span { font-size: 11px; padding: 0 5px; }
 .project-card { padding: 11px 13px; }
 .project-title strong { font-size: 13.5px; }
 .project-title span { font-size: 11px; }
@@ -994,7 +997,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 @media (max-width: 640px) {
   .field-row { grid-template-columns: 1fr 1fr; gap: 8px; }
   .field-hint {
-    font-size: 10.5px;
+    font-size: 11px;
     line-height: 1.35;
     margin: -2px 0 7px;
     color: var(--muted);
@@ -1004,7 +1007,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   .field { margin-bottom: 7px; }
   .uug-form-panel { padding: 11px; }
   .uug-submit { height: 40px; margin-top: 2px; }
-  .panel-header span { font-size: 10px; }
+  .panel-header span { font-size: 11px; }
 }
 
 /* Комплектация по слотам: одна позиция на тип, отказы с причинами */
@@ -1106,7 +1109,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--muted);
@@ -1130,13 +1133,13 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 }
 .selection-history-item:hover { border-color: var(--border-strong); background: var(--accent-soft); }
 .selection-history-top { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
-.selection-history-time { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
-.selection-history-verdict { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+.selection-history-time { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.selection-history-verdict { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 .selection-history-verdict.fits { color: var(--ok); }
 .selection-history-verdict.fits_with_caveats { color: var(--warn); }
 .selection-history-verdict.not_applicable { color: var(--danger); }
-.selection-history-params { font-size: 10.5px; color: var(--muted); line-height: 1.35; }
-.selection-history-mi { font-family: var(--font-mono); font-size: 9.5px; color: var(--accent); overflow-wrap: anywhere; }
+.selection-history-params { font-size: 11px; color: var(--muted); line-height: 1.35; }
+.selection-history-mi { font-family: var(--font-mono); font-size: 11px; color: var(--accent); overflow-wrap: anywhere; }
 
 @media (max-width: 1400px) {
   .uug-screen .uug-layout { grid-template-columns: 320px 1fr; }
@@ -1230,7 +1233,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.method-picker-trigger .method-picker-summary { color: var(--accent); font-family: var(--font-mono); font-size: 10.5px; -webkit-line-clamp: 2; }
+.method-picker-trigger .method-picker-summary { color: var(--accent); font-family: var(--font-mono); font-size: 11px; -webkit-line-clamp: 2; }
 
 .method-picker-backdrop {
   position: fixed;
@@ -1274,7 +1277,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .method-picker-row.active { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.1); }
 .method-picker-row b { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
 .method-picker-row span { font-size: 12px; line-height: 1.35; }
-.method-picker-row small { color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
+.method-picker-row small { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
 
 /* ============ Плотность форм карточки МИ ============
    Числовые поля занимали половину экрана каждое. Ячейка держит ширину
@@ -1294,12 +1297,12 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   line-height: 1.45;
   margin: -4px 0 8px;
 }
-.version-pick small { color: var(--muted); font-size: 10.5px; line-height: 1.35; }
+.version-pick small { color: var(--muted); font-size: 11px; line-height: 1.35; }
 .version-pick-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .version-pick-top b { font-size: 12px; }
 .version-pick-comment { color: var(--text); opacity: 0.75; }
 .version-state {
-  font-size: 10px;
+  font-size: 11px;
   padding: 2px 7px;
   border-radius: 999px;
   color: var(--muted);
@@ -1353,7 +1356,7 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .report-tile-context { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; margin: 4px 0 8px; }
 .report-tile-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 10px; }
 .report-tile-facts div { padding: 8px 10px; border-radius: 10px; background: rgba(var(--raise-rgb), 0.04); border: 1px solid var(--border); }
-.report-tile-facts span { display: block; color: var(--muted); font-size: 10.5px; margin-bottom: 3px; }
+.report-tile-facts span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; }
 .report-tile-facts b { font-family: var(--font-mono); font-size: 13px; }
 .report-tile-facts b.ok { color: var(--ok); }
 .report-tile-facts b.warn { color: var(--warn); }
@@ -1414,3 +1417,9 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   .selection-history-list { grid-template-columns: 1fr 1fr; }
   .method-picker-trigger { min-height: 46px; }
 }
+
+/* Авторство фотографий «Архимеда» — условие лицензий CC BY-SA 4.0 / CC BY 4.0 */
+.side-nav { display: flex; flex-direction: column; }
+.side-nav .nav-list { flex: 1; align-content: start; }
+.photo-credit { margin-top: 14px; color: var(--muted); font-size: 11px; line-height: 1.4; opacity: 0.8; }
+@media (max-width: 1100px) { .photo-credit { display: none; } }

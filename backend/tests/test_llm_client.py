@@ -68,7 +68,7 @@ def test_status_probe_reports_unreachable_gateway():
     status = LlmClient(_settings(), transport=httpx.MockTransport(handler)).status()
     assert status.configured is True
     assert status.reachable is False
-    assert 'недоступен' in status.detail
+    assert 'недоступн' in status.detail
 
 
 def test_explain_selection_passes_facts_verbatim_and_forbids_recalculation():
@@ -114,3 +114,62 @@ def test_explain_endpoint_returns_503_when_llm_not_configured(monkeypatch):
         monkeypatch.delenv(name, raising=False)
     response = client.post('/api/llm/explain-selection', json={'selection': {'summary': 'x'}, 'audience': 'technologist'})
     assert response.status_code == 503
+
+
+def test_ollama_protocol_uses_api_chat_without_stream_or_think():
+    """Корпоративная LLM — Ollama: родной /api/chat, stream=false, think=false, num_predict."""
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen['url'] = str(request.url)
+        seen['body'] = json.loads(request.content)
+        return httpx.Response(200, json={
+            'model': 'gemma4:e4b',
+            'message': {'role': 'assistant', 'content': 'Методика подходит для режима.'},
+            'prompt_eval_count': 120, 'eval_count': 18,
+        })
+
+    settings = LlmSettings(base_url='http://10.61.157.1:11434', api_key=None, model='gemma4:e4b', timeout_s=5)
+    assert settings.is_ollama
+    reply = LlmClient(settings, transport=httpx.MockTransport(handler)).chat([{'role': 'user', 'content': 'Объясни'}])
+
+    assert seen['url'] == 'http://10.61.157.1:11434/api/chat'
+    assert seen['body']['stream'] is False
+    assert seen['body']['think'] is False
+    assert seen['body']['options']['num_predict'] > 0
+    assert seen['body']['messages'][0]['role'] == 'system'
+    assert reply.text == 'Методика подходит для режима.'
+    assert reply.prompt_tokens == 120
+
+
+def test_ollama_status_probes_api_version():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == '/api/version'
+        return httpx.Response(200, json={'version': '0.24.0'})
+
+    settings = LlmSettings(base_url='http://10.61.157.1:11434', api_key=None, model='gemma4:e4b', timeout_s=5)
+    status = LlmClient(settings, transport=httpx.MockTransport(handler)).status()
+    assert status.reachable is True
+    assert '0.24.0' in status.detail
+
+
+def test_critic_rejects_numbers_absent_from_facts():
+    from app.llm_client import criticize
+
+    facts = 'диапазон МИ 40–1600 м³/ч; давление 0,5 МПа'
+    kept, notes = criticize('Диапазон 40–1600 м³/ч при 0.5 МПа подходит, две линии не нужны.', facts)
+    assert kept and not notes
+
+    dropped, notes = criticize('Пересчитанный расход 1734 м³/ч укладывается в 40–1600.', facts)
+    assert dropped == ''
+    assert notes and '1734' in notes[0]
+
+
+def test_explain_selection_drops_reply_with_invented_numbers():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={'choices': [{'message': {'content': 'Рекомендую принять 4321 м³/ч.'}}]})
+
+    selection = {'best_method': {'verdict_title': 'Подходит', 'registration_number': '0169.RA.RU.314369/2024', 'reasons': ['Расход 60–325 м³/ч внутри МИ']}}
+    reply = explain_selection(LlmClient(_settings(), transport=httpx.MockTransport(handler)), selection)
+    assert reply.text == ''
+    assert reply.notes and 'критик' in reply.notes[0]

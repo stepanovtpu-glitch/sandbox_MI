@@ -57,7 +57,7 @@
 .audit-event-meta span,
 .audit-event-card small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .audit-event-meta {
@@ -70,7 +70,7 @@
   margin-top: 6px;
   color: var(--accent);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
 

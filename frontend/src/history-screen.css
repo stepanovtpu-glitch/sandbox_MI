@@ -88,7 +88,7 @@
 .history-verification code {
   color: var(--muted);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .history-screen-layout {
@@ -114,7 +114,7 @@
   gap: 8px;
   padding: 11px 12px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   border-bottom: 1px solid var(--border);
   background: rgba(var(--raise-rgb), 0.03);
@@ -177,7 +177,7 @@
 .history-detail-title span {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
 }
 
@@ -220,7 +220,7 @@
   display: block;
   margin-bottom: 5px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .history-detail-grid b {

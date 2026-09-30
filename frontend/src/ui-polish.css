@@ -95,7 +95,7 @@ select:focus-visible,
   background: rgba(var(--well-rgb),0.42);
   color: var(--muted);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -474,13 +474,13 @@ select:focus-visible,
 
 .quality-badge {
   padding: 5px 8px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .quality-dot {
   width: max-content;
   padding: 3px 7px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .quality-badge.verified,
@@ -582,7 +582,7 @@ select:focus-visible,
 
 .ocr-compare-grid > span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -626,7 +626,7 @@ select:focus-visible,
   margin-top: 8px;
   color: var(--muted);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }

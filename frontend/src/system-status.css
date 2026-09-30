@@ -65,7 +65,7 @@
 
 .readiness-top span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -136,12 +136,12 @@
 
 .system-details span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .system-details b {
   color: var(--text);
-  font-size: 10px;
+  font-size: 11px;
   font-family: 'IBM Plex Mono', monospace;
   overflow-wrap: anywhere;
 }
@@ -168,7 +168,7 @@
 
 .readiness-check small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }

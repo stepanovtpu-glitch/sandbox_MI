@@ -28,10 +28,17 @@ services:
       - GASMETER_DB_DIR=/app/data
       # На сервере вход обязателен: роль определяется сессией, а не заголовком запроса
       - GASMETER_REQUIRE_AUTH=1
-      # Корпоративная LLM (OpenAI-совместимый шлюз). Пусто — модуль отключён.
+      # Корпоративная LLM — Ollama внутри периметра ИНК (пример: http://10.61.157.1:11434,
+      # модель gemma4:e4b). Пусто — модуль отключён. Со стенда в интернете модель
+      # недоступна, включается на развёртывании внутри сети («Архимед»).
       - GASMETER_LLM_BASE_URL=${GASMETER_LLM_BASE_URL:-}
-      - GASMETER_LLM_API_KEY=${GASMETER_LLM_API_KEY:-}
+      - GASMETER_LLM_PROVIDER=${GASMETER_LLM_PROVIDER:-auto}
       - GASMETER_LLM_MODEL=${GASMETER_LLM_MODEL:-}
+      - GASMETER_LLM_API_KEY=${GASMETER_LLM_API_KEY:-}
+      # Яндекс Мессенджер — уведомления о согласовании проектов. Пусто — отключено.
+      - GASMETER_YM_TOKEN=${GASMETER_YM_TOKEN:-}
+      - GASMETER_YM_CHAT_ID=${GASMETER_YM_CHAT_ID:-}
+      - GASMETER_YM_LOGIN=${GASMETER_YM_LOGIN:-}
       - GASMETER_DATABASE_URL=postgresql://gasmeter:${GASMETER_DB_PASSWORD}@postgres:5432/gasmeter
     volumes:
       - ./data:/app/data
