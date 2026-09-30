@@ -1,0 +1,65 @@
+# GasMeter Pro на корпоративном сервере «Архимед» (10.224.120.1).
+#
+# Сервер без интернета: образы привозятся файлом (docker load), здесь только
+# запуск по тегам — ни одной директивы build. Устройство как у соседей:
+# свои контейнеры, свои тома в /opt/gasmeter, свой порт, свой cron gasmeter-*.
+#
+# Занято соседями и не используется: 80 (arhimed-nginx), 8802 (API «Архимеда»),
+# 8830 (ГЕРОН), 445 (Samba БГИ МТР). GasMeter слушает 127.0.0.1:8840 —
+# наружу его при необходимости публикует arhimed-nginx отдельным решением.
+#
+# Секреты — в /opt/gasmeter/.env (права 600), в этом файле значений нет.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gasmeter-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=gasmeter
+      - POSTGRES_USER=gasmeter
+      - POSTGRES_PASSWORD=${GASMETER_DB_PASSWORD:?требуется GASMETER_DB_PASSWORD в .env}
+    volumes:
+      - /opt/gasmeter/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gasmeter -d gasmeter"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    image: gasmeter-backend:latest
+    container_name: gasmeter-backend
+    restart: unless-stopped
+    environment:
+      - GASMETER_DB_DIR=/app/data
+      - GASMETER_REQUIRE_AUTH=1
+      - GASMETER_DATABASE_URL=postgresql://gasmeter:${GASMETER_DB_PASSWORD}@postgres:5432/gasmeter
+      # Корпоративная LLM внутри периметра (Ollama). Пусто — модуль отключён.
+      - GASMETER_LLM_BASE_URL=${GASMETER_LLM_BASE_URL:-}
+      - GASMETER_LLM_PROVIDER=${GASMETER_LLM_PROVIDER:-auto}
+      - GASMETER_LLM_MODEL=${GASMETER_LLM_MODEL:-}
+      # Яндекс Мессенджер — уведомления о согласовании. Пусто — отключено.
+      - GASMETER_YM_TOKEN=${GASMETER_YM_TOKEN:-}
+      - GASMETER_YM_CHAT_ID=${GASMETER_YM_CHAT_ID:-}
+      - GASMETER_YM_LOGIN=${GASMETER_YM_LOGIN:-}
+    volumes:
+      - /opt/gasmeter/data:/app/data
+      - /opt/gasmeter/mi_library:/app/mi_library
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  frontend:
+    image: gasmeter-frontend:latest
+    container_name: gasmeter-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8840:80"
+    depends_on:
+      - backend

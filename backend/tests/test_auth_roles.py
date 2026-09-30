@@ -141,3 +141,18 @@ def test_short_password_is_rejected():
         headers=_auth(_token('admin4')),
     )
     assert response.status_code == 400
+
+
+def test_manage_command_creates_user_with_prompted_password(monkeypatch, capsys):
+    """Служебная команда образа: пароль только с клавиатуры, не из аргументов."""
+    from app import manage
+
+    answers = iter(['Правильный-пароль-42', 'Правильный-пароль-42'])
+    monkeypatch.setattr(manage.getpass, 'getpass', lambda prompt='': next(answers))
+    manage.main(['create-user', 'manage_user', 'kip', 'Тест Управления'])
+    assert 'Создан пользователь manage_user' in capsys.readouterr().out
+    token = client.post('/api/auth/login', json={'login': 'manage_user', 'password': 'Правильный-пароль-42'}).json()['token']
+    assert client.get('/api/security/me', headers=_auth(token)).json()['role'] == 'kip'
+
+    manage.main(['list-users'])
+    assert 'manage_user' in capsys.readouterr().out

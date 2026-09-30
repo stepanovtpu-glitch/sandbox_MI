@@ -1,0 +1,113 @@
+# GasMeter Pro на сервере «Архимед» — комплект для решения владельца
+
+Адресат: Степанов А. В. (владелец) и сессия «АРХИМЕД», которая выполняет
+установку. Разработчик GasMeter на сервер не заходит.
+
+## Что это и чего требует
+
+GasMeter Pro — три контейнера: `gasmeter-frontend` (nginx, отдаёт интерфейс и
+проксирует `/api`), `gasmeter-backend` (FastAPI), `gasmeter-postgres`
+(PostgreSQL 16). Интернет серверу не нужен: образы привозятся файлом, база
+и документы живут в томах на диске сервера.
+
+| Ресурс | Значение | Основание |
+|---|---|---|
+| Порт | `127.0.0.1:8840` (frontend) | свободен; 80/8802/8830/445 заняты соседями |
+| Образы на диске | backend 353 МБ, frontend 79 МБ, postgres 420 МБ — ≈ 850 МБ | `docker images` на стенде |
+| Архив для переноса | ≈ 250–300 МБ (`gasmeter-images.tar.gz`) | сжатие gzip |
+| Данные | база 65 МБ, документы 3 МБ, индекс МИ < 1 МБ; сканы МИ (2 ГБ) — по желанию | стенд после месяца работы |
+| Диск, запас | **3 ГБ** без сканов, **6 ГБ** со сканами МИ | образы + данные + копии за 14 дней |
+| Память | в покое ≈ 110 МБ на три контейнера; **выделить 1 ГБ** | `docker stats` на стенде |
+| Процессор | пиков нет; распознавание сканов на сервере не выполняется | — |
+
+Соседей GasMeter не касается: не использует их порты, сети, тома и cron.
+
+## Состав комплекта (`deploy/bundle/`, собирается `deploy\build_bundle.ps1`)
+
+- `gasmeter-images.tar.gz` — образы `gasmeter-backend:latest`,
+  `gasmeter-frontend:latest`, `postgres:16-alpine`;
+- `docker-compose.yaml` — запуск (без директив `build`);
+- `backup.sh` — ежедневная копия базы и документов, проверка архива;
+- `ARHIMED_DEPLOY.md` — этот документ;
+- `SHA256SUMS` — контрольные суммы; сверить после переноса.
+
+## Переменные окружения (`/opt/gasmeter/.env`, права 600)
+
+Значений здесь нет намеренно — их вводит владелец на сервере.
+
+| Переменная | Обязательна | Назначение |
+|---|---|---|
+| `GASMETER_DB_PASSWORD` | да | пароль базы PostgreSQL (сгенерировать, 24+ символов) |
+| `GASMETER_LLM_BASE_URL` | нет | Ollama внутри периметра, `http://10.61.157.1:11434` |
+| `GASMETER_LLM_MODEL` | нет | `gemma4:e4b` |
+| `GASMETER_LLM_PROVIDER` | нет | `auto` (по адресу) / `ollama` / `openai` |
+| `GASMETER_YM_TOKEN` | нет | OAuth-токен отдельного бота GasMeter в Яндекс Мессенджере |
+| `GASMETER_YM_CHAT_ID` | нет | идентификатор рабочего чата (или `GASMETER_YM_LOGIN`) |
+
+Без LLM и мессенджера программа работает полностью; эти модули включаются
+позже, когда владелец создаст бота в Яндекс 360 и разрешит доступ к модели.
+`GASMETER_REQUIRE_AUTH=1` задан в compose — вход только по учётной записи.
+
+## Порядок установки (выполняет «АРХИМЕД»)
+
+```bash
+# 0. Здоровье соседей до начала — зафиксировать
+docker ps --format '{{.Names}} {{.Status}}'
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8802/health   # «Архимед»
+
+# 1. Каталоги и права
+mkdir -p /opt/gasmeter/{pgdata,data,mi_library,backup}
+install -m 600 /dev/null /opt/gasmeter/.env   # затем вписать переменные
+
+# 2. Комплект и контрольные суммы
+cd /opt/gasmeter && sha256sum -c SHA256SUMS
+gunzip -c gasmeter-images.tar.gz | docker load
+
+# 3. Запуск
+docker compose -f /opt/gasmeter/docker-compose.yaml up -d
+
+# 4. Проверка GasMeter
+curl -s http://127.0.0.1:8840/health            # {"status":"ok","application":"GasMeter Pro"}
+docker compose -f /opt/gasmeter/docker-compose.yaml ps
+
+# 5. Здоровье соседей после — сравнить с п. 0
+docker ps --format '{{.Names}} {{.Status}}'
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8802/health
+
+# 6. Резервная копия: свой cron-файл, префикс gasmeter-*
+install -m 755 backup.sh /opt/gasmeter/backup.sh
+echo '30 2 * * * root /opt/gasmeter/backup.sh >> /opt/gasmeter/backup/backup.log 2>&1' > /etc/cron.d/gasmeter-backup
+```
+
+`backup.sh` рассчитан на compose в `/opt/gasmeter` и контейнер `postgres`
+из этого файла; соседей не трогает.
+
+## Первый вход и данные
+
+1. Учётные записи заводятся администратором внутри контейнера:
+   `docker compose exec backend python -m app.manage create-user <логин> <роль> "<ФИО>"`
+   (роли: technologist, kip, metrologist, admin). Пароль запрашивается
+   с клавиатуры и ни в аргументы, ни в журнал не попадает.
+   Ещё команды: `list-users`, `set-password <логин>`.
+2. Библиотека МИ (216 методик) и парк СИ (55 приборов) переносятся дампом со
+   стенда: `pg_dump` → `psql` внутри контейнера `gasmeter-postgres`; файл
+   дампа ≈ 50 МБ в сжатом виде входит в комплект по запросу владельца.
+3. Сканы МИ (2 ГБ) нужны только для просмотра PDF из карточки; без них
+   подбор и расчёты работают.
+
+## Обновление и откат
+
+- Обновление: новый `gasmeter-images.tar.gz` → `docker load` →
+  `docker compose up -d`. Тома не затрагиваются, миграции схемы базы
+  выполняет backend при старте (версия схемы пишется в журнал).
+- Откат: `docker compose down` → `docker load` предыдущего архива →
+  `docker compose up -d`. Базу перед обновлением копирует `backup.sh`
+  (запустить вручную: `/opt/gasmeter/backup.sh`).
+- `docker system prune` и перезапуск чужих контейнеров не применяются ни при
+  каких обстоятельствах.
+
+## Что нужно от владельца для решения
+
+1. Разрешение на размещение в `/opt/gasmeter` и порт 8840.
+2. Пароль базы (вводится на сервере, разработчику не сообщается).
+3. Позже: бот Яндекс Мессенджера (Яндекс 360) и id чата; доступ к Ollama.

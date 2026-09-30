@@ -100,7 +100,7 @@ return document.querySelector('.topbar h1')?.textContent;
 """
 
 
-async def capture(base_url: str, token: str, out: Path):
+async def capture(base_url: str, token: str, out: Path, theme: str = 'light'):
     out.mkdir(parents=True, exist_ok=True)
     async with websockets.connect(page_socket(), max_size=40 * 1024 * 1024) as socket:
         page = Devtools(socket)
@@ -112,7 +112,7 @@ async def capture(base_url: str, token: str, out: Path):
         # Светлая тема «протокол» читается в печати лучше тёмной «диспетчерской»
         await page.evaluate(
             f"localStorage.setItem('gasmeter-token', '{token}');"
-            "localStorage.setItem('gasmeter-theme', 'light');"
+            f"localStorage.setItem('gasmeter-theme', '{theme}');"
             "return 'ok';"
         )
         await page.call('Page.navigate', url=base_url)
@@ -219,12 +219,13 @@ def main() -> None:
     parser.add_argument('--token', required=True)
     parser.add_argument('--base-url', default='https://gasmeter.77-95-203-87.sslip.io')
     parser.add_argument('--out', default='docs/screens')
+    parser.add_argument('--theme', default='light', choices=['light', 'dark'])
     args = parser.parse_args()
 
     profile = Path.home() / '.gasmeter-shots-profile'
     edge = start_edge(profile)
     try:
-        asyncio.run(capture(args.base_url, args.token, Path(args.out)))
+        asyncio.run(capture(args.base_url, args.token, Path(args.out), args.theme))
     finally:
         edge.terminate()
 
