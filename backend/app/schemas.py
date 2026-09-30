@@ -473,3 +473,14 @@ class UugSelectionResponse(BaseModel):
     # Что технологу сделать с режимом, если диапазон обеспечен не полностью
     technologist_advice: list[str] = Field(default_factory=list)
     summary: str
+
+
+class LlmExplainRequest(BaseModel):
+    """Пояснение результата подбора языком адресата — через корпоративную LLM.
+
+    Передаётся готовый результат подбора (UugSelectionResponse в виде словаря);
+    модель ничего не пересчитывает и не меняет вердикт (см. llm_client.py).
+    """
+
+    selection: dict
+    audience: Literal['technologist', 'kip', 'metrologist'] = 'technologist'

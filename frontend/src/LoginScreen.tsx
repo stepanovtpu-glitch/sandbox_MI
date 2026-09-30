@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LogIn } from 'lucide-react';
 import { login, setAuthToken, type SessionUser } from './api';
-import inkLogoWhite from './assets/brand/ink-logo-white.svg';
+import { BRAND } from './brand';
 
 export function LoginScreen({ onSignedIn }: { onSignedIn: (user: SessionUser, token: string) => void }) {
   const [loginName, setLoginName] = useState('');
@@ -32,8 +32,8 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: SessionUser, to
   return (
     <div className="login-shell">
       <form className="login-card" onSubmit={submit}>
-        <img className="login-logo" src={inkLogoWhite} alt="Эмблема ИНК" />
-        <h1>GasMeter Pro</h1>
+        <img className="login-logo" src={BRAND.logoOnDark} alt="Эмблема ИНК" />
+        <h1>{BRAND.productName}</h1>
         <p className="login-subtitle">Подбор методик измерений и состава узлов учёта газа</p>
 
         <label className="field">

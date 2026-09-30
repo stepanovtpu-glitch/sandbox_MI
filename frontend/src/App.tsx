@@ -6,8 +6,7 @@ import { UugSelectionScreen } from './UugSelectionScreen';
 import { LoginScreen } from './LoginScreen';
 import { UsersScreen } from './UsersScreen';
 import { ProjectsScreen } from './ProjectsScreen';
-import inkLogo from './assets/brand/ink-logo.svg';
-import inkLogoWhite from './assets/brand/ink-logo-white.svg';
+import { BRAND, brandLogo } from './brand';
 import { HistoryScreen } from './HistoryScreen';
 import { MethodLibraryPanel } from './MethodLibraryPanel';
 import { MethodIntakeScreen } from './MethodIntakeScreen';
@@ -367,7 +366,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="side-nav"><div className="brand"><img className="brand-logo" src={theme === 'light' ? inkLogo : inkLogoWhite} alt="Эмблема ИНК" /><div><div className="brand-title">GasMeter Pro</div><div className="brand-subtitle">Иркутская нефтяная компания</div></div></div><nav className="nav-list">{visibleNavItems.map((item) => (
+      <aside className="side-nav"><div className="brand"><img className="brand-logo" src={brandLogo(theme)} alt={BRAND.logoAlt} /><div><div className="brand-title">{BRAND.productName}</div><div className="brand-subtitle">{BRAND.companyName}</div></div></div><nav className="nav-list">{visibleNavItems.map((item) => (
         <button key={item.view} className={`nav-item nav-button ${activeView === item.view ? 'active' : ''}`} onClick={() => setActiveView(item.view)}>{item.icon} {item.label}</button>
       ))}
       {can('calculation:create') && <button className="nav-item nav-button" onClick={() => setIsHistoryOpen(true)}><History size={18} /> История</button>}</nav></aside>

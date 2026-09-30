@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel
+import logging
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi import Header as FastApiHeader
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,6 +37,7 @@ from app.schemas import (
     CalculationTemplate,
     GasCompressibilityRequest,
     Instrument,
+    LlmExplainRequest,
     InstrumentRecommendationRequest,
     InstrumentReplacementRecommendation,
     MeasurementMethod,
@@ -70,6 +72,7 @@ from app.uug_projects import (
 )
 from app.compressibility import METHODS as COMPRESSIBILITY_METHODS
 from app.gas_physics import k_ratio_from_composition
+from app.llm_client import LlmClient, LlmNotConfigured, explain_selection
 from app.uug_composition import project_candidates, validate_composition
 from app.selection_history import list_queries, remember_query
 from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
@@ -654,6 +657,38 @@ def gas_physics_compressibility(
         },
         'warnings': ratio.warnings,
     }
+
+
+@app.get('/api/llm/status')
+def llm_status(user: dict[str, object] = Depends(require_permission('system:read'))):
+    """Подключена ли корпоративная LLM и отвечает ли шлюз. Ключ наружу не отдаётся."""
+    status = LlmClient().status(probe=True)
+    return {
+        'configured': status.configured,
+        'reachable': status.reachable,
+        'base_url': status.base_url,
+        'model': status.model,
+        'detail': status.detail,
+        'usage_policy': status.usage_policy,
+    }
+
+
+@app.post('/api/llm/explain-selection')
+def llm_explain_selection(payload: LlmExplainRequest, user: dict[str, object] = Depends(require_permission('method:read'))):
+    """Связный текст по готовому результату подбора — для служебной записки.
+
+    Вердикт и числа модель получает готовыми; если LLM не настроена — 503,
+    а не молчаливая заглушка.
+    """
+    try:
+        reply = explain_selection(LlmClient(), payload.selection, payload.audience)
+    except LlmNotConfigured as error:
+        raise HTTPException(status_code=503, detail=str(error))
+    except Exception as error:  # noqa: BLE001 — шлюз внешний, причина уходит в журнал
+        logging.getLogger(__name__).warning('LLM explain failed: %s', error)
+        raise HTTPException(status_code=502, detail='Корпоративная LLM не ответила. Повторите позже.')
+    log_audit_event('llm_explain_selection', 'uug_selection', payload.audience, {'model': reply.model}, actor=_actor(user))
+    return {'text': reply.text, 'model': reply.model}
 
 
 @app.get('/api/uug/projects')
