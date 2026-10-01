@@ -8,6 +8,7 @@
 #   docker-compose.yaml        — запуск на «Архимеде» (порт 127.0.0.1:8840)
 #   ARHIMED_DEPLOY.md          — порядок установки и проверки
 #   backup.sh                  — ежедневная копия базы (cron gasmeter-backup)
+#   gasmeter-library.sql.gz    — справочники со стенда (кладётся отдельно, см. ARHIMED_DEPLOY.md)
 #   SHA256SUMS                 — контрольные суммы всего комплекта
 
 $ErrorActionPreference = 'Stop'
@@ -25,8 +26,17 @@ docker pull postgres:16-alpine
 if (-not $?) { throw 'postgres image pull failed' }
 
 New-Item -ItemType Directory -Force $bundle | Out-Null
-docker save gasmeter-backend:latest gasmeter-frontend:latest postgres:16-alpine | gzip -c > "$bundle\gasmeter-images.tar.gz"
+# docker save -o, а не конвейер: в Windows PowerShell 5.1 нет gzip, а конвейер
+# перекодирует двоичный поток и портит архив. Сжатие — средствами .NET.
+$tar = "$bundle\gasmeter-images.tar"
+docker save -o $tar gasmeter-backend:latest gasmeter-frontend:latest postgres:16-alpine
 if (-not $?) { throw 'docker save failed' }
+
+$source = [System.IO.File]::OpenRead($tar)
+$target = [System.IO.File]::Create("$tar.gz")
+$gzip = New-Object System.IO.Compression.GZipStream($target, [System.IO.Compression.CompressionLevel]::Optimal)
+try { $source.CopyTo($gzip) } finally { $gzip.Dispose(); $target.Dispose(); $source.Dispose() }
+Remove-Item $tar
 
 Copy-Item "$PSScriptRoot\docker-compose.arhimed.yaml" "$bundle\docker-compose.yaml" -Force
 Copy-Item "$PSScriptRoot\ARHIMED_DEPLOY.md" "$bundle\ARHIMED_DEPLOY.md" -Force
