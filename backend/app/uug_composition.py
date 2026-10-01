@@ -60,6 +60,7 @@ def selection_context(project: dict) -> dict | None:
         p_abs_max_mpa=selection.get('p_abs_max_mpa'),
         t_working_c=selection['t_working_c'],
         t_working_max_c=selection.get('t_working_max_c'),
+        gas_composition=selection.get('gas_composition') or None,
     )
     best = selection.get('best_method') or {}
     method = next((item for item in list_current_methods() if item.mi_id == best.get('mi_id')), None)

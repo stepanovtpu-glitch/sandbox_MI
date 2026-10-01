@@ -206,6 +206,21 @@ export type UugSelectionRequest = {
   t_working_c: number;
   t_working_max_c?: number | null;
   preferred_flowmeter_type?: string | null;
+  // Состав газа, моль %: если задан, приведение расхода идёт с K по составу, а не с K = 1
+  gas_composition?: Record<string, number> | null;
+};
+
+export type UugCompressibility = {
+  k_min: number;
+  k_max: number;
+  z_working_min: number;
+  z_working_max: number;
+  z_standard: number;
+  relative_density: number;
+  molar_mass: number;
+  method: string;
+  standard_compliant: boolean;
+  notes: string[];
 };
 
 export type UugMethodMatch = {
@@ -247,6 +262,7 @@ export type UugSelectionResponse = {
   instrument_plan: UugInstrumentSlot[];
   technologist_params: string[];
   technologist_advice?: string[];
+  compressibility?: UugCompressibility | null;
   summary: string;
 };
 

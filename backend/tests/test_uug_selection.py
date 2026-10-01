@@ -256,3 +256,41 @@ def test_uug_selection_prefers_newer_method():
         if item['registration_number'].split('/')[-1].split('-')[-1].isdigit()
     ]
     assert years == sorted(years, reverse=True) or years[0] == max(years)
+
+
+PNG_COMPOSITION = {
+    'метан': 78.0, 'этан': 8.0, 'пропан': 5.0, 'изобутан': 1.0, 'н-бутан': 1.5,
+    'изопентан': 0.5, 'н-пентан': 0.5, 'гексан+': 0.5, 'азот': 3.0, 'диоксид углерода': 2.0,
+}
+
+
+def test_uug_selection_uses_k_from_gas_composition():
+    """Кнопка «K по составу газа»: приведение к ст. у. идёт с реальным K, а не с 1.
+
+    Реальный газ сжимается сильнее идеального (K < 1), поэтому тот же расход
+    при рабочих условиях даёт больший расход при стандартных.
+    """
+    import pytest
+
+    payload = _base_payload(flow_basis='working', q_input_min=60, q_input_max=325, p_abs_mpa=0.5, p_abs_max_mpa=1.5)
+    ideal = client.post('/api/uug/selection', json=payload).json()
+    real = client.post('/api/uug/selection', json={**payload, 'gas_composition': PNG_COMPOSITION}).json()
+
+    assert ideal['compressibility'] is None
+    k = real['compressibility']
+    assert 0.9 < k['k_min'] <= k['k_max'] < 1.0
+    assert k['standard_compliant'] is False, 'расчёт не должен выдавать себя за аттестованный'
+    assert real['q_requested_std'][1] > ideal['q_requested_std'][1]
+    assert real['q_requested_std'][1] == pytest.approx(ideal['q_requested_std'][1] / k['k_min'], rel=1e-3)
+    # введённый рабочий диапазон остаётся истиной
+    assert real['q_requested_working'] == [60, 325]
+
+
+def test_uug_selection_rejects_unbalanced_gas_composition_without_crashing():
+    """Состав с суммой не 100 % — ошибка проверки данных, а не падение и не тихий K."""
+    data = client.post('/api/uug/selection', json=_base_payload(gas_composition={'метан': 60.0})).json()
+    assert any('Сумма компонентов' in error for error in data['validation_errors'])
+    assert data['best_method'] is None
+
+    unknown = client.post('/api/uug/selection', json=_base_payload(gas_composition={'гелий': 100.0})).json()
+    assert any('известных компонентов' in error for error in unknown['validation_errors'])

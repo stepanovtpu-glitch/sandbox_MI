@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SelectionHistory } from './SelectionHistory';
-import { AlertTriangle, CheckCircle2, ClipboardList, Gauge, HelpCircle, Lightbulb, Search, Thermometer, Wrench } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardList, FlaskConical, Gauge, HelpCircle, Lightbulb, Search, Thermometer, Wrench } from 'lucide-react';
 import { getSelectionHistory, type SelectionHistoryItem, createProject, selectUug, type GasMedium, type MeteringProcess, type UugSelectionResponse } from './api';
 
 const DN_SERIES = [25, 50, 80, 100, 150, 200, 250, 300, 350, 400, 500, 600, 800, 1000];
+
+/** Компоненты состава газа — те же и в том же порядке, что в акте лабораторного анализа. */
+const GAS_COMPONENTS = [
+  'метан', 'этан', 'пропан', 'изобутан', 'н-бутан',
+  'изопентан', 'н-пентан', 'гексан+', 'азот', 'диоксид углерода',
+] as const;
 
 const MEDIUM_OPTIONS: Array<{ value: GasMedium; label: string; hint: string }> = [
   { value: 'png', label: 'ПНГ — попутный нефтяной газ', hint: 'Включая свободный и влажный нефтяной газ. Температура среды не ниже −10 °C.' },
@@ -51,6 +57,9 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
   const [pAbsMax, setPAbsMax] = useState(0.5);
   const [tWorking, setTWorking] = useState(20);
   const [tWorkingMax, setTWorkingMax] = useState(20);
+  // K по составу газа: без состава приведение к стандартным условиям идёт с K = 1
+  const [useComposition, setUseComposition] = useState(false);
+  const [composition, setComposition] = useState<Record<string, string>>({});
   const [result, setResult] = useState<UugSelectionResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -78,6 +87,13 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
     const stored = (item.request ?? {}) as { p_abs_max_mpa?: number | null; t_working_max_c?: number | null };
     setPAbsMax(stored.p_abs_max_mpa ?? item.p_abs_mpa);
     setTWorkingMax(stored.t_working_max_c ?? item.t_working_c);
+    const storedComposition = (item.request as { gas_composition?: Record<string, number> | null } | undefined)?.gas_composition;
+    if (storedComposition && Object.keys(storedComposition).length > 0) {
+      setComposition(Object.fromEntries(Object.entries(storedComposition).map(([name, value]) => [name, String(value)])));
+      setUseComposition(true);
+    } else {
+      setUseComposition(false);
+    }
   };
 
   /** Подбор — начало проекта УУГ: дальше состав комплектует КИПиА, утверждает метролог. */
@@ -97,6 +113,7 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
           q_std_min: result?.input.q_std_min ?? qInputMin,
           q_std_max: result?.input.q_std_max ?? qInputMax,
           p_abs_mpa: pAbs, p_abs_max_mpa: pAbsMax, t_working_c: tWorking, t_working_max_c: tWorkingMax,
+          gas_composition: gasComposition,
           best_method: result?.best_method ?? null,
         },
       });
@@ -105,6 +122,15 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
       setApiError(caught instanceof Error ? caught.message : 'Не удалось создать проект');
     }
   };
+
+  const compositionValues = useMemo(() => Object.fromEntries(
+    Object.entries(composition)
+      .map(([name, raw]) => [name, Number(String(raw).replace(',', '.'))] as const)
+      .filter(([, value]) => Number.isFinite(value) && value > 0),
+  ) as Record<string, number>, [composition]);
+  const compositionTotal = Object.values(compositionValues).reduce((sum, value) => sum + value, 0);
+  const compositionOk = compositionTotal >= 95 && compositionTotal <= 105;
+  const gasComposition = useComposition && Object.keys(compositionValues).length > 0 ? compositionValues : null;
 
   const mediumHint = useMemo(() => MEDIUM_OPTIONS.find((option) => option.value === medium)?.hint ?? '', [medium]);
 
@@ -127,6 +153,7 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
         p_abs_max_mpa: Math.max(pAbs, pAbsMax),
         t_working_c: Math.min(tWorking, tWorkingMax),
         t_working_max_c: Math.max(tWorking, tWorkingMax),
+        gas_composition: gasComposition,
       });
       setResult(response);
       refreshHistory();
@@ -227,6 +254,39 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
                 <input type="number" step="any" value={tWorkingMax} onChange={(event) => setTWorkingMax(Number(event.target.value))} className={tWorkingMax < tWorking ? 'invalid' : ''} />
               </label>
             </div>
+
+            <button
+              className={`ghost-button full-width k-toggle ${useComposition ? 'active' : ''}`}
+              onClick={() => setUseComposition((value) => !value)}
+              aria-pressed={useComposition}
+              title="Приведение расхода к стандартным условиям с коэффициентом сжимаемости по составу газа вместо K = 1"
+            >
+              <FlaskConical size={14} /> {useComposition ? 'K по составу газа — включено' : 'K по составу газа'}
+            </button>
+            {useComposition && (
+              <div className="k-composition">
+                <div className="k-composition-hint">
+                  Состав из акта лабораторного анализа, моль %. Пока состав не задан или сумма не сходится, подбор идёт с K = 1.
+                </div>
+                <div className="k-composition-grid">
+                  {GAS_COMPONENTS.map((name) => (
+                    <label className="field" key={name}>
+                      <span>{name}</span>
+                      <input
+                        inputMode="decimal"
+                        value={composition[name] ?? ''}
+                        onChange={(event) => setComposition((current) => ({ ...current, [name]: event.target.value }))}
+                        placeholder="0"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className={`k-composition-total ${compositionOk ? 'ok' : 'warn'}`}>
+                  Сумма: {compositionTotal.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} %
+                  {compositionOk ? ' — состав принят' : ' — должна быть 100 % (допуск 95–105)'}
+                </div>
+              </div>
+            )}
           </section>
 
           <button className="primary-button full-width uug-submit" onClick={runSelection} disabled={isLoading}>
@@ -323,6 +383,22 @@ export function UugSelectionScreen({ onApplyMethod }: { onApplyMethod?: (miId: s
                       {range.note && <div className="uug-range-note">{range.note}</div>}
                     </div>
                   ))}
+                  {result.compressibility && (
+                    <div className="k-result">
+                      <div className="k-result-head"><FlaskConical size={14} /> Коэффициент сжимаемости по составу газа</div>
+                      <div className="k-result-grid">
+                        <div><span>K = Zраб / Zст</span><b>{result.compressibility.k_min === result.compressibility.k_max
+                          ? result.compressibility.k_min
+                          : `${result.compressibility.k_min} … ${result.compressibility.k_max}`}</b></div>
+                        <div><span>Zраб</span><b>{result.compressibility.z_working_min === result.compressibility.z_working_max
+                          ? result.compressibility.z_working_min
+                          : `${result.compressibility.z_working_min} … ${result.compressibility.z_working_max}`}</b></div>
+                        <div><span>Zст</span><b>{result.compressibility.z_standard}</b></div>
+                        <div><span>Плотность отн. воздуха</span><b>{result.compressibility.relative_density}</b></div>
+                      </div>
+                      {result.compressibility.notes.map((note) => <div className="k-result-note" key={note}>{note}</div>)}
+                    </div>
+                  )}
                 </div>
               )}
 

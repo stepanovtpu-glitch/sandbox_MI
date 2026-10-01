@@ -23,6 +23,7 @@ from app.calculation_templates.drg_series import (
 from app.instrument_library import list_instruments
 from app.method_library import list_current_methods
 from app.compressibility import excluded_by_pressure, medium_limits, methods_for_medium
+from app.gas_physics import COMPONENTS as GAS_COMPONENTS, k_ratio_from_composition, normalize_component_name
 from app.uug_flowmeters import COVERED, FlowmeterFit, flowmeter_fit
 from app.schemas import (
     ALLOWED_PIPE_DN_MM,
@@ -337,19 +338,27 @@ def standard_flow_from_working(q_working: float, p_abs_mpa: float, t_working_c: 
     return q_working * (p_abs_mpa * STANDARD_TEMPERATURE_K) / (STANDARD_PRESSURE_MPA * temperature_k)
 
 
+def _k_ratio(request: UugSelectionRequest, p_abs_mpa: float, t_working_c: float) -> float:
+    """K = Zраб/Zст в точке режима: по составу газа, если он задан, иначе 1."""
+    if not request.gas_composition:
+        return 1.0
+    return k_ratio_from_composition(request.gas_composition, p_abs_mpa, t_working_c).k
+
+
 def standard_flow_bounds(q_work_min: float, q_work_max: float, request: UugSelectionRequest) -> tuple[float, float]:
     """Расход при ст. у. по всему диапазону рабочих давления и температуры.
 
     Приведение зависит от P и T, поэтому при заданном диапазоне режима берётся
     наихудший угол: наименьший расход — при минимальном давлении и максимальной
     температуре, наибольший — наоборот. Так узел остаётся в области применения
-    МИ на всём режиме, а не только в одной точке.
+    МИ на всём режиме, а не только в одной точке. Qст = Qраб·P·Tст/(Pст·T·K);
+    K берётся в том же углу режима, что и P с T.
     """
     p_min, p_max = request.p_range
     t_min, t_max = request.t_range
     return (
-        standard_flow_from_working(q_work_min, p_min, t_max),
-        standard_flow_from_working(q_work_max, p_max, t_min),
+        standard_flow_from_working(q_work_min, p_min, t_max) / _k_ratio(request, p_min, t_max),
+        standard_flow_from_working(q_work_max, p_max, t_min) / _k_ratio(request, p_max, t_min),
     )
 
 
@@ -358,9 +367,56 @@ def working_flow_bounds(q_std_min: float, q_std_max: float, request: UugSelectio
     p_min, p_max = request.p_range
     t_min, t_max = request.t_range
     return (
-        _working_flow_rate(q_std_min, p_max, t_min),
-        _working_flow_rate(q_std_max, p_min, t_max),
+        _working_flow_rate(q_std_min, p_max, t_min) * _k_ratio(request, p_max, t_min),
+        _working_flow_rate(q_std_max, p_min, t_max) * _k_ratio(request, p_min, t_max),
     )
+
+
+def _composition_errors(request: UugSelectionRequest) -> list[str]:
+    """Проверка состава газа до расчёта: с негодным составом K не считается."""
+    composition = request.gas_composition
+    if not composition:
+        return []
+    known = {name: value for name, value in composition.items() if normalize_component_name(name) in GAS_COMPONENTS and value and value > 0}
+    unknown = sorted(name for name, value in composition.items() if value and value > 0 and normalize_component_name(name) not in GAS_COMPONENTS)
+    errors: list[str] = []
+    if not known:
+        errors.append('Состав газа не содержит известных компонентов — K по составу не рассчитан.')
+        return errors
+    total = sum(known.values())
+    if not 95.0 <= total <= 105.0:
+        errors.append(f'Сумма компонентов состава газа {total:.2f} % — должна быть 100 % (допуск 95–105 %).')
+    if unknown:
+        errors.append('В составе газа есть компоненты, которых нет в справочнике: ' + ', '.join(unknown) + '.')
+    return errors
+
+
+def _compressibility_summary(request: UugSelectionRequest) -> dict | None:
+    """Что именно принято за K — для экрана и для проекта узла."""
+    if not request.gas_composition:
+        return None
+    p_min, p_max = request.p_range
+    t_min, t_max = request.t_range
+    low = k_ratio_from_composition(request.gas_composition, p_min, t_max)
+    high = k_ratio_from_composition(request.gas_composition, p_max, t_min)
+    k_values = sorted({round(low.k, 4), round(high.k, 4)})
+    pseudo = low.working.pseudo_critical
+    extrapolated = not (low.working.in_range and high.working.in_range)
+    notes = ['Инженерный расчёт по корреляции Дранчука—Абу-Кассема; для коммерческого учёта K сверяется с вычислителем узла.']
+    if extrapolated:
+        notes.append('Режим ниже паспортной области корреляции (Pпр < 0,2) — значение получено экстраполяцией к идеальному газу.')
+    return {
+        'k_min': k_values[0],
+        'k_max': k_values[-1],
+        'z_working_min': round(min(low.working.z, high.working.z), 4),
+        'z_working_max': round(max(low.working.z, high.working.z), 4),
+        'z_standard': round(low.standard.z, 4),
+        'relative_density': round(pseudo.relative_density, 4),
+        'molar_mass': round(pseudo.apparent_molar_mass, 3),
+        'method': low.working.method,
+        'standard_compliant': False,
+        'notes': notes,
+    }
 
 
 def working_view(request: UugSelectionRequest, q_std_min: float, q_std_max: float) -> tuple[float, float]:
@@ -592,8 +648,12 @@ def _technologist_advice(
 
 def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
     basis = request.flow_basis
+    # Негодный состав не должен ронять расчёт: сообщаем об ошибке и считаем без него
+    composition_errors = _composition_errors(request)
+    if composition_errors:
+        request = request.model_copy(update={'gas_composition': None})
     request = normalize_flow(request)
-    validation_errors = _validate(request)
+    validation_errors = composition_errors + _validate(request)
     warnings = _algorithm_warnings(request)
     accuracy_limit, accuracy_note = ACCURACY_RULES[(request.medium, request.process)]
 
@@ -698,6 +758,8 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
     q_max = adjusted.q_max if adjusted else request.q_std_max
     qw_min, qw_max = working_view(request, q_min, q_max)
 
+    compressibility = _compressibility_summary(request)
+
     ranges = [
         UugOperatingRange(
             label='Расход при стандартных условиях (20 °C; 0,101325 МПа)',
@@ -719,7 +781,15 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
             q_min=round(qw_min, 2),
             q_max=round(qw_max, 2),
             unit='м³/ч',
-            note='Коэффициент сжимаемости K принят равным 1; уточняется по составу газа.',
+            note=(
+                'Коэффициент сжимаемости K принят равным 1; уточняется по составу газа.'
+                if compressibility is None
+                else (
+                    f'K = {compressibility["k_min"]:g}'
+                    + ('' if compressibility['k_min'] == compressibility['k_max'] else f'…{compressibility["k_max"]:g}')
+                    + ' — рассчитан по составу газа.'
+                )
+            ),
         ),
     ]
 
@@ -749,5 +819,6 @@ def select_uug(request: UugSelectionRequest) -> UugSelectionResponse:
         instrument_plan=_instrument_plan(method, request, qw_min, qw_max, fit),
         technologist_params=_technologist_params(method, request),
         technologist_advice=advice,
+        compressibility=compressibility,
         summary=summary,
     )

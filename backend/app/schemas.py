@@ -350,6 +350,10 @@ class UugSelectionRequest(BaseModel):
     t_working_c: float
     t_working_max_c: float | None = None
     preferred_flowmeter_type: str | None = None
+    # Состав газа, моль % (ключи — как в акте лабораторного анализа). Если задан,
+    # приведение расхода к стандартным условиям идёт с K = Zраб/Zст по составу,
+    # а не с K = 1. Расчёт инженерный (app/gas_physics.py), не аттестованный.
+    gas_composition: dict[str, float] | None = None
 
     @property
     def p_range(self) -> tuple[float, float]:
@@ -472,6 +476,8 @@ class UugSelectionResponse(BaseModel):
     technologist_params: list[str] = Field(default_factory=list)
     # Что технологу сделать с режимом, если диапазон обеспечен не полностью
     technologist_advice: list[str] = Field(default_factory=list)
+    # Коэффициент сжимаемости, с которым выполнено приведение: None — принят K = 1
+    compressibility: dict | None = None
     summary: str
 
 

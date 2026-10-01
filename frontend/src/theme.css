@@ -1423,3 +1423,21 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .side-nav .nav-list { flex: 1; align-content: start; }
 .photo-credit { margin-top: 14px; color: var(--muted); font-size: 11px; line-height: 1.4; opacity: 0.8; }
 @media (max-width: 1100px) { .photo-credit { display: none; } }
+
+/* ============ K по составу газа на экране подбора ============ */
+.k-toggle { margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.k-toggle.active { color: var(--accent); border-color: var(--border-strong); background: var(--accent-soft); }
+.k-composition { margin-top: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: rgba(var(--well-rgb), 0.45); }
+.k-composition-hint { color: var(--muted); font-size: 11px; line-height: 1.45; margin-bottom: 8px; }
+.k-composition-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.k-composition-grid .field { margin-bottom: 0; }
+.k-composition-total { margin-top: 8px; font-size: 11.5px; }
+.k-composition-total.ok { color: var(--ok); }
+.k-composition-total.warn { color: var(--warn); }
+.k-result { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.k-result-head { display: flex; align-items: center; gap: 7px; color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+.k-result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.k-result-grid div { padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: rgba(var(--raise-rgb), 0.03); }
+.k-result-grid span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+.k-result-grid b { font-family: var(--font-mono); font-size: 13px; }
+.k-result-note { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.45; }
