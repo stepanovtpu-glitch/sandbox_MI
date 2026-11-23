@@ -25,6 +25,10 @@ def test_snapshot_import_is_versioned_and_idempotent(monkeypatch, tmp_path):
     assert (preview['row_count'], preview['past_due_rows'], preview['missing_due'], preview['repeated_guid_rows']) == (2, 1, 1, 1)
     first = publish_export(content, 'export.xlsx', date(2026, 11, 20), 'metrologist')
     assert publish_export(content, 'export.xlsx', date(2026, 11, 20), 'metrologist')['already_imported']
+    with pytest.raises(ValueError, match='не подтверждает обновление данных'):
+        preview_export(content, date(2026, 11, 21))
+    with pytest.raises(ValueError, match='не подтверждает обновление данных'):
+        publish_export(content, 'reused.xlsx', date(2026, 11, 21), 'metrologist')
     assert len(list_imports()) == 1
     assert snapshot_rows(first['import_id'], 'past_due')['rows'][0]['serial_number'] == 'А-01'
     assert snapshot_rows(first['import_id'], 'past_due_now')['total'] >= 1

@@ -14,13 +14,13 @@ from pathlib import Path
 
 import paramiko
 
-VERSION = '0.2.20'
-EXPECTED_HASH = '52855aaa8c6d26b86d90663e9a09fe52ed47056ba038a7506431df8bcaa4bbe7'
+VERSION = '0.2.21'
+EXPECTED_HASH = '60c7c61259b5e1f55ba4a7f1f31e6026c5ed04b12d1b2527a86d92c71885b156'
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / 'releases' / f'forvater-{VERSION}' / 'forvater-images-fixed.tar'
+ARCHIVE = ROOT / 'releases' / f'forvater-{VERSION}' / 'forvater-images.tar'
 CREDS = Path('C:/pass/izp-flow-meter.json')
 KNOWN_HOSTS = Path.home() / '.ssh' / 'known_hosts'
-REMOTE = f'/opt/gasmeter/backup/forvater-images-{VERSION}-fixed.tar'
+REMOTE = f'/opt/gasmeter/backup/forvater-images-{VERSION}.tar'
 SOURCE_EXPORT = Path('C:/Users/silve/AppData/Local/Temp/farvater_mail_933afdcdb933448b8ce265c5bbcb47e6/Плановая дата поверки СИ для контроля XLSX.xlsx')
 SOURCE_HASH = '116daaed24df342acf2b88a05ae32ed771fb2ce67c3ccdcc4e9c2e04dd95006b'
 INBOX_CRON = ROOT / 'deploy' / 'gasmeter-metrology-inbox.cron'

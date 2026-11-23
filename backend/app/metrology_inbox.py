@@ -44,8 +44,11 @@ def import_pair(file: Path) -> dict:
     if manifest.get('sha256') != digest:
         raise ValueError('SHA-256 в манифесте не совпадает с XLSX.')
     init_db()
-    existing = fetch_one('SELECT row_count FROM metrology_imports WHERE sha256 = ?', (digest,))
+    existing = fetch_one('SELECT row_count,snapshot_date FROM metrology_imports WHERE sha256 = ?', (digest,))
     if existing:
+        if existing['snapshot_date'] != snapshot_date.isoformat():
+            raise ValueError(f"Этот XLSX уже опубликован с датой среза {existing['snapshot_date']}. "
+                             'Для нового среза нужна новая выгрузка из источника.')
         return {'already_imported': True, 'row_count': existing['row_count']}
     latest = fetch_one('SELECT MAX(snapshot_date) AS snapshot_date FROM metrology_imports')
     if latest and latest['snapshot_date'] and snapshot_date < date.fromisoformat(latest['snapshot_date']):

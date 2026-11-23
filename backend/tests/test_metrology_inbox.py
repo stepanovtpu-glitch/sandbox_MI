@@ -32,6 +32,11 @@ def test_scheduled_inbox_requires_verified_full_snapshot(monkeypatch, tmp_path):
     file.with_suffix('.json').write_text(json.dumps(manifest), encoding='utf-8')
     assert import_pair(file)['row_count'] == 1
     assert process_inbox(inbox)['already_imported'] == 1
+    manifest['snapshot_date'] = '2026-11-21'
+    file.with_suffix('.json').write_text(json.dumps(manifest), encoding='utf-8')
+    assert process_inbox(inbox)['failed'] == 1
+    manifest['snapshot_date'] = '2026-11-20'
+    file.with_suffix('.json').write_text(json.dumps(manifest), encoding='utf-8')
     assert metrology_import.list_imports()[0]['snapshot_date'] == date(2026, 11, 20).isoformat()
 
     # Старая пара остаётся во входящей папке и должна распознаваться после

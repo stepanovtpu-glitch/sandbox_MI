@@ -95,7 +95,10 @@ def preview_export(content: bytes, snapshot_date: date) -> dict:
     parsed = parse_export(content, snapshot_date)
     digest = sha256(content).hexdigest()
     init_db()
-    existing = fetch_one('SELECT import_id FROM metrology_imports WHERE sha256 = ?', (digest,))
+    existing = fetch_one('SELECT import_id,snapshot_date FROM metrology_imports WHERE sha256 = ?', (digest,))
+    if existing and existing['snapshot_date'] != snapshot_date.isoformat():
+        raise ValueError(f"Этот XLSX уже опубликован с датой среза {existing['snapshot_date']}. "
+                         'Повторное использование файла с другой датой не подтверждает обновление данных.')
     return ({key: value for key, value in parsed.items() if key != 'rows'}
             | {'sha256': digest, 'already_imported': bool(existing),
                'coverage_check': _coverage_check(parsed['row_count'], snapshot_date, bool(existing))})
@@ -124,6 +127,9 @@ def publish_export(content: bytes, filename: str, snapshot_date: date, actor: st
     init_db()
     existing = fetch_one('SELECT * FROM metrology_imports WHERE sha256 = ?', (digest,))
     if existing:
+        if existing['snapshot_date'] != snapshot_date.isoformat():
+            raise ValueError(f"Этот XLSX уже опубликован с датой среза {existing['snapshot_date']}. "
+                             'Повторное использование файла с другой датой не подтверждает обновление данных.')
         return {key: value for key, value in dict(existing).items() if key != 'source_path'} | {'already_imported': True}
     latest = fetch_one('SELECT MAX(snapshot_date) AS snapshot_date FROM metrology_imports')
     if latest and latest['snapshot_date'] and snapshot_date < date.fromisoformat(latest['snapshot_date']):
