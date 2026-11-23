@@ -1,8 +1,9 @@
 """Клиент корпоративной LLM.
 
 Единая точка подключения языковой модели предприятия. Корпоративная LLM
-ИНК — Ollama внутри периметра (по памятке ИТ: 10.61.157.1:11434, модели
-gemma4:e4b и qwen3.5), поэтому основной протокол — родной /api/chat Ollama
+ИНК — Ollama внутри периметра. Прежний адрес 10.61.157.1:11434, указанный в
+проектных памятках, остановлен 08.09.2026; действующий URL требуется получить
+у владельца сервиса. Для Ollama основной протокол — родной /api/chat
 со "stream": false и "think": false (иначе ответ пуст, а рассуждение уходит
 в message.thinking). Второй протокол — chat completions, совместимый
 с OpenAI, для шлюзов vLLM/LiteLLM. Адрес и модель — только настройка.
@@ -28,7 +29,7 @@ gemma4:e4b и qwen3.5), поэтому основной протокол — р�
 модель есть.
 
 Настройка (docker-compose / .env):
-    GASMETER_LLM_BASE_URL   Ollama: http://10.61.157.1:11434; OpenAI-шлюз: https://.../v1
+    GASMETER_LLM_BASE_URL   Действующий внутренний URL Ollama; OpenAI-шлюз: https://.../v1
     GASMETER_LLM_PROVIDER   ollama | openai (по умолчанию определяется по адресу)
     GASMETER_LLM_MODEL      gemma4:e4b, qwen3.5:latest и т. п.
     GASMETER_LLM_API_KEY    ключ (только для OpenAI-шлюза)
