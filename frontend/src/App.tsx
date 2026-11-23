@@ -656,7 +656,7 @@ function SettingsScreen({ apiBase, methodsCount, instrumentsCount }: { apiBase: 
           <div className="settings-list">
             <div><span>Движок</span><b>Tesseract OCR</b></div>
             <div><span>Языки</span><b>rus + eng</b></div>
-            <div><span>Модели</span><b>backend/app/ocr_tessdata</b></div>
+            <div><span>Проверка</span><b>Сверка распознанных карточек</b></div>
             <div><span>Рендер PDF</span><b>pdftoppm / Poppler</b></div>
           </div>
         </section>
@@ -664,18 +664,17 @@ function SettingsScreen({ apiBase, methodsCount, instrumentsCount }: { apiBase: 
           <div className="rec-label">Об оформлении</div>
           <div className="settings-list">
             <div><span>Эмблема</span><b>ООО «ИНК», irkutskoil.ru</b></div>
-            <div><span>Фото Байкала</span><b>Sergey Pesterev, Iurii Volkov</b></div>
-            <div><span>Лицензия фото</span><b>CC BY-SA 4.0, Wikimedia Commons</b></div>
+            <div><span>Фото Байкала</span><b>{BRAND.photoCredit}</b></div>
             <div><span>Шрифты</span><b>Golos Text · IBM Plex Mono</b></div>
           </div>
         </section>
         <section className="settings-tile">
           <div className="rec-label">Рабочие ограничения</div>
           <div className="settings-list">
-            <div><span>База данных</span><b>локальная SQLite</b></div>
-            <div><span>Тесты</span><b>изолированная временная БД</b></div>
+            <div><span>База данных</span><b>PostgreSQL на сервере</b></div>
+            <div><span>Источник данных</span><b>последняя опубликованная выгрузка</b></div>
             <div><span>Документы МИ</span><b>SHA-256 контроль</b></div>
-            <div><span>Режим</span><b>альфа-подготовка</b></div>
+            <div><span>Режим</span><b>пилотная эксплуатация</b></div>
           </div>
         </section>
       </div>
