@@ -21,7 +21,7 @@ from typing import Any, Iterator
 
 DB_DIR = Path(os.environ.get('GASMETER_DB_DIR', Path(__file__).resolve().parents[1] / 'data'))
 DB_PATH = DB_DIR / 'gasmeter.db'
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 def database_url() -> str:
@@ -452,6 +452,23 @@ def _ensure_schema_version(connection: _Connection) -> None:
         ''')
         connection.execute('INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
                            (10, 'Versioned periodic metrology export snapshots'))
+    if current_version < 11:
+        connection.executescript('''
+            CREATE TABLE IF NOT EXISTS integration_clients (
+                client_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                key_hash TEXT NOT NULL UNIQUE,
+                scope TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                disabled_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_metro_import_rows_serial
+                ON metrology_import_rows(import_id, serial_number);
+        ''')
+        connection.execute('INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+                           (11, 'Scoped read-only integration clients and exact serial lookup index'))
     if _current_schema_version(connection) > SCHEMA_VERSION:
         raise RuntimeError('Database schema is newer than this application version')
 

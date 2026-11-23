@@ -76,6 +76,7 @@ from app.gas_physics import k_ratio_from_composition
 from app.llm_client import LlmClient, LlmNotConfigured, explain_selection
 from app.metrology_expert import answer_question
 from app.metrology_import import compare_imports, export_snapshot_csv, find_in_latest_snapshot, list_imports, preview_export, publish_export, snapshot_conflicts, snapshot_rows
+from app.metrology_integration import lookup_metrology, require_integration_client
 from app.arshin_monitor import asset_history, check_asset, create_asset, get_asset as get_metrology_asset, list_assets, update_asset
 from app.yandex_messenger import MessengerCourier, notify_project_event
 from app.uug_composition import project_candidates, validate_composition
@@ -84,7 +85,7 @@ from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
-APP_VERSION = '0.2.10'
+APP_VERSION = '0.2.11'
 app = FastAPI(title='ФОРВАТЕР', version=APP_VERSION)
 
 
@@ -767,6 +768,20 @@ def arshin_assets_list(user: dict[str, object] = Depends(require_permission('met
 @app.get('/api/metrology/imports')
 def metrology_imports_list(user: dict[str, object] = Depends(require_permission('metrology:read'))):
     return list_imports()
+
+
+@app.get('/api/integration/v1/metrology/lookup')
+def integration_metrology_lookup(serial: str, organization: str | None = None, metrology_code: str | None = None,
+                                 client: dict = Depends(require_integration_client)):
+    try:
+        result = lookup_metrology(serial, organization=organization, metrology_code=metrology_code)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    log_audit_event('integration_metrology_lookup', 'metrology_snapshot',
+                    result['snapshot']['import_id'] if result['snapshot'] else None,
+                    {'client_id': client['client_id'], 'match_status': result['match_status'],
+                     'total_matches': result['total_matches']}, actor=f"integration:{client['name']}")
+    return result
 
 
 @app.get('/api/metrology/snapshot/search')
