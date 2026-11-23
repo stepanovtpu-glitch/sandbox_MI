@@ -47,7 +47,7 @@ export function SystemStatusPanel({ defaultExpanded = false }: { defaultExpanded
       {readiness && (
         <div className={`readiness-card ${readiness.status}`}>
           <div className="readiness-top">
-            <span>Готовность к пилоту</span>
+            <span>Готовность расчётного пилота</span>
             <b>{readinessPercent}%</b>
           </div>
           <div className="readiness-track"><i style={{ width: `${Math.min(Math.max(readinessPercent, 0), 100)}%` }} /></div>

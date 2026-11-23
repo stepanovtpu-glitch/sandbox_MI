@@ -1,8 +1,20 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app import pilot_readiness
 
 client = TestClient(app)
+
+
+def test_postgres_database_check_uses_connection_not_sqlite_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(pilot_readiness, 'uses_postgres', lambda: True)
+    monkeypatch.setattr(pilot_readiness, 'DB_PATH', tmp_path / 'missing-sqlite.db')
+    queries = []
+    monkeypatch.setattr(pilot_readiness, 'fetch_one', lambda query: queries.append(query) or {'ok': 1})
+    check = pilot_readiness._database_check()
+    assert check.status == 'pass'
+    assert check.details == 'PostgreSQL: соединение подтверждено'
+    assert queries == ['SELECT 1 AS ok']
 
 
 def test_pilot_readiness_endpoint_returns_weighted_checks():

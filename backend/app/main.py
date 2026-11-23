@@ -1,7 +1,6 @@
 import hashlib
 import json
 import os
-import re
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -16,7 +15,7 @@ from app.audit_log import list_audit_events, log_audit_event
 from app.calculation import calculate
 from app.calculation_history import get_calculation_record, list_calculation_records, save_calculation_record
 from app.calculation_templates import TEMPLATE_TITLES
-from app.database import DB_PATH, SCHEMA_VERSION, database_url, get_schema_version, uses_postgres
+from app.database import DB_PATH, SCHEMA_VERSION, get_schema_version, uses_postgres
 from app.document_storage import _library_raw_dir, get_method_document, save_method_document, verify_method_document
 from app.instrument_library import bootstrap_instrument_library, list_instruments, recommend_replacements, upsert_instrument
 from app.method_library import (
@@ -87,7 +86,7 @@ from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
-APP_VERSION = '0.2.18'
+APP_VERSION = '0.2.19'
 app = FastAPI(title='ФОРВАТЕР', version=APP_VERSION)
 
 
@@ -270,9 +269,8 @@ def system_info(user: dict[str, object] = Depends(require_permission('system:rea
     # и после перехода на PostgreSQL экран вводил в заблуждение.
     postgres = uses_postgres()
     if postgres:
-        # адрес без пароля: логин и хост полезны, секрет — нет
-        url = re.sub(r'//[^@]*@', '//', database_url())
-        storage = {'database_engine': 'PostgreSQL', 'database_location': url, 'database_exists': True}
+        # Строка подключения может содержать секреты и не нужна клиенту.
+        storage = {'database_engine': 'PostgreSQL', 'database_location': 'Серверная база PostgreSQL', 'database_exists': True}
     else:
         storage = {
             'database_engine': 'SQLite',

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.database import DB_PATH, SCHEMA_VERSION, fetch_all, fetch_one, get_schema_version, json_load
+from app.database import DB_PATH, SCHEMA_VERSION, fetch_all, fetch_one, get_schema_version, init_db, json_load, uses_postgres
 from app.instrument_library import list_instruments
 
 
@@ -26,6 +26,7 @@ class ReadinessCheck:
 
 
 def get_pilot_readiness() -> dict[str, Any]:
+    init_db()
     checks = [
         _database_check(),
         _schema_check(),
@@ -57,13 +58,15 @@ def get_pilot_readiness() -> dict[str, Any]:
 
 
 def _database_check() -> ReadinessCheck:
-    exists = DB_PATH.exists()
+    postgres = uses_postgres()
+    exists = bool(fetch_one('SELECT 1 AS ok')) if postgres else DB_PATH.exists()
     return ReadinessCheck(
         code='database',
-        title='База данных создана',
+        title='База данных доступна',
         status='pass' if exists else 'fail',
         weight=10,
-        details=str(DB_PATH) if exists else 'Файл базы не найден',
+        details=('PostgreSQL: соединение подтверждено' if exists else 'PostgreSQL не отвечает') if postgres
+                else str(DB_PATH) if exists else 'Файл базы не найден',
     )
 
 
