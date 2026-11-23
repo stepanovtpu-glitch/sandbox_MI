@@ -13,8 +13,8 @@ from pathlib import Path
 
 import paramiko
 
-VERSION = '0.2.16'
-EXPECTED_HASH = 'c7101c9ae31b1342e860ed71475e03f4fe8807cc588fc5dd870e420bb1a510ae'
+VERSION = '0.2.17'
+EXPECTED_HASH = '31cc6e4db12fe59ba6591879234e45b921b05f13a8c686332647a44dd3f2b152'
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / 'releases' / f'forvater-{VERSION}' / 'forvater-images.tar'
 CREDS = Path('C:/pass/izp-flow-meter.json')

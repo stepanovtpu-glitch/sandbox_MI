@@ -10,7 +10,9 @@ from datetime import date
 from hashlib import sha256
 from pathlib import Path
 
-from app.metrology_import import list_imports, publish_export
+from app.database import fetch_one, init_db
+from app.metrology_import import publish_export
+from app.metrology_status import operational_today
 
 MAX_MANIFEST_BYTES = 8192
 MAX_XLSX_BYTES = 20_000_000
@@ -33,7 +35,7 @@ def import_pair(file: Path) -> dict:
         raise ValueError('Автоматический импорт принимает только полный снимок (scope=full).')
     if manifest.get('source') != 'ИС Метрология':
         raise ValueError('Укажите source="ИС Метрология".')
-    if snapshot_date > date.today():
+    if snapshot_date > operational_today():
         raise ValueError('Дата среза не может быть в будущем.')
     if file.stat().st_size > MAX_XLSX_BYTES:
         raise ValueError('XLSX превышает 20 МБ.')
@@ -41,10 +43,12 @@ def import_pair(file: Path) -> dict:
     digest = sha256(content).hexdigest()
     if manifest.get('sha256') != digest:
         raise ValueError('SHA-256 в манифесте не совпадает с XLSX.')
-    imports = list_imports()
-    if any(item['sha256'] == digest for item in imports):
-        return {'already_imported': True, 'row_count': next(item['row_count'] for item in imports if item['sha256'] == digest)}
-    if imports and snapshot_date < max(date.fromisoformat(item['snapshot_date']) for item in imports):
+    init_db()
+    existing = fetch_one('SELECT row_count FROM metrology_imports WHERE sha256 = ?', (digest,))
+    if existing:
+        return {'already_imported': True, 'row_count': existing['row_count']}
+    latest = fetch_one('SELECT MAX(snapshot_date) AS snapshot_date FROM metrology_imports')
+    if latest and latest['snapshot_date'] and snapshot_date < date.fromisoformat(latest['snapshot_date']):
         raise ValueError('Дата среза старше уже опубликованного снимка.')
     return publish_export(content, file.name, snapshot_date, 'scheduled-inbox')
 
