@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AlertTriangle, BadgeCheck, Clock3, ExternalLink, FileSearch, LoaderCircle, Plus, RefreshCw, ShieldAlert } from 'lucide-react';
-import { checkArshinAsset, compareMetrologyImports, createArshinAsset, downloadMetrologySnapshot, findInMetrologySnapshot, getArshinAssetHistory, getArshinAssets, getMetrologyConflicts, getMetrologyImports, getMetrologySnapshotRows, uploadMetrologySnapshot, type LocalSnapshotMatch, type MetrologyComparison, type MetrologyConflicts, type MetrologySnapshotRow, type MetrologyImport, type SnapshotFreshness, type ArshinCheckRun, type ArshinStatus, type MetrologyAsset, type MetrologyAssetInput } from './api';
+import { checkArshinAsset, compareMetrologyImports, createArshinAsset, downloadMetrologyCertificate, downloadMetrologySnapshot, findInMetrologySnapshot, getArshinAssetHistory, getArshinAssets, getMetrologyCertificates, getMetrologyConflicts, getMetrologyImports, getMetrologySnapshotRows, uploadMetrologyCertificate, uploadMetrologySnapshot, type LocalSnapshotMatch, type MetrologyCertificate, type MetrologyComparison, type MetrologyConflicts, type MetrologySnapshotRow, type MetrologyImport, type SnapshotFreshness, type ArshinCheckRun, type ArshinStatus, type MetrologyAsset, type MetrologyAssetInput } from './api';
 
 const statusInfo: Record<string, { title: string; tone: string; explanation: string }> = {
   valid: { title: 'Действует по записи', tone: 'good', explanation: 'В последней найденной записи указан срок действия, который ещё не истёк.' },
@@ -52,6 +52,10 @@ export function ArshinMonitorScreen({ canManage }: { canManage: boolean }) {
   const [conflicts, setConflicts] = useState<MetrologyConflicts | null>(null);
   const [searchSerial, setSearchSerial] = useState('');
   const [searchResult, setSearchResult] = useState<{ snapshot: MetrologyImport | null; freshness?: SnapshotFreshness; total: number; rows: LocalSnapshotMatch[]; note?: string } | null>(null);
+  const [certificates, setCertificates] = useState<MetrologyCertificate[]>([]);
+  const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [certificateFields, setCertificateFields] = useState({ issuer: '', document_number: '', verification_date: '', source_note: '' });
+  const [certificateBusy, setCertificateBusy] = useState(false);
   const selected = useMemo(() => assets.find((item) => item.asset_id === selectedId) ?? null, [assets, selectedId]);
 
   const refresh = useCallback(async () => {
@@ -85,6 +89,24 @@ export function ArshinMonitorScreen({ canManage }: { canManage: boolean }) {
     if (!selectedId) { setHistory([]); return; }
     getArshinAssetHistory(selectedId).then(setHistory).catch(() => setHistory([]));
   }, [selectedId, assets]);
+  useEffect(() => {
+    if (!selectedId) { setCertificates([]); return; }
+    getMetrologyCertificates(selectedId).then(setCertificates).catch(() => setCertificates([]));
+  }, [selectedId]);
+
+  async function submitCertificate(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedId || !certificateFile || certificateBusy) return;
+    setCertificateBusy(true); setError(''); setMessage('');
+    try {
+      const result = await uploadMetrologyCertificate(selectedId, certificateFile, certificateFields);
+      setCertificates(await getMetrologyCertificates(selectedId));
+      setCertificateFile(null);
+      setCertificateFields({ issuer: '', document_number: '', verification_date: '', source_note: '' });
+      setMessage(result.already_uploaded ? 'Этот PDF уже приложен к СИ.' : 'Документ поверителя сохранён. Его подлинность сверяется отдельно с записью ФГИС.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось загрузить документ.'); }
+    finally { setCertificateBusy(false); }
+  }
 
   async function submitAsset(event: FormEvent) {
     event.preventDefault();
@@ -201,6 +223,10 @@ export function ArshinMonitorScreen({ canManage }: { canManage: boolean }) {
         {run.results[0]?.official_record_url && <a className="arshin-source-link" href={run.results[0].official_record_url} target="_blank" rel="noreferrer">Открыть запись в официальном источнике <ExternalLink size={14} /></a>}
         {run.error_message && <p className="muted-copy">{run.error_message}</p>}
       </li>)}</ol>}
+      <div className="certificate-section"><strong>Документы поверителя</strong><p className="muted-copy">Приложенные PDF хранятся отдельно от записей ФГИС. Загрузка документа не подтверждает поверку автоматически.</p>
+        {certificates.length === 0 ? <p className="muted-copy">Документов пока нет.</p> : <ul className="certificate-list">{certificates.map((item) => <li key={item.certificate_id}><span><b>№ {item.document_number}</b> · {item.issuer} · {item.verification_date}<small>{item.original_name} · источник: {item.source_note}</small></span><button className="ghost-button" onClick={() => void downloadMetrologyCertificate(item.certificate_id).catch((reason) => setError(reason instanceof Error ? reason.message : 'Не удалось скачать PDF.'))}>Скачать PDF</button></li>)}</ul>}
+        {canManage && <details className="certificate-upload"><summary>Приложить свидетельство поверителя</summary><form onSubmit={(event) => void submitCertificate(event)}><div className="certificate-form-grid"><label className="field"><span>Организация-поверитель</span><input required maxLength={200} value={certificateFields.issuer} onChange={(event) => setCertificateFields({ ...certificateFields, issuer: event.target.value })} /></label><label className="field"><span>Номер документа</span><input required maxLength={120} value={certificateFields.document_number} onChange={(event) => setCertificateFields({ ...certificateFields, document_number: event.target.value })} /></label><label className="field"><span>Дата поверки</span><input required type="date" value={certificateFields.verification_date} onChange={(event) => setCertificateFields({ ...certificateFields, verification_date: event.target.value })} /></label><label className="field"><span>Откуда получен документ</span><input required maxLength={500} value={certificateFields.source_note} onChange={(event) => setCertificateFields({ ...certificateFields, source_note: event.target.value })} placeholder="Например, от организации-поверителя" /></label><label className="field"><span>PDF до 10 МБ</span><input required type="file" accept="application/pdf,.pdf" onChange={(event) => setCertificateFile(event.target.files?.[0] ?? null)} /></label></div><button className="primary-button" disabled={certificateBusy || !certificateFile}>{certificateBusy ? 'Сохраняем…' : 'Сохранить документ'}</button></form></details>}
+      </div>
       <div className="arshin-detail-footer"><span>Следующая автоматическая проверка: {dateTime(selected.next_check_at)}</span>{canManage && <button className="primary-button" disabled={busyId === selected.asset_id} onClick={() => void checkNow(selected.asset_id)}><RefreshCw size={15} /> Проверить сейчас</button>}</div>
     </article>}
   </section>;

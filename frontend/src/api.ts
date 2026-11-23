@@ -351,6 +351,22 @@ export async function getArshinAssets() { return request<MetrologyAsset[]>('/api
 export async function createArshinAsset(asset: MetrologyAssetInput) { return request<MetrologyAsset>('/api/metrology/arshin/assets', { method: 'POST', body: JSON.stringify(asset) }); }
 export async function checkArshinAsset(assetId: string) { return request<ArshinCheckRun>(`/api/metrology/arshin/assets/${assetId}/check`, { method: 'POST' }); }
 export async function getArshinAssetHistory(assetId: string) { return request<ArshinCheckRun[]>(`/api/metrology/arshin/assets/${assetId}/history`); }
+export type MetrologyCertificate = { certificate_id: string; asset_id: string; sha256: string; original_name: string; issuer: string; document_number: string; verification_date: string; source_note: string; uploaded_by: string; uploaded_at: string; already_uploaded?: boolean };
+export async function getMetrologyCertificates(assetId: string) { return request<MetrologyCertificate[]>(`/api/metrology/arshin/assets/${assetId}/certificates`); }
+export async function uploadMetrologyCertificate(assetId: string, file: File, fields: { issuer: string; document_number: string; verification_date: string; source_note: string }) {
+  const body = new FormData();
+  body.append('file', file);
+  for (const [key, value] of Object.entries(fields)) body.append(key, value);
+  const response = await fetch(`${API_BASE}/api/metrology/arshin/assets/${assetId}/certificates`, { method: 'POST', headers: authHeaders(), body });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? `Ошибка загрузки: ${response.status}`);
+  }
+  return response.json() as Promise<MetrologyCertificate>;
+}
+export async function downloadMetrologyCertificate(certificateId: string) {
+  return downloadAuthenticatedFile(`/api/metrology/certificates/${certificateId}/file`, `certificate-${certificateId.slice(0, 8)}.pdf`);
+}
 
 export type SnapshotFreshness = { status: 'future_date' | 'threshold_unset' | 'invalid_threshold' | 'stale' | 'within_threshold'; snapshot_date: string; checked_on: string; checked_timezone: string; age_days: number; max_age_days: number | null };
 export type MetrologyImport = { import_id: string; snapshot_date: string; imported_at: string; file_name: string; row_count: number; issue_count: number; already_imported?: boolean; past_due_rows?: number; missing_due?: number; repeated_guid_rows?: number; sha256?: string; freshness?: SnapshotFreshness; coverage_check?: { status: 'ok' | 'large_drop' | 'older_snapshot'; previous_rows: number | null; decrease_percent?: number } };

@@ -21,7 +21,7 @@ from typing import Any, Iterator
 
 DB_DIR = Path(os.environ.get('GASMETER_DB_DIR', Path(__file__).resolve().parents[1] / 'data'))
 DB_PATH = DB_DIR / 'gasmeter.db'
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 def database_url() -> str:
@@ -488,6 +488,27 @@ def _ensure_schema_version(connection: _Connection) -> None:
         ''')
         connection.execute('INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
                            (12, 'Idempotent bridge queue for the shared Engineering Memory messenger bot'))
+    if current_version < 13:
+        connection.executescript('''
+            CREATE TABLE IF NOT EXISTS metrology_certificates (
+                certificate_id TEXT PRIMARY KEY,
+                asset_id TEXT NOT NULL REFERENCES metrology_assets(asset_id),
+                sha256 TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                issuer TEXT NOT NULL,
+                document_number TEXT NOT NULL,
+                verification_date TEXT NOT NULL,
+                source_note TEXT NOT NULL,
+                uploaded_by TEXT NOT NULL,
+                uploaded_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_metrology_certificates_asset_hash
+                ON metrology_certificates(asset_id, sha256);
+            CREATE INDEX IF NOT EXISTS idx_metrology_certificates_asset_date
+                ON metrology_certificates(asset_id, verification_date DESC, uploaded_at DESC);
+        ''')
+        connection.execute('INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+                           (13, 'Provenance-tracked verification certificate files supplied by the verifier'))
     if _current_schema_version(connection) > SCHEMA_VERSION:
         raise RuntimeError('Database schema is newer than this application version')
 

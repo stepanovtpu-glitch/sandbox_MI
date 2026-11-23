@@ -14,7 +14,7 @@ from app.security import ROLE_PERMISSIONS
 from app.users import get_user
 
 logger = logging.getLogger('gasmeter.messenger_bridge')
-COMMAND = re.compile(r'^\s*/(?:поверка|состояние|си|эксперт)(?:\s|$)', re.IGNORECASE)
+COMMAND = re.compile(r'^\s*/(?:поверка|состояние|си|эксперт|свидетельство)(?:\s|$)', re.IGNORECASE)
 
 
 def _now() -> datetime:

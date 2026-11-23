@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 import logging
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi import Header as FastApiHeader
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -75,6 +75,7 @@ from app.compressibility import METHODS as COMPRESSIBILITY_METHODS
 from app.gas_physics import k_ratio_from_composition
 from app.llm_client import LlmClient, LlmNotConfigured, explain_selection
 from app.metrology_expert import answer_question
+from app.metrology_certificates import MAX_PDF_BYTES, list_certificates, read_certificate, save_certificate
 from app.metrology_import import compare_imports, export_snapshot_csv, find_in_latest_snapshot, list_imports, preview_export, publish_export, snapshot_conflicts, snapshot_rows
 from app.metrology_integration import lookup_metrology, require_integration_client
 from app.messenger_bridge import _bridge_key, enqueue_command
@@ -86,7 +87,7 @@ from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
-APP_VERSION = '0.2.17'
+APP_VERSION = '0.2.18'
 app = FastAPI(title='ФОРВАТЕР', version=APP_VERSION)
 
 
@@ -916,6 +917,46 @@ def arshin_asset_history(asset_id: str, limit: int = 20, user: dict[str, object]
     if not get_metrology_asset(asset_id):
         raise HTTPException(status_code=404, detail='Экземпляр СИ не найден.')
     return asset_history(asset_id, limit)
+
+
+@app.get('/api/metrology/arshin/assets/{asset_id}/certificates')
+def arshin_asset_certificates(asset_id: str, user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    if not get_metrology_asset(asset_id):
+        raise HTTPException(status_code=404, detail='Экземпляр СИ не найден.')
+    return list_certificates(asset_id)
+
+
+@app.post('/api/metrology/arshin/assets/{asset_id}/certificates', status_code=201)
+async def arshin_asset_certificate_upload(
+    asset_id: str, issuer: str = Form(...), document_number: str = Form(...),
+    verification_date: date = Form(...), source_note: str = Form(...),
+    file: UploadFile = File(...), user: dict[str, object] = Depends(require_permission('metrology:manage')),
+):
+    try:
+        result = save_certificate(asset_id, await file.read(MAX_PDF_BYTES + 1), file.filename or '',
+                                  issuer, document_number, verification_date, source_note, _actor(user))
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    log_audit_event('metrology_certificate_uploaded', 'metrology_certificate', result['certificate_id'],
+                    {'asset_id': asset_id, 'sha256': result['sha256'], 'already_uploaded': result['already_uploaded']},
+                    actor=_actor(user))
+    return result
+
+
+@app.get('/api/metrology/certificates/{certificate_id}/file')
+def metrology_certificate_file(certificate_id: str, user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    try:
+        record, content = read_certificate(certificate_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (OSError, RuntimeError) as error:
+        raise HTTPException(status_code=409, detail='Документ недоступен или повреждён.') from error
+    log_audit_event('metrology_certificate_downloaded', 'metrology_certificate', certificate_id,
+                    {'asset_id': record['asset_id']}, actor=_actor(user))
+    return Response(content, media_type='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="certificate-{certificate_id[:8]}.pdf"'})
 
 
 @app.get('/api/uug/projects')

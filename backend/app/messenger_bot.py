@@ -27,6 +27,7 @@ from app.database import execute, fetch_one, init_db, json_dump
 from app.llm_client import LlmNotConfigured
 from app.metrology_expert import answer_question
 from app.metrology_import import find_in_latest_snapshot
+from app.metrology_certificates import find_for_serial, read_certificate
 from app.security import ROLE_PERMISSIONS
 from app.users import get_user
 
@@ -36,10 +37,12 @@ MAX_UPDATE_BATCH = 100
 CURRENT_UPDATE_ID: ContextVar[int | None] = ContextVar('current_yandex_update_id', default=None)
 SERIAL_COMMAND = re.compile(r'^\s*(?:/поверка|поверка)\s+(.+?)\s*$', re.IGNORECASE)
 LOCAL_COMMAND = re.compile(r'^\s*(?:/состояние|состояние|/си)\s+(.+?)\s*$', re.IGNORECASE)
+CERTIFICATE_COMMAND = re.compile(r'^\s*/свидетельство\s+(.+?)\s*$', re.IGNORECASE)
 HELP_TEXT = (
     'ФОРВАТЕР — справка по метрологии.\n'
     '• «/поверка заводской_номер [номер_типа]» — поиск записи о поверке в ФГИС «Аршин».\n'
     '• «/состояние заводской_номер» — срок по последней локальной выгрузке ТОиР без обращения к Аршину.\n'
+    '• «/свидетельство заводской_номер [номер_типа]» — приложенный PDF поверителя, если он загружен метрологом.\n'
     '• «/эксперт ваш вопрос» или обычный текст — ответ по распознанной библиотеке МИ.\n'
     'Ответ по МИ содержит ссылки на использованные файлы. Если подтверждения в источниках нет, бот скажет об этом.'
 )
@@ -104,7 +107,7 @@ def _send_text(token: str, target: dict[str, str], text: str) -> None:
 
 
 def _send_file(token: str, target: dict[str, str], name: str, payload: bytes, mime_type: str) -> None:
-    if len(payload) > 2_000_000:
+    if len(payload) > 10_000_000:
         raise ValueError('Выгрузка превышает разрешённый внутренний лимит отправки.')
     with httpx.Client(timeout=30) as client:
         response = client.post(
@@ -154,11 +157,42 @@ def _format_arshin(records: list[dict[str, Any]]) -> tuple[str, bytes]:
 
 def _handle_text(text: str, token: str, target: dict[str, str], actor: str) -> None:
     normalized = text.strip()
-    if normalized.casefold() in {'/поверка', '/состояние', '/си', '/эксперт'}:
+    if normalized.casefold() in {'/поверка', '/состояние', '/си', '/эксперт', '/свидетельство'}:
         _send_text(token, target, 'Укажите после команды заводской номер или вопрос. Пример: /состояние А-123.')
         return
     if normalized.casefold() in {'/start', '/help', 'помощь', 'справка'}:
         _send_text(token, target, HELP_TEXT)
+        return
+    certificate_command = CERTIFICATE_COMMAND.match(normalized)
+    if certificate_command:
+        try:
+            parts = shlex.split(certificate_command.group(1))
+            if len(parts) not in (1, 2):
+                raise ValueError('Формат: /свидетельство заводской_номер [номер_типа_СИ].')
+            found = find_for_serial(parts[0], parts[1] if len(parts) == 2 else None)
+            if found['status'] == 'not_found':
+                _send_text(token, target, 'СИ с таким точным заводским номером нет в реестре контролируемых СИ. Это не означает отсутствие поверки в ФГИС.')
+                return
+            if found['status'] == 'ambiguous':
+                _send_text(token, target, 'Номер неоднозначен. Добавьте после заводского номера номер типа СИ в Госреестре.')
+                return
+            if found['status'] == 'no_document':
+                _send_text(token, target, 'Для этого СИ не загружен документ поверителя. Запросите его у метролога; запись ФГИС проверяется отдельно командой /поверка.')
+                return
+            record, content = read_certificate(found['certificate']['certificate_id'])
+        except ValueError as error:
+            _send_text(token, target, str(error))
+            return
+        except (KeyError, OSError, RuntimeError):
+            _send_text(token, target, 'Приложенный документ недоступен или не прошёл контроль целостности. Обратитесь к метрологу.')
+            return
+        _send_text(token, target,
+                   f"Приложенный документ поверителя: {record['issuer']}, № {record['document_number']}, "
+                   f"дата поверки {record['verification_date']}. Загружен {record['uploaded_at'][:10]} "
+                   'и не получен из ФГИС; подлинность и актуальность сверяйте с записью «Аршина».')
+        _send_file(token, target, f"certificate-{record['certificate_id'][:8]}.pdf", content, 'application/pdf')
+        log_audit_event('metrology_certificate_sent', 'metrology_certificate', record['certificate_id'],
+                        {'asset_id': record['asset_id'], 'sha256': record['sha256']}, actor=actor)
         return
     local = LOCAL_COMMAND.match(normalized)
     if local:

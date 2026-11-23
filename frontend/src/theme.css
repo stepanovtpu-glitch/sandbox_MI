@@ -1555,6 +1555,16 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .arshin-source-link { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-size: 11px; text-decoration: none; }
 .arshin-detail-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
 .arshin-detail-footer button { display: inline-flex; align-items: center; gap: 7px; }
+.certificate-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.certificate-section > strong { font-size: 13px; }
+.certificate-section > p { margin: 5px 0 10px; }
+.certificate-list { list-style: none; padding: 0; margin: 0 0 10px; }
+.certificate-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 12px; }
+.certificate-list small { display: block; margin-top: 3px; color: var(--muted); }
+.certificate-upload { margin-top: 8px; font-size: 12px; }
+.certificate-upload summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.certificate-upload form { margin-top: 10px; }
+.certificate-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
 @media (max-width: 900px) { .arshin-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .arshin-record-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
   .arshin-card, .arshin-detail { padding: 12px; }
@@ -1567,6 +1577,8 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
   .arshin-current { align-items: flex-start; flex-direction: column; }
   .arshin-detail .panel-header { align-items: flex-start; flex-direction: column; }
   .arshin-record-grid { grid-template-columns: 1fr 1fr; }
+  .certificate-form-grid { grid-template-columns: 1fr; }
+  .certificate-list li { align-items: flex-start; flex-direction: column; }
   .arshin-detail-footer { align-items: flex-start; flex-direction: column; }
   .arshin-detail-footer button { width: 100%; justify-content: center; }
 }
