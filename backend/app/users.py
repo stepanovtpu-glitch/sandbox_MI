@@ -17,7 +17,7 @@ import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from app.database import execute, fetch_all, fetch_one, init_db
+from app.database import execute, fetch_all, fetch_one, get_connection, init_db
 
 PBKDF2_ITERATIONS = 200_000
 SESSION_TTL_HOURS = 12
@@ -67,11 +67,18 @@ def list_users() -> list[dict]:
 
 
 def set_user_active(login: str, is_active: bool) -> None:
-    execute('UPDATE users SET is_active = ? WHERE login = ?', (1 if is_active else 0, login.strip().lower()))
+    clean_login = login.strip().lower()
+    with get_connection() as connection:
+        connection.execute('UPDATE users SET is_active = ? WHERE login = ?', (1 if is_active else 0, clean_login))
+        if not is_active:
+            connection.execute('DELETE FROM user_sessions WHERE login = ?', (clean_login,))
 
 
 def update_password(login: str, password: str) -> None:
-    execute('UPDATE users SET password_hash = ? WHERE login = ?', (hash_password(password), login.strip().lower()))
+    clean_login = login.strip().lower()
+    with get_connection() as connection:
+        connection.execute('UPDATE users SET password_hash = ? WHERE login = ?', (hash_password(password), clean_login))
+        connection.execute('DELETE FROM user_sessions WHERE login = ?', (clean_login,))
 
 
 def authenticate(login: str, password: str) -> dict | None:

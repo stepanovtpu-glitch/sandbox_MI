@@ -143,6 +143,24 @@ def test_short_password_is_rejected():
     assert response.status_code == 400
 
 
+def test_password_reset_and_reactivation_do_not_restore_old_sessions():
+    from uuid import uuid4
+    login = 'session_guard_' + uuid4().hex[:8]
+    admin_login = 'session_admin_' + uuid4().hex[:8]
+    _ensure_user(login, 'kip')
+    _ensure_user(admin_login, 'admin')
+    admin = _auth(_token(admin_login))
+    old = _token(login)
+    assert client.get('/api/security/me', headers=_auth(old)).status_code == 200
+    assert client.post(f'/api/users/{login}/password',
+                       json={'password': 'new-session-guard-2026'}, headers=admin).status_code == 200
+    assert client.get('/api/security/me', headers=_auth(old)).status_code == 401
+    fresh = _token(login, 'new-session-guard-2026')
+    assert client.post(f'/api/users/{login}/active?is_active=false', headers=admin).status_code == 200
+    assert client.post(f'/api/users/{login}/active?is_active=true', headers=admin).status_code == 200
+    assert client.get('/api/security/me', headers=_auth(fresh)).status_code == 401
+
+
 def test_manage_command_creates_user_with_prompted_password(monkeypatch, capsys):
     """Служебная команда образа: пароль только с клавиатуры, не из аргументов."""
     from app import manage

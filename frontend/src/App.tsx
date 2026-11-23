@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Activity, AlertTriangle, ChevronRight, ClipboardList, LogOut, Users, Database, FileText, Gauge, History, Moon, PlusCircle, Search, Settings, ShieldCheck, Sun, BookOpenText, FileSearch } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronDown, ChevronRight, ClipboardList, LogOut, Users, Database, FileText, Gauge, History, Moon, PlusCircle, Search, Settings, ShieldCheck, Sun, BookOpenText, FileSearch } from 'lucide-react';
 import { PipelineScene } from './PipelineScene';
 import { MIN_STRAIGHT_AFTER_DN, MIN_STRAIGHT_BEFORE_DN, PIPE_DN_SERIES } from './domain';
 import { UugSelectionScreen } from './UugSelectionScreen';
@@ -72,6 +72,8 @@ function App() {
   // На сервере вход обязателен (GASMETER_REQUIRE_AUTH=1), локально — нет:
   // об этом сообщает сам сервер, отвечая 401 на запрос профиля без токена.
   const [authRequired, setAuthRequired] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const isAuthorized = isSessionChecked && (!authRequired || Boolean(session));
   const apiBase = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000';
 
   /** Восстановление сессии по сохранённому токену при открытии приложения. */
@@ -109,10 +111,10 @@ function App() {
     (permission: string) => {
       // Пока сессия не проверена, запросы не выполняем: иначе роль без права
       // успевает получить 403 на первом рендере и видит ложную ошибку.
-      if (!isSessionChecked) return false;
+      if (!isAuthorized) return false;
       return session ? session.permissions.includes(permission) : true;
     },
-    [session, isSessionChecked],
+    [session, isAuthorized],
   );
 
   /** Разделы меню: каждый показывается, только если роль имеет соответствующее право. */
@@ -135,6 +137,8 @@ function App() {
       ).filter((item) => can(item.permission)),
     [can],
   );
+  const currentNavLabel = visibleNavItems.find((item) => item.view === activeView)?.label ?? 'Разделы';
+  useEffect(() => { setMobileNavOpen(false); }, [activeView]);
 
   /** Если роль потеряла доступ к текущему разделу — уводим на её домашний экран. */
   useEffect(() => {
@@ -180,10 +184,10 @@ function App() {
   const selectedInstruments = useMemo(() => [selectedFlowmeter, selectedPressure, selectedTemperature, selectedComputer, selectedAnalyzer].filter((item): item is Instrument => Boolean(item)), [selectedFlowmeter, selectedPressure, selectedTemperature, selectedComputer, selectedAnalyzer]);
 
   const refreshMethods = useCallback(() => getMethods().then((loadedMethods) => { setMethods(loadedMethods); if (!loadedMethods.some((method) => method.mi_id === selectedMethodId)) setSelectedMethodId(loadedMethods[0]?.mi_id ?? ''); }).catch((error: Error) => setApiError(error.message)), [selectedMethodId]);
-  useEffect(() => { if (!isSessionChecked) return; refreshMethods(); }, [refreshMethods, isSessionChecked]);
+  useEffect(() => { if (!isAuthorized) return; refreshMethods(); }, [refreshMethods, isAuthorized]);
   useEffect(() => { if (!can('calculation:create')) return; getCalculationTemplates().then(setTemplates).catch(() => setTemplates([])); }, [can]);
   useEffect(() => {
-    if (!isSessionChecked) return;
+    if (!isAuthorized) return;
     getInstruments()
       .then((loadedInstruments) => {
         setInstruments(loadedInstruments);
@@ -196,12 +200,12 @@ function App() {
         }));
       })
       .catch((error: Error) => setApiError(error.message));
-  }, [isSessionChecked]);
+  }, [isAuthorized]);
 
   useEffect(() => {
-    if (!isSessionChecked) return;
+    if (!isAuthorized) return;
     getSelectionHistory(25).then(setSelectionQueries).catch(() => setSelectionQueries([]));
-  }, [isSessionChecked, activeView]);
+  }, [isAuthorized, activeView]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -372,10 +376,10 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="side-nav"><div className="brand"><img className="brand-logo" src={brandLogo(theme)} alt={BRAND.logoAlt} /><div><div className="brand-title">{BRAND.productName}</div><div className="brand-subtitle">{BRAND.companyName}</div></div></div><nav className="nav-list">{visibleNavItems.map((item) => (
-        <button key={item.view} className={`nav-item nav-button ${activeView === item.view ? 'active' : ''}`} onClick={() => setActiveView(item.view)}>{item.icon} {item.label}</button>
+      <aside className="side-nav"><div className="brand"><img className="brand-logo" src={brandLogo(theme)} alt={BRAND.logoAlt} /><div><div className="brand-title">{BRAND.productName}</div><div className="brand-subtitle">{BRAND.companyName}</div></div></div><button className="mobile-nav-toggle" type="button" aria-expanded={mobileNavOpen} aria-controls="forvater-navigation" onClick={() => setMobileNavOpen((open) => !open)}><span>{currentNavLabel}</span><ChevronDown size={16} aria-hidden="true" /></button><nav id="forvater-navigation" className={`nav-list ${mobileNavOpen ? 'open' : ''}`}>{visibleNavItems.map((item) => (
+        <button key={item.view} className={`nav-item nav-button ${activeView === item.view ? 'active' : ''}`} onClick={() => { setActiveView(item.view); setMobileNavOpen(false); }}>{item.icon} {item.label}</button>
       ))}
-      {can('calculation:create') && <button className="nav-item nav-button" onClick={() => setIsHistoryOpen(true)}><History size={18} /> История</button>}</nav><div className="photo-credit">{BRAND.photoCredit}</div></aside>
+      {can('calculation:create') && <button className="nav-item nav-button" onClick={() => { setIsHistoryOpen(true); setMobileNavOpen(false); }}><History size={18} /> История</button>}</nav><div className="photo-credit">{BRAND.photoCredit}</div></aside>
       <main className="workspace">
         <header className="topbar">
           <h1>{viewCopy[activeView].title}</h1>

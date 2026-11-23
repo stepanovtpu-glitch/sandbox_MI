@@ -28,6 +28,7 @@ logs/
 /release/
 /releases/
 /output/
+/.playwright-cli/
 *.spec
 
 # OS / IDE
