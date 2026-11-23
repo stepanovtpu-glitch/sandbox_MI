@@ -34,6 +34,16 @@ def test_unknown_applicability_is_not_valid():
     assert row['validity_status'] == 'unknown'
 
 
+def test_boolean_applicability_does_not_break_register_parsing():
+    response = {'result': {'count': 1, 'items': [
+        {'vri_id': '1', 'mi_number': 'A-1', 'vriInfo': {'applicable': True, 'validDate': '2099-01-01'}}
+    ]}}
+    records = client_with(response).search_by_serial('A-1')
+    assert records[0]['applicable'] is True
+    assert records[0]['document_number'] is None
+    assert records[0]['validity_status'] == 'valid_by_register_date'
+
+
 def test_same_serial_different_types_is_ambiguous():
     rows = [_readable_record({'mi_number': 'A', 'mit_number': number, 'valid_date': '2099-01-01', 'applicability': True}) for number in ['100-01', '200-01']]
     assert _classify(rows)[0] == 'ambiguous'

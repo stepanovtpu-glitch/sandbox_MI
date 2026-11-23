@@ -108,6 +108,24 @@ export function ArshinMonitorScreen({ canManage }: { canManage: boolean }) {
     finally { setBusyId(''); }
   }
 
+  async function trackSnapshotRow(row: LocalSnapshotMatch) {
+    const snapshot = searchResult?.snapshot;
+    if (!snapshot) return;
+    setBusyId(`snapshot-${row.row_number}`); setError(''); setMessage('');
+    try {
+      const created = await createArshinAsset({
+        name: (row.metrology_name || row.metrology_code || 'Средство измерений').slice(0, 200),
+        serial_number: row.serial_number,
+        location: row.location || undefined,
+        source_reference: `ИС Метрология / ТОиР; срез ${snapshot.snapshot_date}; код ${row.metrology_code}; GUID ${row.toir_guid}; строка ${row.row_number}`,
+      });
+      setSelectedId(created.asset_id);
+      setMessage(`СИ № ${row.serial_number} добавлено в контроль. Сверка с «Аршином» будет выполнена при доступности источника.`);
+      await refresh();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Не удалось добавить СИ в контроль.'); }
+    finally { setBusyId(''); }
+  }
+
   async function handleSnapshot(publish: boolean) {
     if (!snapshotFile || !snapshotDate) return;
     setImportBusy(true); setError(''); setMessage('');
@@ -126,7 +144,7 @@ export function ArshinMonitorScreen({ canManage }: { canManage: boolean }) {
     <article className="panel arshin-card">
       <div className="arshin-heading"><div><div className="eyebrow">ПЕРИОДИЧЕСКИЙ СНИМОК</div><h2>Выгрузка ИС Метрология / ТОиР</h2></div></div>
       <form className="snapshot-controls" onSubmit={(event) => { event.preventDefault(); findInMetrologySnapshot(searchSerial).then(setSearchResult).catch((reason) => setError(reason instanceof Error ? reason.message : 'Ошибка поиска.')); }}><label>Заводской номер <input value={searchSerial} onChange={(e) => setSearchSerial(e.target.value)} placeholder="Точный номер" maxLength={80} /></label><button className="ghost-button" disabled={!searchSerial.trim()}>Найти в снимке</button></form>
-      {searchResult && <div className="snapshot-comparison"><strong>Снимок на {searchResult.snapshot?.snapshot_date ?? '—'} · найдено {searchResult.total}</strong><small>{freshnessText(searchResult.freshness)}</small>{searchResult.rows.map((row) => <span key={`${row.row_number}-${row.metrology_code}`}>{row.metrology_name} · {row.organization} · срок по выгрузке {row.valid_until || 'не указан'} · на дату среза: {planText(row.plan_status)} · сегодня: {planText(row.plan_status_today)}</span>)}<small>{searchResult.note || 'Поиск по локальному снимку не подтверждает поверку.'}</small></div>}
+      {searchResult && <div className="snapshot-comparison"><strong>Снимок на {searchResult.snapshot?.snapshot_date ?? '—'} · найдено {searchResult.total}</strong><small>{freshnessText(searchResult.freshness)}</small>{searchResult.rows.map((row) => <div className="snapshot-match" key={`${row.row_number}-${row.metrology_code}`}><span>{row.metrology_name} · № {row.serial_number} · {row.organization} · срок по выгрузке {row.valid_until || 'не указан'} · на дату среза: {planText(row.plan_status)} · сегодня: {planText(row.plan_status_today)}</span>{canManage && !assets.some((asset) => asset.serial_number === row.serial_number) && <button className="ghost-button" type="button" disabled={Boolean(busyId)} onClick={() => void trackSnapshotRow(row)}>{busyId === `snapshot-${row.row_number}` ? 'Добавление…' : 'В контроль'}</button>}</div>)}<small>{searchResult.note || 'Поиск по локальному снимку не подтверждает поверку.'}</small></div>}
       <div className="snapshot-controls"><label>Дата среза <input type="date" value={snapshotDate} onChange={(e) => { setSnapshotDate(e.target.value); setSnapshotPreview(null); }} /></label>{canManage && <><label>Файл XLSX <input type="file" accept=".xlsx" onChange={(e) => { setSnapshotFile(e.target.files?.[0] ?? null); setSnapshotPreview(null); }} /></label><button className="ghost-button" disabled={!snapshotFile || !snapshotDate || importBusy} onClick={() => void handleSnapshot(false)}>Проверить файл</button>{snapshotPreview && <button className="primary-button" disabled={importBusy || snapshotPreview.issue_count > 0 || snapshotPreview.coverage_check?.status !== 'ok'} onClick={() => void handleSnapshot(true)}>Опубликовать снимок</button>}</>}</div>
       {snapshotPreview && <div className="snapshot-summary">{snapshotPreview.row_count.toLocaleString('ru-RU')} строк · {snapshotPreview.past_due_rows?.toLocaleString('ru-RU')} с прошедшей датой · {snapshotPreview.missing_due?.toLocaleString('ru-RU')} без срока · {snapshotPreview.repeated_guid_rows?.toLocaleString('ru-RU')} повторов GUID · {snapshotPreview.issue_count} ошибок. Даты из выгрузки не подтверждают факт поверки.</div>}
       {snapshotPreview?.coverage_check?.status === 'large_drop' && <div className="api-error">Публикация остановлена: в файле {snapshotPreview.row_count.toLocaleString('ru-RU')} строк против {snapshotPreview.coverage_check.previous_rows?.toLocaleString('ru-RU')} в последнем снимке (меньше на {snapshotPreview.coverage_check.decrease_percent}%). Проверьте, что выгрузка полная.</div>}

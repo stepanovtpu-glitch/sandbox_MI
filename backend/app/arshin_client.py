@@ -96,7 +96,12 @@ def _readable_record(raw: dict[str, Any]) -> dict[str, Any]:
     if isinstance(applicable, str):
         applicable = True if applicable.casefold() in {'true', '1', 'да'} else False if applicable.casefold() in {'false', '0', 'нет'} else None
     if applicable is None:
-        applicable = True if isinstance(vri.get('applicable'), dict) else False if isinstance(vri.get('inapplicable'), dict) else None
+        applicable = (vri.get('applicable') if isinstance(vri.get('applicable'), bool)
+                      else True if isinstance(vri.get('applicable'), dict)
+                      else False if isinstance(vri.get('inapplicable'), dict) or vri.get('inapplicable') is True
+                      else None)
+    applicable_details = vri.get('applicable') if isinstance(vri.get('applicable'), dict) else {}
+    inapplicable_details = vri.get('inapplicable') if isinstance(vri.get('inapplicable'), dict) else {}
     vri_id = _first(raw, 'vri_id', 'id')
     valid_until = _first(raw, 'valid_date', 'validDate') or vri.get('validDate')
     parsed_valid_until = _parse_date(valid_until)
@@ -124,8 +129,8 @@ def _readable_record(raw: dict[str, Any]) -> dict[str, Any]:
         'publication_date': publication.get('date'),
         'applicable': applicable,
         'document_number': _first(raw, 'result_docnum', 'resultDocnum')
-            or (vri.get('applicable') or {}).get('certNum')
-            or (vri.get('inapplicable') or {}).get('noticeNum'),
+            or applicable_details.get('certNum')
+            or inapplicable_details.get('noticeNum'),
         'verification_organization': _first(raw, 'org_title', 'orgTitle') or vri.get('organization'),
         'verification_method': vri.get('docTitle'),
         'official_record_url': PUBLIC_RECORD_ROOT + quote(str(vri_id), safe='-') if vri_id else None,

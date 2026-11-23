@@ -1505,6 +1505,10 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .snapshot-list span { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .snapshot-comparison { display:grid; gap:5px; margin-top:10px; padding:9px 11px; border:1px solid var(--border); border-radius:7px; font-size:11px; background:var(--surface-2); }
 .snapshot-comparison small { color:var(--muted); font-size:10px; }
+.snapshot-match { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 0; border-top:1px solid var(--border); }
+.snapshot-match span { min-width:0; overflow-wrap:anywhere; }
+.snapshot-match .ghost-button { flex:none; }
+@media (max-width: 640px) { .snapshot-match { align-items:flex-start; flex-direction:column; gap:6px; } }
 .arshin-screen { display: grid; gap: 14px; max-width: 1480px; margin: 0 auto; }
 .arshin-card, .arshin-detail { padding: 18px; min-width: 0; }
 .arshin-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
