@@ -38,8 +38,8 @@ GasMeter Pro — три контейнера: `gasmeter-frontend` (nginx, отд
 | Переменная | Обязательна | Назначение |
 |---|---|---|
 | `GASMETER_DB_PASSWORD` | да | пароль базы PostgreSQL (сгенерировать, 24+ символов) |
-| `GASMETER_LLM_BASE_URL` | нет | Ollama внутри периметра, `http://10.61.157.1:11434` |
-| `GASMETER_LLM_MODEL` | нет | `gemma4:e4b` |
+| `GASMETER_LLM_BASE_URL` | нет | действующий внутренний URL корпоративной LLM; прежний `10.61.157.1:11434` остановлен 08.09.2026 |
+| `GASMETER_LLM_MODEL` | нет | имя модели, подтверждённое владельцем действующего сервиса; без него интеграция выключена |
 | `GASMETER_LLM_PROVIDER` | нет | `auto` (по адресу) / `ollama` / `openai` |
 | `GASMETER_YM_TOKEN` | нет | OAuth-токен отдельного бота GasMeter в Яндекс Мессенджере |
 | `GASMETER_YM_CHAT_ID` | нет | идентификатор рабочего чата (или `GASMETER_YM_LOGIN`) |
