@@ -1,0 +1,4 @@
+# ФОРВАТЕР: проверка входящих полных снимков ИС Метрология каждый час.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+15 * * * * root cd /opt/gasmeter && docker compose exec -T backend python -m app.metrology_inbox >> /opt/gasmeter/backup/metrology-inbox.log 2>&1

@@ -490,3 +490,7 @@ class LlmExplainRequest(BaseModel):
 
     selection: dict
     audience: Literal['technologist', 'kip', 'metrologist'] = 'technologist'
+
+
+class MetrologyExpertQuestion(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)

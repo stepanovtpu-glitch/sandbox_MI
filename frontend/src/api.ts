@@ -337,6 +337,43 @@ export async function selectUug(payload: UugSelectionRequest): Promise<UugSelect
   return request<UugSelectionResponse>('/api/uug/selection', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+export type MetrologyExpertReply = { text: string; model: string; sources: Array<{ reference: string; review_state: 'confirmed' | 'unverified' | string }> };
+export async function askMetrologyExpert(question: string): Promise<MetrologyExpertReply> {
+  return request<MetrologyExpertReply>('/api/metrology/expert', { method: 'POST', body: JSON.stringify({ question }) });
+}
+
+export type ArshinStatus = 'valid' | 'expired' | 'unfit' | 'publication_attention' | 'no_record' | 'source_unavailable' | 'ambiguous' | 'unknown' | string;
+export type ArshinRecord = { vri_id?: string | number | null; serial_number?: string | null; instrument_type?: string | null; designation?: string | null; modification?: string | null; registry_number?: string | null; verification_date?: string | null; valid_until?: string | null; validity_status?: string; publication_status?: string | null; publication_reason?: string | null; applicable?: boolean | null; document_number?: string | null; verification_organization?: string | null; official_record_url?: string | null; source?: string; retrieved_at?: string };
+export type ArshinCheckRun = { run_id: string; asset_id: string; started_at: string; completed_at: string; status: ArshinStatus; result_count: number; results: ArshinRecord[]; error_code?: string | null; error_message?: string | null; checked_by: string };
+export type MetrologyAsset = { asset_id: string; name: string; serial_number: string; registry_number?: string | null; manufacturer?: string | null; model?: string | null; location?: string | null; source_reference?: string | null; check_interval_seconds: number; enabled: boolean; created_by: string; created_at: string; updated_at: string; last_checked_at?: string | null; next_check_at?: string | null; latest_check?: ArshinCheckRun | null; last_successful_check?: ArshinCheckRun | null };
+export type MetrologyAssetInput = Pick<MetrologyAsset, 'name' | 'serial_number'> & Partial<Pick<MetrologyAsset, 'registry_number' | 'manufacturer' | 'model' | 'location' | 'source_reference' | 'check_interval_seconds'>>;
+export async function getArshinAssets() { return request<MetrologyAsset[]>('/api/metrology/arshin/assets'); }
+export async function createArshinAsset(asset: MetrologyAssetInput) { return request<MetrologyAsset>('/api/metrology/arshin/assets', { method: 'POST', body: JSON.stringify(asset) }); }
+export async function checkArshinAsset(assetId: string) { return request<ArshinCheckRun>(`/api/metrology/arshin/assets/${assetId}/check`, { method: 'POST' }); }
+export async function getArshinAssetHistory(assetId: string) { return request<ArshinCheckRun[]>(`/api/metrology/arshin/assets/${assetId}/history`); }
+
+export type MetrologyImport = { import_id: string; snapshot_date: string; imported_at: string; file_name: string; row_count: number; issue_count: number; already_imported?: boolean; past_due_rows?: number; missing_due?: number; repeated_guid_rows?: number; sha256?: string };
+export async function getMetrologyImports() { return request<MetrologyImport[]>('/api/metrology/imports'); }
+export type MetrologySnapshotRow = { row_number: number; metrology_code: string; toir_guid: string; metrology_name: string; serial_number: string; organization: string; owner_name: string; location: string; valid_until: string; next_work_on: string; issue: string };
+export async function getMetrologySnapshotRows(importId: string, status: string, offset: number) { return request<{ total: number; rows: MetrologySnapshotRow[] }>(`/api/metrology/imports/${importId}/rows?status=${status}&offset=${offset}&limit=50`); }
+export type MetrologyConflicts = { groups: number; affected_rows: number; different_serial_groups: number; note: string; examples: Array<{ toir_guid: string; row_count: number; serial_count: number }> };
+export async function getMetrologyConflicts(importId: string) { return request<MetrologyConflicts>(`/api/metrology/imports/${importId}/conflicts`); }
+export async function downloadMetrologySnapshot(importId: string, status: string) { return downloadAuthenticatedFile(`/api/metrology/imports/${importId}/export.csv?status=${encodeURIComponent(status)}`, `forvater-snapshot-${importId.slice(0, 8)}.csv`); }
+export type MetrologyComparison = { current_date: string; previous_date: string; counts: Record<string, number>; note: string; examples: Array<{ kind: string; organization: string; metrology_code: string; serial_number: string; changed_fields: string[] }> };
+export async function compareMetrologyImports(currentId: string, previousId: string) { return request<MetrologyComparison>(`/api/metrology/imports/${currentId}/compare/${previousId}`); }
+export type LocalSnapshotMatch = MetrologySnapshotRow & { plan_status: 'past_due' | 'within_date' | 'no_due_date' };
+export async function findInMetrologySnapshot(serial: string) { return request<{ snapshot: MetrologyImport | null; total: number; rows: LocalSnapshotMatch[]; note?: string }>(`/api/metrology/snapshot/search?serial=${encodeURIComponent(serial)}`); }
+export async function uploadMetrologySnapshot(file: File, snapshotDate: string, publish: boolean) {
+  const body = new FormData(); body.append('file', file);
+  const path = publish ? '/api/metrology/imports' : '/api/metrology/imports/preview';
+  const response = await fetch(`${API_BASE}${path}?snapshot_date=${encodeURIComponent(snapshotDate)}`, { method: 'POST', headers: authHeaders(), body });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail ?? `Ошибка загрузки: ${response.status}`);
+  }
+  return response.json() as Promise<MetrologyImport>;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(init?.headers ?? {}) } });
   if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);

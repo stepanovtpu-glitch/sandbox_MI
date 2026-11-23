@@ -11,7 +11,7 @@ def test_system_info_endpoint():
     assert response.status_code == 200
     payload = response.json()
     assert payload['status'] == 'ok'
-    assert payload['application'] == 'GasMeter Pro'
+    assert payload['application'] == 'ФОРВАТЕР'
     assert payload['version']
     assert payload['schema_version'] == SCHEMA_VERSION
     assert payload['expected_schema_version'] == SCHEMA_VERSION

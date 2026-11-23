@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Activity, AlertTriangle, ChevronRight, ClipboardList, LogOut, Users, Database, FileText, Gauge, History, Moon, PlusCircle, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronRight, ClipboardList, LogOut, Users, Database, FileText, Gauge, History, Moon, PlusCircle, Search, Settings, ShieldCheck, Sun, BookOpenText, FileSearch } from 'lucide-react';
 import { PipelineScene } from './PipelineScene';
 import { MIN_STRAIGHT_AFTER_DN, MIN_STRAIGHT_BEFORE_DN, PIPE_DN_SERIES } from './domain';
 import { UugSelectionScreen } from './UugSelectionScreen';
@@ -13,6 +13,8 @@ import { MethodIntakeScreen } from './MethodIntakeScreen';
 import { SystemStatusPanel } from './SystemStatusPanel';
 import { SelectionHistory } from './SelectionHistory';
 import { MethodPicker } from './MethodPicker';
+import { MetrologyExpertScreen } from './MetrologyExpertScreen';
+import { ArshinMonitorScreen } from './ArshinMonitorScreen';
 import { getSelectionHistory, downloadReadinessReport, type SelectionHistoryItem } from './api';
 import { getCurrentUser, logout, setAuthToken, type SessionUser, calculate, downloadReport, getCalculationTemplates, getInstrumentRecommendations, getInstruments, getMethods, saveCalculation, scoreMethods, type CalculationContext, type CalculationRecord, type CalculationResult, type CalculationTemplateCode, type CalculationTemplateInfo, type ErrorContributions, type Instrument, type InstrumentReplacementRecommendation, type InstrumentStatus, type InstrumentType, type LineParameters, type MeasurementMethod, type MethodCompatibility } from './api';
 
@@ -32,7 +34,7 @@ function lastTitlePart(value: string) { const parts = value.split('. '); return 
 const instrumentTypeTitles: Record<InstrumentType, string> = { flowmeter: 'Расходомер', pressure: 'Датчик давления', temperature: 'Датчик температуры', computer: 'Вычислитель', analyzer: 'Анализатор состава' };
 const instrumentStatusTitles: Record<InstrumentStatus, string> = { available: 'Доступен', in_calibration: 'На поверке', ordered: 'Заказан', decommissioned: 'Выведен' };
 const instrumentTypeOrder: InstrumentType[] = ['flowmeter', 'pressure', 'temperature', 'computer', 'analyzer'];
-type ActiveView = 'constructor' | 'technologist' | 'instruments' | 'methodIntake' | 'methods' | 'reports' | 'settings' | 'users' | 'projects';
+type ActiveView = 'constructor' | 'technologist' | 'instruments' | 'methodIntake' | 'methods' | 'reports' | 'settings' | 'users' | 'projects' | 'metrologyExpert' | 'arshin';
 type ApplyTechnologyRecommendationDetail = { mi_id: string; calculation_template: string; pipe_dn_mm?: number; q_min: number; q_max: number; p_working_mpa: number; t_working_c: number };
 
 function App() {
@@ -120,6 +122,8 @@ function App() {
         [
           { view: 'technologist', label: 'Подбор МИ', icon: <Activity size={18} />, permission: 'uug:select' },
           { view: 'projects', label: 'Проекты УУГ', icon: <ClipboardList size={18} />, permission: 'uug:select' },
+          { view: 'metrologyExpert', label: 'Метрологический эксперт', icon: <BookOpenText size={18} />, permission: 'metrology:read' },
+          { view: 'arshin', label: 'Состояние СИ', icon: <FileSearch size={18} />, permission: 'metrology:read' },
           { view: 'instruments', label: 'База СИ', icon: <Database size={18} />, permission: 'instrument:read' },
           { view: 'constructor', label: 'Расчёт погрешности', icon: <Gauge size={18} />, permission: 'calculation:create' },
           { view: 'methodIntake', label: 'Добавление МИ', icon: <PlusCircle size={18} />, permission: 'document:write' },
@@ -357,6 +361,8 @@ function App() {
     settings: { breadcrumbs: 'Главная / Настройки / Система', title: 'Настройки системы' },
     users: { breadcrumbs: 'Главная / Пользователи', title: 'Пользователи и роли' },
     projects: { breadcrumbs: 'Главная / Проекты УУГ', title: 'Проекты узлов учёта' },
+    metrologyExpert: { breadcrumbs: 'Главная / Метрологический эксперт / Поиск по МИ', title: 'Метрологический эксперт' },
+    arshin: { breadcrumbs: 'Главная / Метрологическое состояние / ФГИС «Аршин»', title: 'Контроль поверок СИ' },
   };
 
   if (!isSessionChecked) return <div className="app-loading">Загрузка…</div>;
@@ -394,7 +400,7 @@ function App() {
             <button className="ghost-button theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title={theme === 'dark' ? 'Светлая тема «протокол»' : 'Тёмная тема «диспетчерская»'}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}</button>
           </div>
         </header>
-        {activeView === 'constructor' ? <section className="three-column-layout with-history">
+        {activeView === 'arshin' ? <ArshinMonitorScreen canManage={can('metrology:manage')} /> : activeView === 'metrologyExpert' ? <MetrologyExpertScreen /> : activeView === 'constructor' ? <section className="three-column-layout with-history">
           <aside className="left-panel panel"><div className="panel-header"><strong>Исходные данные</strong></div>
             <FormGroup title="Проект / объект"><TextField label="Название расчёта" value={projectName} onChange={setProjectName} /></FormGroup>
             <FormGroup title="Трубопровод">

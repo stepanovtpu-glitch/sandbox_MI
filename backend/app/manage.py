@@ -57,7 +57,7 @@ def cmd_list_users(_: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog='python -m app.manage', description='Служебные команды GasMeter Pro')
+    parser = argparse.ArgumentParser(prog='python -m app.manage', description='Служебные команды ФОРВАТЕРА')
     commands = parser.add_subparsers(dest='command', required=True)
 
     create = commands.add_parser('create-user', help='завести учётную запись; пароль запрашивается с клавиатуры')

@@ -53,7 +53,7 @@ def generate_readiness_pdf_report() -> Path:
     styles = getSampleStyleSheet()
     apply_cyrillic_styles(styles)
     story = [
-        Paragraph('GasMeter Pro — отчёт готовности к пилотной эксплуатации', styles['Title']),
+        Paragraph('ФОРВАТЕР — отчёт готовности к пилотной эксплуатации', styles['Title']),
         Paragraph(f'Дата формирования: {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}', styles['BodyText']),
         Spacer(1, 10),
         Paragraph(f'Итоговый статус: {_status_label(readiness["status"])}', styles['Heading2']),
@@ -83,7 +83,7 @@ def generate_readiness_docx_report() -> Path:
     readiness = get_pilot_readiness()
     path = _report_name('docx')
     document = Document()
-    document.add_heading('GasMeter Pro — отчёт готовности к пилотной эксплуатации', level=1)
+    document.add_heading('ФОРВАТЕР — отчёт готовности к пилотной эксплуатации', level=1)
     document.add_paragraph(f'Дата формирования: {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}')
     document.add_heading('Итог', level=2)
     document.add_paragraph(f'Статус: {_status_label(readiness["status"])}')

@@ -21,7 +21,7 @@ from typing import Any, Iterator
 
 DB_DIR = Path(os.environ.get('GASMETER_DB_DIR', Path(__file__).resolve().parents[1] / 'data'))
 DB_PATH = DB_DIR / 'gasmeter.db'
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 10
 
 
 def database_url() -> str:
@@ -355,6 +355,103 @@ def _ensure_schema_version(connection: _Connection) -> None:
             'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
             (7, 'History of MI selection queries per user'),
         )
+    if current_version < 8:
+        connection.executescript(
+            '''
+            CREATE TABLE IF NOT EXISTS messenger_bot_state (
+                state_key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            '''
+        )
+        connection.execute(
+            'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+            (8, 'Yandex Messenger polling cursor for the standalone bot worker'),
+        )
+    if current_version < 9:
+        connection.executescript(
+            '''
+            CREATE TABLE IF NOT EXISTS metrology_assets (
+                asset_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                serial_number TEXT NOT NULL,
+                registry_number TEXT,
+                manufacturer TEXT,
+                model TEXT,
+                location TEXT,
+                source_reference TEXT,
+                check_interval_seconds INTEGER NOT NULL DEFAULT 86400,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_checked_at TEXT,
+                next_check_at TEXT
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_metrology_assets_identity
+                ON metrology_assets(serial_number, COALESCE(registry_number, ''));
+            CREATE INDEX IF NOT EXISTS idx_metrology_assets_due
+                ON metrology_assets(enabled, next_check_at);
+            CREATE TABLE IF NOT EXISTS arshin_check_runs (
+                run_id TEXT PRIMARY KEY,
+                asset_id TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                completed_at TEXT NOT NULL,
+                status TEXT NOT NULL,
+                result_count INTEGER NOT NULL DEFAULT 0,
+                results_json TEXT NOT NULL DEFAULT '[]',
+                error_code TEXT,
+                error_message TEXT,
+                checked_by TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_arshin_runs_asset
+                ON arshin_check_runs(asset_id, completed_at DESC);
+            '''
+        )
+        connection.execute(
+            'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+            (9, 'Tracked physical metrology assets and auditable Arshin verification checks'),
+        )
+    if current_version < 10:
+        connection.executescript('''
+            CREATE TABLE IF NOT EXISTS metrology_imports (
+                import_id TEXT PRIMARY KEY,
+                sha256 TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                snapshot_date TEXT NOT NULL,
+                imported_at TEXT NOT NULL,
+                imported_by TEXT NOT NULL,
+                row_count INTEGER NOT NULL,
+                issue_count INTEGER NOT NULL,
+                source_path TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS metrology_import_rows (
+                import_id TEXT NOT NULL,
+                row_number INTEGER NOT NULL,
+                metrology_code TEXT,
+                toir_guid TEXT,
+                group_name TEXT,
+                work_type TEXT,
+                metrology_name TEXT,
+                toir_name TEXT,
+                serial_number TEXT,
+                organization TEXT,
+                owner_name TEXT,
+                kip_responsible TEXT,
+                metro_responsible TEXT,
+                location TEXT,
+                completed_on TEXT,
+                valid_until TEXT,
+                next_work_on TEXT,
+                issue TEXT,
+                PRIMARY KEY(import_id, row_number)
+            );
+            CREATE INDEX IF NOT EXISTS idx_metro_import_rows_guid ON metrology_import_rows(toir_guid);
+            CREATE INDEX IF NOT EXISTS idx_metro_import_rows_due ON metrology_import_rows(valid_until);
+        ''')
+        connection.execute('INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+                           (10, 'Versioned periodic metrology export snapshots'))
     if _current_schema_version(connection) > SCHEMA_VERSION:
         raise RuntimeError('Database schema is newer than this application version')
 

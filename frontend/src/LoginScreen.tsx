@@ -34,7 +34,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: SessionUser, to
       <form className="login-card" onSubmit={submit}>
         <img className="login-logo" src={BRAND.logoOnDark} alt="Эмблема ИНК" />
         <h1>{BRAND.productName}</h1>
-        <p className="login-subtitle">Подбор методик измерений и состава узлов учёта газа</p>
+        <p className="login-subtitle">Методики измерений · средства измерений · поверки</p>
 
         <label className="field">
           <span>Логин</span>

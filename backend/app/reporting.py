@@ -125,7 +125,7 @@ def generate_pdf_report(request: CalculationRequest, result: CalculationResult) 
     styles = getSampleStyleSheet()
     apply_cyrillic_styles(styles)
     story = [
-        Paragraph('GasMeter Pro — протокол расчёта', styles['Title']),
+        Paragraph('ФОРВАТЕР — протокол расчёта', styles['Title']),
         Paragraph('Автоматизированный расчёт погрешности / расширенной неопределённости измерений', styles['BodyText']),
         Paragraph(f'Дата формирования: {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}', styles['BodyText']),
         Spacer(1, 12),
@@ -171,7 +171,7 @@ def generate_pdf_report(request: CalculationRequest, result: CalculationResult) 
 def generate_docx_report(request: CalculationRequest, result: CalculationResult) -> Path:
     path = _report_name(request.method.mi_id if request.method else None, 'docx')
     document = Document()
-    document.add_heading('GasMeter Pro — протокол расчёта', level=1)
+    document.add_heading('ФОРВАТЕР — протокол расчёта', level=1)
     document.add_paragraph('Автоматизированный расчёт погрешности / расширенной неопределённости измерений')
     document.add_paragraph(f'Дата формирования: {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}')
     table = document.add_table(rows=0, cols=2)

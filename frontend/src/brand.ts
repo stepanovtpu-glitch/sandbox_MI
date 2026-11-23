@@ -15,7 +15,7 @@ import inkEmblem from './assets/brand/ink-emblem-archimed.svg';
 import inkLogoFullWhite from './assets/brand/ink-logo-full-white.svg';
 
 export const BRAND = {
-  productName: 'GasMeter Pro',
+  productName: 'ФОРВАТЕР',
   companyName: 'Иркутская нефтяная компания',
   companyNameFull: 'ООО «Иркутская нефтяная компания»',
   /** Эмблема для светлого фона */

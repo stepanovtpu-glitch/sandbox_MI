@@ -1,5 +1,5 @@
 /*
-  Дизайн-система GasMeter Pro · ИНК
+  Дизайн-система ФОРВАТЕР · ИНК
   Фирменные цвета из официальной эмблемы: зелёный #006654, графит #344855.
   Тёмная тема — «диспетчерская», светлая — «протокол».
   Файл ПЕРЕОПРЕДЕЛЯЕТ токены старой темы (styles.css) и добавляет светлый режим.
@@ -84,6 +84,22 @@ html[data-theme='light'] {
   --accent-contrast: #ffffff;
 }
 
+.metrology-expert-screen { max-width: 1120px; margin: 0 auto; }
+.metrology-expert-card { padding: 20px; }
+.metrology-expert-card .panel-header strong { display: inline-flex; align-items: center; gap: 9px; }
+.muted-copy { color: var(--muted); max-width: 760px; line-height: 1.55; }
+.expert-question-form { display: grid; gap: 12px; margin-top: 18px; }
+.expert-question-form textarea { width: 100%; min-height: 112px; resize: vertical; box-sizing: border-box; }
+.expert-form-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; }
+.expert-form-footer button { display: inline-flex; align-items: center; gap: 8px; }
+.expert-answer { margin-top: 20px; padding: 16px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface-2); }
+.answer-heading { color: var(--accent); font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+.answer-text { line-height: 1.65; white-space: pre-wrap; }
+.expert-sources { display: grid; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.spin { animation: expert-spin 1s linear infinite; }
+@keyframes expert-spin { to { transform: rotate(360deg); } }
+@media (max-width: 640px) { .metrology-expert-card { padding: 14px; } .expert-form-footer { align-items: flex-start; flex-direction: column; } .expert-form-footer button { align-self: stretch; justify-content: center; } }
+
 html {
   color-scheme: dark;
 }
@@ -101,10 +117,26 @@ body::before {
   position: fixed;
   inset: 0;
   z-index: -1;
-  background-image: var(--photo-overlay), url('./assets/photos/baikal-ice.jpg');
-  background-size: cover;
-  background-position: center 30%;
-  background-attachment: fixed;
+  background: linear-gradient(135deg, var(--bg-deep), var(--bg));
+}
+
+/* Рабочие разделы: компактная информационная система без декоративного фона. */
+.side-nav { width: 206px; padding: 12px 10px; background: var(--surface); }
+.app-shell { grid-template-columns: 206px minmax(0, 1fr); }
+.side-nav .brand { margin-bottom: 12px; gap: 9px; }
+.brand-logo { height: 34px; }
+.brand-title { letter-spacing: .055em; font-size: 15px; }
+.nav-list { gap: 2px; }
+.nav-item { height: 36px; border-radius: 7px; padding: 0 9px; font-size: 12px; }
+.topbar { height: 44px; }
+.three-column-layout { height: calc(100vh - 44px); gap: 10px; padding: 10px; }
+.panel { border-radius: 9px; box-shadow: none; }
+.panel-header { margin-bottom: 10px; }
+.panel-header strong { font-size: 14px; }
+.photo-credit { font-size: 10px; opacity: .65; }
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .side-nav { width: 100%; }
 }
 
 /* Утилиты темы */
@@ -1421,6 +1453,11 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 /* Авторство фотографий «Архимеда» — условие лицензий CC BY-SA 4.0 / CC BY 4.0 */
 .side-nav { display: flex; flex-direction: column; }
 .side-nav .nav-list { flex: 1; align-content: start; }
+@media (max-width: 1100px) {
+  .side-nav { width: 100%; flex-direction: row; overflow-x: auto; }
+  .side-nav .nav-list { display: flex; flex: none; align-content: unset; white-space: nowrap; }
+  .side-nav .photo-credit { display: none; }
+}
 .photo-credit { margin-top: 14px; color: var(--muted); font-size: 11px; line-height: 1.4; opacity: 0.8; }
 @media (max-width: 1100px) { .photo-credit { display: none; } }
 
@@ -1441,3 +1478,77 @@ html[data-theme='light'] .login-logo { filter: invert(24%) sepia(64%) saturate(1
 .k-result-grid span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; }
 .k-result-grid b { font-family: var(--font-mono); font-size: 13px; }
 .k-result-note { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+/* ============ Контроль поверок в ФГИС «Аршин» ============ */
+.snapshot-controls { display:flex; flex-wrap:wrap; align-items:end; gap:8px; margin-top:12px; }
+.snapshot-controls label { display:grid; gap:4px; color:var(--muted); font-size:11px; }
+.snapshot-controls input { max-width:290px; height:32px; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface-2); color:var(--text); }
+.snapshot-controls select { height:32px; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface-2); color:var(--text); }
+.snapshot-pages { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:8px; font-size:11px; color:var(--muted); }
+.snapshot-summary { margin-top:10px; color:var(--text); font-size:12px; }
+.snapshot-list { margin-top:10px; display:grid; gap:4px; }
+.snapshot-list>div { display:flex; gap:12px; border-top:1px solid var(--border); padding:6px 0; font-size:11px; }
+.snapshot-list span { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.snapshot-comparison { display:grid; gap:5px; margin-top:10px; padding:9px 11px; border:1px solid var(--border); border-radius:7px; font-size:11px; background:var(--surface-2); }
+.snapshot-comparison small { color:var(--muted); font-size:10px; }
+.arshin-screen { display: grid; gap: 14px; max-width: 1480px; margin: 0 auto; }
+.arshin-card, .arshin-detail { padding: 18px; min-width: 0; }
+.arshin-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+.arshin-heading h2 { margin: 5px 0; font-size: 20px; }
+.arshin-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.eyebrow { color: var(--accent); font-size: 10px; font-weight: 750; letter-spacing: .1em; }
+.arshin-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.arshin-actions button, .arshin-check { display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
+.arshin-notice { display: flex; gap: 9px; align-items: flex-start; margin: 16px 0 12px; padding: 10px 12px; color: var(--muted); background: var(--accent-soft); border: 1px solid var(--border); border-radius: 9px; font-size: 11.5px; line-height: 1.5; }
+.arshin-notice svg { flex: 0 0 auto; color: var(--accent); margin-top: 1px; }
+.arshin-message { margin: 10px 0; padding: 10px 12px; border-radius: 8px; background: rgba(var(--info-rgb), .11); color: var(--text); font-size: 12px; }
+.arshin-form { display: grid; gap: 12px; margin: 14px 0; padding: 14px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface-2); }
+.arshin-form-title { font-weight: 700; font-size: 14px; }
+.arshin-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.arshin-form .field { min-width: 0; margin: 0; }
+.arshin-form input { min-width: 0; box-sizing: border-box; }
+.arshin-form-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--muted); font-size: 11px; }
+.arshin-form-footer span { flex: 1; }
+.arshin-table-wrap { overflow-x: auto; }
+.arshin-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.arshin-table th { padding: 9px 8px; color: var(--muted); text-align: left; font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.arshin-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.arshin-table tbody tr { cursor: pointer; }
+.arshin-table tbody tr:hover, .arshin-table tbody tr.selected { background: rgba(var(--accent-rgb), .07); }
+.arshin-table td:first-child { min-width: 210px; }
+.arshin-table td:first-child strong, .arshin-table td small { display: block; }
+.arshin-table td small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.arshin-table .mono { font-family: var(--font-mono); white-space: nowrap; }
+.arshin-status { display: inline-flex; align-items: center; gap: 5px; width: fit-content; padding: 4px 7px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font-size: 10.5px; line-height: 1.2; white-space: nowrap; }
+.arshin-status.good { color: var(--ok); background: rgba(var(--ok-rgb), .12); }
+.arshin-status.bad { color: var(--danger); background: rgba(var(--danger-rgb), .12); }
+.arshin-status.warn { color: var(--warn); background: rgba(var(--warn-rgb), .12); }
+.arshin-empty { display: grid; justify-items: center; gap: 7px; min-height: 150px; align-content: center; color: var(--muted); text-align: center; font-size: 12px; }
+.arshin-empty strong { color: var(--text); font-size: 14px; }
+.arshin-detail .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.arshin-detail .muted-copy { font-size: 11px; }
+.arshin-current { display: flex; align-items: center; gap: 10px; margin: 10px 0; color: var(--muted); font-size: 12px; }
+.arshin-history { display: grid; gap: 0; list-style: none; margin: 12px 0 0; padding: 0; }
+.arshin-history li { padding: 12px 0; border-top: 1px solid var(--border); }
+.arshin-history-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.arshin-record-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
+.arshin-record-grid span { padding: 8px 9px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 10px; }
+.arshin-record-grid strong { display: block; margin-top: 4px; color: var(--text); font-size: 12px; }
+.arshin-source-link { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-size: 11px; text-decoration: none; }
+.arshin-detail-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+.arshin-detail-footer button { display: inline-flex; align-items: center; gap: 7px; }
+@media (max-width: 900px) { .arshin-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .arshin-record-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .arshin-card, .arshin-detail { padding: 12px; }
+  .arshin-heading { flex-direction: column; }
+  .arshin-actions { width: 100%; }
+  .arshin-actions button { flex: 1; }
+  .arshin-form-grid { grid-template-columns: 1fr; }
+  .arshin-form-footer { align-items: stretch; flex-direction: column; }
+  .arshin-table { min-width: 760px; }
+  .arshin-current { align-items: flex-start; flex-direction: column; }
+  .arshin-detail .panel-header { align-items: flex-start; flex-direction: column; }
+  .arshin-record-grid { grid-template-columns: 1fr 1fr; }
+  .arshin-detail-footer { align-items: flex-start; flex-direction: column; }
+  .arshin-detail-footer button { width: 100%; justify-content: center; }
+}

@@ -98,7 +98,7 @@ def notify_project_event(project: dict, action: str, actor: str, comment: str | 
     if not what:
         return False
     lines = [
-        f'GasMeter Pro: проект «{project.get("name", project.get("project_id"))}» {what}.',
+        f'ФОРВАТЕР: проект «{project.get("name", project.get("project_id"))}» {what}.',
         f'Объект: {project.get("object_name") or "не указан"} · кто: {actor}',
     ]
     if comment:

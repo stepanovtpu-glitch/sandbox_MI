@@ -2,7 +2,7 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ import logging
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi import Header as FastApiHeader
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.audit_log import list_audit_events, log_audit_event
 from app.calculation import calculate
@@ -38,6 +38,7 @@ from app.schemas import (
     GasCompressibilityRequest,
     Instrument,
     LlmExplainRequest,
+    MetrologyExpertQuestion,
     InstrumentRecommendationRequest,
     InstrumentReplacementRecommendation,
     MeasurementMethod,
@@ -73,6 +74,9 @@ from app.uug_projects import (
 from app.compressibility import METHODS as COMPRESSIBILITY_METHODS
 from app.gas_physics import k_ratio_from_composition
 from app.llm_client import LlmClient, LlmNotConfigured, explain_selection
+from app.metrology_expert import answer_question
+from app.metrology_import import compare_imports, export_snapshot_csv, find_in_latest_snapshot, list_imports, preview_export, publish_export, snapshot_conflicts, snapshot_rows
+from app.arshin_monitor import asset_history, check_asset, create_asset, get_asset as get_metrology_asset, list_assets, update_asset
 from app.yandex_messenger import MessengerCourier, notify_project_event
 from app.uug_composition import project_candidates, validate_composition
 from app.selection_history import list_queries, remember_query
@@ -80,13 +84,36 @@ from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
-APP_VERSION = '0.1.0'
-app = FastAPI(title='GasMeter Pro', version=APP_VERSION)
+APP_VERSION = '0.2.6'
+app = FastAPI(title='ФОРВАТЕР', version=APP_VERSION)
 
 
 class SaveCalculationPayload(BaseModel):
     project_name: str | None = None
     calculation: CalculationRequest
+
+
+class MetrologyAssetCreatePayload(BaseModel):
+    name: str
+    serial_number: str
+    registry_number: str | None = None
+    manufacturer: str | None = None
+    model: str | None = None
+    location: str | None = None
+    source_reference: str | None = None
+    check_interval_seconds: int = 86400
+
+
+class MetrologyAssetUpdatePayload(BaseModel):
+    name: str | None = None
+    serial_number: str | None = None
+    registry_number: str | None = None
+    manufacturer: str | None = None
+    model: str | None = None
+    location: str | None = None
+    source_reference: str | None = None
+    check_interval_seconds: int | None = None
+    enabled: bool | None = None
 
 
 DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
@@ -126,7 +153,7 @@ def startup() -> None:
 
 @app.get('/health')
 def health():
-    return {'status': 'ok', 'application': 'GasMeter Pro'}
+    return {'status': 'ok', 'application': 'ФОРВАТЕР'}
 
 
 class LoginPayload(BaseModel):
@@ -244,7 +271,7 @@ def system_info(user: dict[str, object] = Depends(require_permission('system:rea
         }
     return {
         'status': 'ok',
-        'application': 'GasMeter Pro',
+        'application': 'ФОРВАТЕР',
         'version': APP_VERSION,
         'schema_version': get_schema_version(),
         'expected_schema_version': SCHEMA_VERSION,
@@ -699,6 +726,147 @@ def llm_explain_selection(payload: LlmExplainRequest, user: dict[str, object] = 
         raise HTTPException(status_code=502, detail='Корпоративная LLM не ответила. Повторите позже.')
     log_audit_event('llm_explain_selection', 'uug_selection', payload.audience, {'model': reply.model}, actor=_actor(user))
     return {'text': reply.text, 'model': reply.model, 'notes': reply.notes}
+
+
+@app.post('/api/metrology/expert')
+def metrology_expert(payload: MetrologyExpertQuestion, user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    """Ответ по локальным OCR-фрагментам МИ с перечислением исходных файлов."""
+    try:
+        answer = answer_question(payload.question)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+    except LlmNotConfigured as error:
+        raise HTTPException(status_code=503, detail=str(error))
+    except Exception as error:  # noqa: BLE001 — модель и библиотека являются внешней границей
+        logging.getLogger(__name__).warning('Metrology expert failed: %s', error.__class__.__name__)
+        raise HTTPException(status_code=502, detail='Не удалось получить ответ корпоративной LLM.')
+    log_audit_event(
+        'metrology_expert_query', 'metrology', None,
+        {'source_count': len(answer.sources), 'model': answer.model}, actor=_actor(user),
+    )
+    return {'text': answer.text, 'model': answer.model, 'sources': answer.sources}
+
+
+@app.get('/api/metrology/arshin/assets')
+def arshin_assets_list(user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    return list_assets()
+
+
+@app.get('/api/metrology/imports')
+def metrology_imports_list(user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    return list_imports()
+
+
+@app.get('/api/metrology/snapshot/search')
+def metrology_snapshot_search(serial: str, user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    try:
+        return find_in_latest_snapshot(serial)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.get('/api/metrology/imports/{import_id}/rows')
+def metrology_import_rows(import_id: str, status: str = 'all', offset: int = 0, limit: int = 100,
+                          user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    try:
+        return snapshot_rows(import_id, status, offset, limit)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.get('/api/metrology/imports/{import_id}/conflicts')
+def metrology_import_conflicts(import_id: str, user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    try:
+        return snapshot_conflicts(import_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get('/api/metrology/imports/{import_id}/export.csv')
+def metrology_import_export(import_id: str, status: str = 'all', user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    try:
+        content = export_snapshot_csv(import_id, status)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    log_audit_event('metrology_snapshot_exported', 'metrology_import', import_id,
+                    {'status': status, 'bytes': len(content)}, actor=_actor(user))
+    return Response(content, media_type='text/csv; charset=utf-8',
+                    headers={'Content-Disposition': f'attachment; filename="forvater-snapshot-{import_id[:8]}.csv"'})
+
+
+@app.get('/api/metrology/imports/{import_id}/compare/{previous_id}')
+def metrology_import_compare(import_id: str, previous_id: str,
+                             user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    try:
+        return compare_imports(import_id, previous_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post('/api/metrology/imports/preview')
+async def metrology_import_preview(snapshot_date: date, file: UploadFile = File(...), user: dict[str, object] = Depends(require_permission('metrology:manage'))):
+    try:
+        return preview_export(await file.read(20_000_001), snapshot_date)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post('/api/metrology/imports')
+async def metrology_import_publish(snapshot_date: date, file: UploadFile = File(...), user: dict[str, object] = Depends(require_permission('metrology:manage'))):
+    try:
+        result = publish_export(await file.read(20_000_001), file.filename or 'export.xlsx', snapshot_date, _actor(user))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    log_audit_event('metrology_snapshot_imported', 'metrology_import', result['import_id'],
+                    {'rows': result['row_count'], 'sha256': result['sha256'], 'already_imported': result['already_imported']}, actor=_actor(user))
+    return result
+
+
+@app.post('/api/metrology/arshin/assets', status_code=201)
+def arshin_asset_create(payload: MetrologyAssetCreatePayload, user: dict[str, object] = Depends(require_permission('metrology:manage'))):
+    try:
+        asset = create_asset(payload.model_dump(), _actor(user))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    log_audit_event('arshin_asset_created', 'metrology_asset', asset['asset_id'],
+                    {'registry_number': asset['registry_number'], 'source_reference': asset['source_reference']}, actor=_actor(user))
+    return asset
+
+
+@app.patch('/api/metrology/arshin/assets/{asset_id}')
+def arshin_asset_update(asset_id: str, payload: MetrologyAssetUpdatePayload, user: dict[str, object] = Depends(require_permission('metrology:manage'))):
+    try:
+        asset = update_asset(asset_id, payload.model_dump(exclude_unset=True))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if not asset:
+        raise HTTPException(status_code=404, detail='Экземпляр СИ не найден.')
+    log_audit_event('arshin_asset_updated', 'metrology_asset', asset_id, {'fields': list(payload.model_dump(exclude_unset=True))}, actor=_actor(user))
+    return asset
+
+
+@app.post('/api/metrology/arshin/assets/{asset_id}/check')
+def arshin_asset_check(asset_id: str, user: dict[str, object] = Depends(require_permission('metrology:manage'))):
+    try:
+        run = check_asset(asset_id, _actor(user))
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    log_audit_event('arshin_asset_checked', 'metrology_asset', asset_id,
+                    {'status': run['status'], 'result_count': run['result_count']}, actor=_actor(user))
+    return run
+
+
+@app.get('/api/metrology/arshin/assets/{asset_id}/history')
+def arshin_asset_history(asset_id: str, limit: int = 20, user: dict[str, object] = Depends(require_permission('metrology:read'))):
+    if not get_metrology_asset(asset_id):
+        raise HTTPException(status_code=404, detail='Экземпляр СИ не найден.')
+    return asset_history(asset_id, limit)
 
 
 @app.get('/api/uug/projects')

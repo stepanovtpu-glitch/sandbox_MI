@@ -30,6 +30,7 @@ DEFAULT_ROLE = 'admin'
 TECHNOLOGIST_PERMISSIONS = {
     'method:read',
     'instrument:read',
+    'metrology:read',
     'uug:select',
     'report:export',
 }
@@ -43,6 +44,7 @@ KIP_PERMISSIONS = TECHNOLOGIST_PERMISSIONS | {
 
 # Права метролога: вся метрологическая часть, включая утверждение состава.
 METROLOGIST_PERMISSIONS = KIP_PERMISSIONS | {
+    'metrology:manage',
     'system:read',
     'audit:read',
     'method:write',
