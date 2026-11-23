@@ -70,3 +70,31 @@ def test_snapshot_import_is_versioned_and_idempotent(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match='старше'):
         publish_export(old.getvalue(), 'old.xlsx', date(2026, 11, 19), 'metrologist')
     assert len(list_imports()) == 2
+
+
+def test_truncated_full_export_cannot_replace_published_snapshot(monkeypatch, tmp_path):
+    monkeypatch.setenv('GASMETER_DATABASE_URL', '')
+    monkeypatch.setattr(database, 'DB_DIR', tmp_path)
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'snapshot.db')
+
+    def xlsx(rows: int) -> bytes:
+        book = Workbook()
+        sheet = book.active
+        sheet.append(list(HEADERS))
+        for number in range(rows):
+            sheet.append([str(number), f'guid-{number}', 'Расходомеры', 'Поверка', 'ДРГ.М', 'ДРГ.М',
+                          f'А-{number}', 'ИНК', 'УПН', 'КИП', 'МО', 'Яракта', '', '20.11.2027', ''])
+        data = BytesIO()
+        book.save(data)
+        return data.getvalue()
+
+    full = publish_export(xlsx(120), 'full.xlsx', date(2026, 11, 20), 'metrologist')
+    truncated = xlsx(20)
+    preview = preview_export(truncated, date(2026, 11, 21))
+    assert preview['coverage_check']['status'] == 'large_drop'
+    assert preview['coverage_check']['previous_rows'] == 120
+    with pytest.raises(ValueError, match='Публикация остановлена'):
+        publish_export(truncated, 'truncated.xlsx', date(2026, 11, 21), 'metrologist')
+    assert len(list_imports()) == 1
+    assert find_in_latest_snapshot('А-100')['snapshot']['import_id'] == full['import_id']
+    assert find_in_latest_snapshot('А-100')['total'] == 1

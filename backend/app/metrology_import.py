@@ -26,6 +26,7 @@ COLUMNS = (
     'kip_responsible', 'metro_responsible', 'location', 'completed_on',
     'valid_until', 'next_work_on',
 )
+MAX_UNREVIEWED_ROW_DROP = 0.20  # Защитный порог импорта, не метрологический норматив.
 
 
 def _value(value: object) -> str:
@@ -92,7 +93,25 @@ def parse_export(content: bytes, snapshot_date: date) -> dict:
 
 def preview_export(content: bytes, snapshot_date: date) -> dict:
     parsed = parse_export(content, snapshot_date)
-    return {key: value for key, value in parsed.items() if key != 'rows'} | {'sha256': sha256(content).hexdigest()}
+    digest = sha256(content).hexdigest()
+    init_db()
+    existing = fetch_one('SELECT import_id FROM metrology_imports WHERE sha256 = ?', (digest,))
+    return ({key: value for key, value in parsed.items() if key != 'rows'}
+            | {'sha256': digest, 'already_imported': bool(existing),
+               'coverage_check': _coverage_check(parsed['row_count'], snapshot_date, bool(existing))})
+
+
+def _coverage_check(row_count: int, snapshot_date: date, already_imported: bool = False) -> dict:
+    latest = fetch_one('SELECT snapshot_date,row_count FROM metrology_imports ORDER BY snapshot_date DESC, imported_at DESC LIMIT 1')
+    if not latest or already_imported:
+        return {'status': 'ok', 'previous_rows': latest['row_count'] if latest else None}
+    if snapshot_date < date.fromisoformat(latest['snapshot_date']):
+        return {'status': 'older_snapshot', 'previous_rows': latest['row_count']}
+    previous = latest['row_count']
+    if previous >= 100 and row_count < previous * (1 - MAX_UNREVIEWED_ROW_DROP):
+        return {'status': 'large_drop', 'previous_rows': previous,
+                'decrease_percent': round((previous - row_count) * 100 / previous, 1)}
+    return {'status': 'ok', 'previous_rows': previous}
 
 
 def publish_export(content: bytes, filename: str, snapshot_date: date, actor: str) -> dict:
@@ -109,6 +128,10 @@ def publish_export(content: bytes, filename: str, snapshot_date: date, actor: st
     latest = fetch_one('SELECT MAX(snapshot_date) AS snapshot_date FROM metrology_imports')
     if latest and latest['snapshot_date'] and snapshot_date < date.fromisoformat(latest['snapshot_date']):
         raise ValueError('Дата среза старше уже опубликованного снимка.')
+    coverage = _coverage_check(parsed['row_count'], snapshot_date)
+    if coverage['status'] == 'large_drop':
+        raise ValueError(f"Выгрузка содержит {parsed['row_count']} строк против {coverage['previous_rows']} в последнем снимке "
+                         f"(сокращение {coverage['decrease_percent']}%). Публикация остановлена: проверьте полноту выгрузки и источник.")
     archive = DB_DIR / 'metrology-imports'
     archive.mkdir(parents=True, exist_ok=True)
     source_path = archive / f'{digest}.xlsx'

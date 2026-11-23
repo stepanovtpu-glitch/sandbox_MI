@@ -85,7 +85,7 @@ from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
-APP_VERSION = '0.2.12'
+APP_VERSION = '0.2.13'
 app = FastAPI(title='ФОРВАТЕР', version=APP_VERSION)
 
 
