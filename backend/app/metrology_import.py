@@ -11,6 +11,7 @@ from uuid import uuid4
 from openpyxl import load_workbook
 
 from app.database import DB_DIR, fetch_all, fetch_one, get_connection, init_db
+from app.metrology_status import operational_today, parse_due, plan_status, snapshot_freshness
 
 HEADERS = (
     'Системный код 1С Метрология', 'GUID 1C: ТОиР', 'Группа СИ', 'Вид работ',
@@ -38,14 +39,7 @@ def _value(value: object) -> str:
 
 
 def _due(value: str) -> date | None:
-    if not value:
-        return None
-    for fmt in ('%d.%m.%Y', '%Y-%m-%d'):
-        try:
-            return datetime.strptime(value, fmt).date()
-        except ValueError:
-            pass
-    return None
+    return parse_due(value)
 
 
 def parse_export(content: bytes, snapshot_date: date) -> dict:
@@ -105,7 +99,7 @@ def publish_export(content: bytes, filename: str, snapshot_date: date, actor: st
     parsed = parse_export(content, snapshot_date)
     if parsed['issue_count']:
         raise ValueError(f"В выгрузке {parsed['issue_count']} строк с ошибками данных. Исправьте файл перед публикацией.")
-    if snapshot_date > date.today():
+    if snapshot_date > operational_today():
         raise ValueError('Дата среза не может быть в будущем.')
     digest = sha256(content).hexdigest()
     init_db()
@@ -137,7 +131,8 @@ def publish_export(content: bytes, filename: str, snapshot_date: date, actor: st
 
 def list_imports() -> list[dict]:
     init_db()
-    return [dict(row) for row in fetch_all('SELECT import_id,sha256,file_name,snapshot_date,imported_at,imported_by,row_count,issue_count FROM metrology_imports ORDER BY snapshot_date DESC, imported_at DESC LIMIT 30')]
+    return [dict(row) | {'freshness': snapshot_freshness(date.fromisoformat(row['snapshot_date']))}
+            for row in fetch_all('SELECT import_id,sha256,file_name,snapshot_date,imported_at,imported_by,row_count,issue_count FROM metrology_imports ORDER BY snapshot_date DESC, imported_at DESC LIMIT 30')]
 
 
 def snapshot_conflicts(import_id: str) -> dict:
@@ -169,7 +164,7 @@ def snapshot_conflicts(import_id: str) -> dict:
 
 def export_snapshot_csv(import_id: str, status: str = 'all') -> bytes:
     """Рабочий реестр с датой среза и источником; не выдаёт плановый срок за поверку."""
-    if status not in {'all', 'past_due', 'missing_due', 'issues', 'repeated_guid'}:
+    if status not in {'all', 'past_due', 'past_due_now', 'missing_due', 'issues', 'repeated_guid'}:
         raise ValueError('Недопустимый фильтр.')
     init_db()
     source = fetch_one('SELECT snapshot_date,file_name FROM metrology_imports WHERE import_id = ?', (import_id,))
@@ -177,8 +172,11 @@ def export_snapshot_csv(import_id: str, status: str = 'all') -> bytes:
         raise KeyError('Снимок не найден.')
     text = StringIO(newline='')
     writer = csv.writer(text, delimiter=';')
-    writer.writerow(('Дата среза', 'Источник', 'Строка', *HEADERS, 'Проблема данных', 'Срок по плану'))
+    writer.writerow(('Дата среза', 'Источник', 'Строка', *HEADERS, 'Проблема данных',
+                     'Срок по плану на дату среза', 'Срок по плану сегодня', 'Дата расчёта', 'Свежесть снимка'))
     snapshot_date = date.fromisoformat(source['snapshot_date'])
+    today = operational_today()
+    freshness = snapshot_freshness(snapshot_date, today=today)
     repeated_guids = set()
     if status == 'repeated_guid':
         repeated_guids = {row['toir_guid'] for row in fetch_all(
@@ -189,15 +187,19 @@ def export_snapshot_csv(import_id: str, status: str = 'all') -> bytes:
         due = _due(row['valid_until'])
         if status == 'past_due' and (due is None or due >= snapshot_date):
             continue
+        if status == 'past_due_now' and (due is None or due >= today):
+            continue
         if status == 'missing_due' and row['valid_until']:
             continue
         if status == 'issues' and not row['issue']:
             continue
         if status == 'repeated_guid' and row['toir_guid'] not in repeated_guids:
             continue
-        plan = 'дата не указана' if due is None else ('дата прошла' if due < snapshot_date else 'дата не прошла')
+        plan_at_snapshot = 'дата не указана' if due is None else ('дата прошла' if due < snapshot_date else 'дата не прошла')
+        plan_today = 'дата не указана' if due is None else ('дата прошла' if due < today else 'дата не прошла')
         writer.writerow((_csv_safe(source['snapshot_date']), _csv_safe(source['file_name']), row['row_number'],
-                         *(_csv_safe(row[column]) for column in COLUMNS), _csv_safe(row['issue']), plan))
+                         *(_csv_safe(row[column]) for column in COLUMNS), _csv_safe(row['issue']),
+                         plan_at_snapshot, plan_today, today.isoformat(), freshness['status']))
     return ('\ufeff' + text.getvalue()).encode('utf-8')
 
 
@@ -211,27 +213,38 @@ def snapshot_rows(import_id: str, status: str = 'all', offset: int = 0, limit: i
     init_db()
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
-    if status not in {'all', 'past_due', 'missing_due', 'issues', 'repeated_guid'}:
+    if status not in {'all', 'past_due', 'past_due_now', 'missing_due', 'issues', 'repeated_guid'}:
         raise ValueError('Недопустимый фильтр.')
     source = fetch_one('SELECT * FROM metrology_imports WHERE import_id = ?', (import_id,))
     if not source:
         raise KeyError('Снимок не найден.')
-    where = {'all': '', 'past_due': '',
+    where = {'all': '', 'past_due': '', 'past_due_now': '',
              'missing_due': " AND valid_until = ''", 'issues': " AND issue <> ''",
              'repeated_guid': " AND toir_guid <> '' AND toir_guid IN (SELECT toir_guid FROM metrology_import_rows WHERE import_id = ? AND toir_guid <> '' GROUP BY toir_guid HAVING COUNT(*) > 1)"}[status]
     params: tuple = (import_id,)
-    if status == 'past_due':
+    if status in {'past_due', 'past_due_now'}:
         # ISO и dd.MM.yyyy исходного файла различаются; фильтруем на Python
         # после чтения строк, чтобы не ошибиться при сортировке дат как текста.
         rows = fetch_all('SELECT * FROM metrology_import_rows WHERE import_id = ? ORDER BY row_number', params)
-        selected = [dict(row) for row in rows if (due := _due(str(row['valid_until']))) and due < date.fromisoformat(source['snapshot_date'])]
-        return {'total': len(selected), 'rows': selected[offset:offset + limit], 'snapshot': {key: value for key, value in dict(source).items() if key != 'source_path'}}
+        as_of = date.fromisoformat(source['snapshot_date']) if status == 'past_due' else operational_today()
+        selected = [dict(row) for row in rows if plan_status(str(row['valid_until']), as_of) == 'past_due']
+        page = selected[offset:offset + limit]
+        for row in page:
+            row['plan_status_today'] = plan_status(row['valid_until'], operational_today())
+        return {'total': len(selected), 'rows': page,
+                'snapshot': {key: value for key, value in dict(source).items() if key != 'source_path'},
+                'freshness': snapshot_freshness(date.fromisoformat(source['snapshot_date']))}
     if status == 'repeated_guid':
         params = (import_id, import_id)
     total = fetch_one('SELECT COUNT(*) AS n FROM metrology_import_rows WHERE import_id = ?' + where, params)['n']
     rows = fetch_all('SELECT * FROM metrology_import_rows WHERE import_id = ?' + where + ' ORDER BY row_number LIMIT ? OFFSET ?',
                      (*params, max(1, min(limit, 200)), max(0, offset)))
-    return {'total': total, 'rows': [dict(row) for row in rows], 'snapshot': {key: value for key, value in dict(source).items() if key != 'source_path'}}
+    page = [dict(row) for row in rows]
+    for row in page:
+        row['plan_status_today'] = plan_status(row['valid_until'], operational_today())
+    return {'total': total, 'rows': page,
+            'snapshot': {key: value for key, value in dict(source).items() if key != 'source_path'},
+            'freshness': snapshot_freshness(date.fromisoformat(source['snapshot_date']))}
 
 
 def compare_imports(current_id: str, previous_id: str) -> dict:
@@ -295,10 +308,10 @@ def find_in_latest_snapshot(serial_number: str, limit: int = 10) -> dict:
     entries = []
     for item in rows:
         row = dict(item)
-        due = _due(row['valid_until'])
-        row['plan_status'] = 'no_due_date' if due is None else ('past_due' if due < as_of else 'within_date')
+        row['plan_status'] = plan_status(row['valid_until'], as_of)
+        row['plan_status_today'] = plan_status(row['valid_until'], operational_today())
         entries.append(row)
-    return {'snapshot': dict(latest), 'total': total, 'rows': entries,
+    return {'snapshot': dict(latest), 'freshness': snapshot_freshness(as_of), 'total': total, 'rows': entries,
             'note': 'Срок по выгрузке ИС Метрология; факт поверки подтверждается отдельно по Аршину или документу.'}
 
 

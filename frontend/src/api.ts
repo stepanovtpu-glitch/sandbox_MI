@@ -352,9 +352,10 @@ export async function createArshinAsset(asset: MetrologyAssetInput) { return req
 export async function checkArshinAsset(assetId: string) { return request<ArshinCheckRun>(`/api/metrology/arshin/assets/${assetId}/check`, { method: 'POST' }); }
 export async function getArshinAssetHistory(assetId: string) { return request<ArshinCheckRun[]>(`/api/metrology/arshin/assets/${assetId}/history`); }
 
-export type MetrologyImport = { import_id: string; snapshot_date: string; imported_at: string; file_name: string; row_count: number; issue_count: number; already_imported?: boolean; past_due_rows?: number; missing_due?: number; repeated_guid_rows?: number; sha256?: string };
+export type SnapshotFreshness = { status: 'future_date' | 'threshold_unset' | 'invalid_threshold' | 'stale' | 'within_threshold'; snapshot_date: string; checked_on: string; checked_timezone: string; age_days: number; max_age_days: number | null };
+export type MetrologyImport = { import_id: string; snapshot_date: string; imported_at: string; file_name: string; row_count: number; issue_count: number; already_imported?: boolean; past_due_rows?: number; missing_due?: number; repeated_guid_rows?: number; sha256?: string; freshness?: SnapshotFreshness };
 export async function getMetrologyImports() { return request<MetrologyImport[]>('/api/metrology/imports'); }
-export type MetrologySnapshotRow = { row_number: number; metrology_code: string; toir_guid: string; metrology_name: string; serial_number: string; organization: string; owner_name: string; location: string; valid_until: string; next_work_on: string; issue: string };
+export type MetrologySnapshotRow = { row_number: number; metrology_code: string; toir_guid: string; metrology_name: string; serial_number: string; organization: string; owner_name: string; location: string; valid_until: string; next_work_on: string; issue: string; plan_status_today?: 'past_due' | 'within_date' | 'no_due_date' };
 export async function getMetrologySnapshotRows(importId: string, status: string, offset: number) { return request<{ total: number; rows: MetrologySnapshotRow[] }>(`/api/metrology/imports/${importId}/rows?status=${status}&offset=${offset}&limit=50`); }
 export type MetrologyConflicts = { groups: number; affected_rows: number; different_serial_groups: number; note: string; examples: Array<{ toir_guid: string; row_count: number; serial_count: number }> };
 export async function getMetrologyConflicts(importId: string) { return request<MetrologyConflicts>(`/api/metrology/imports/${importId}/conflicts`); }
@@ -362,7 +363,7 @@ export async function downloadMetrologySnapshot(importId: string, status: string
 export type MetrologyComparison = { current_date: string; previous_date: string; counts: Record<string, number>; note: string; examples: Array<{ kind: string; organization: string; metrology_code: string; serial_number: string; changed_fields: string[] }> };
 export async function compareMetrologyImports(currentId: string, previousId: string) { return request<MetrologyComparison>(`/api/metrology/imports/${currentId}/compare/${previousId}`); }
 export type LocalSnapshotMatch = MetrologySnapshotRow & { plan_status: 'past_due' | 'within_date' | 'no_due_date' };
-export async function findInMetrologySnapshot(serial: string) { return request<{ snapshot: MetrologyImport | null; total: number; rows: LocalSnapshotMatch[]; note?: string }>(`/api/metrology/snapshot/search?serial=${encodeURIComponent(serial)}`); }
+export async function findInMetrologySnapshot(serial: string) { return request<{ snapshot: MetrologyImport | null; freshness?: SnapshotFreshness; total: number; rows: LocalSnapshotMatch[]; note?: string }>(`/api/metrology/snapshot/search?serial=${encodeURIComponent(serial)}`); }
 export async function uploadMetrologySnapshot(file: File, snapshotDate: string, publish: boolean) {
   const body = new FormData(); body.append('file', file);
   const path = publish ? '/api/metrology/imports' : '/api/metrology/imports/preview';

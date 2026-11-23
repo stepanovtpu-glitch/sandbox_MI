@@ -27,6 +27,8 @@ def test_snapshot_import_is_versioned_and_idempotent(monkeypatch, tmp_path):
     assert publish_export(content, 'export.xlsx', date(2026, 11, 20), 'metrologist')['already_imported']
     assert len(list_imports()) == 1
     assert snapshot_rows(first['import_id'], 'past_due')['rows'][0]['serial_number'] == 'А-01'
+    assert snapshot_rows(first['import_id'], 'past_due_now')['total'] >= 1
+    assert list_imports()[0]['freshness']['snapshot_date'] == '2026-11-20'
     assert snapshot_rows(first['import_id'], 'missing_due')['total'] == 1
     conflicts = snapshot_conflicts(first['import_id'])
     assert (conflicts['groups'], conflicts['affected_rows'], conflicts['different_serial_groups']) == (1, 2, 1)
@@ -47,6 +49,8 @@ def test_snapshot_import_is_versioned_and_idempotent(monkeypatch, tmp_path):
     assert local['snapshot']['snapshot_date'] == '2026-11-21'
     assert local['total'] == 1
     assert local['rows'][0]['plan_status'] == 'within_date'
+    assert local['rows'][0]['plan_status_today'] == 'within_date'
+    assert local['freshness']['snapshot_date'] == '2026-11-21'
     database.execute('UPDATE metrology_import_rows SET metrology_name = ? WHERE import_id = ? AND row_number = ?',
                      (' =HYPERLINK("https://example.com")', first['import_id'], 2))
     safe_csv = export_snapshot_csv(first['import_id']).decode('utf-8-sig')
