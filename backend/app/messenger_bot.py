@@ -205,14 +205,24 @@ def _handle_text(text: str, token: str, target: dict[str, str], actor: str) -> N
         if not snapshot:
             _send_text(token, target, 'Локальная выгрузка ИС Метрология ещё не загружена.')
             return
+        freshness = found['freshness']
+        snapshot_note = (f"Снимок ИС Метрология на {snapshot['snapshot_date']}; "
+                         f"возраст {freshness['age_days']} дн. на {freshness['checked_on']} "
+                         f"({freshness['checked_timezone']}).")
+        if freshness['status'] == 'stale':
+            snapshot_note += f" Превышен настроенный порог свежести {freshness['max_age_days']} дн."
+        elif freshness['status'] == 'threshold_unset':
+            snapshot_note += ' Порог свежести не настроен.'
         if not found['total']:
-            _send_text(token, target, f"В выгрузке на {snapshot['snapshot_date']} точный заводской номер не найден. Проверьте написание; это не означает отсутствие поверки.")
+            _send_text(token, target, snapshot_note + ' Точный заводской номер не найден. Проверьте написание; это не означает отсутствие поверки.')
             return
         labels = {'past_due': 'дата по выгрузке прошла', 'within_date': 'дата по выгрузке не прошла', 'no_due_date': 'срок не указан'}
-        lines = [f"Локальный снимок ИС Метрология на {snapshot['snapshot_date']}. Совпадений: {found['total']}."]
+        lines = [snapshot_note, f"Совпадений: {found['total']}."]
         for item in found['rows'][:5]:
             lines.append(f"{item['metrology_name']} · № {item['serial_number']} · {item['organization']} · {item['owner_name']}")
-            lines.append(f"Срок: {item['valid_until'] or '—'} ({labels[item['plan_status']]}). Код 1С: {item['metrology_code']}; строка {item['row_number']}.")
+            lines.append(f"Плановый срок: {item['valid_until'] or '—'}; на {freshness['checked_on']}: "
+                         f"{labels[item['plan_status_today']]}; на дату среза: {labels[item['plan_status']]}. "
+                         f"Код 1С: {item['metrology_code']}; строка {item['row_number']}.")
         if found['total'] > 5:
             lines.append('Показаны первые пять строк; номер неоднозначен, уточните экземпляр в ФОРВАТЕРЕ.')
         lines.append(found['note'])

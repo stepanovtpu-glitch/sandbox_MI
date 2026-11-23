@@ -7,19 +7,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
 
 import paramiko
 
-VERSION = '0.2.19'
-EXPECTED_HASH = '9353be04bbcbfd6e4badf5dc8da27d8308499686b98641e6d9cfe8f7d6796f2a'
+VERSION = '0.2.20'
+EXPECTED_HASH = '52855aaa8c6d26b86d90663e9a09fe52ed47056ba038a7506431df8bcaa4bbe7'
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / 'releases' / f'forvater-{VERSION}' / 'forvater-images.tar'
+ARCHIVE = ROOT / 'releases' / f'forvater-{VERSION}' / 'forvater-images-fixed.tar'
 CREDS = Path('C:/pass/izp-flow-meter.json')
 KNOWN_HOSTS = Path.home() / '.ssh' / 'known_hosts'
-REMOTE = f'/opt/gasmeter/backup/forvater-images-{VERSION}.tar'
+REMOTE = f'/opt/gasmeter/backup/forvater-images-{VERSION}-fixed.tar'
 SOURCE_EXPORT = Path('C:/Users/silve/AppData/Local/Temp/farvater_mail_933afdcdb933448b8ce265c5bbcb47e6/Плановая дата поверки СИ для контроля XLSX.xlsx')
 SOURCE_HASH = '116daaed24df342acf2b88a05ae32ed771fb2ce67c3ccdcc4e9c2e04dd95006b'
 INBOX_CRON = ROOT / 'deploy' / 'gasmeter-metrology-inbox.cron'
@@ -63,6 +64,12 @@ def preflight(client):
 
 
 def upload(client):
+    frontend_config = subprocess.run(
+        ['docker', 'run', '--rm', '--entrypoint', 'cat', f'forvater-frontend:{VERSION}',
+         '/etc/nginx/conf.d/default.conf'], capture_output=True, text=True, encoding='utf-8', check=True,
+    ).stdout
+    if 'location /api/' not in frontend_config or 'location /health' not in frontend_config or 'proxy_pass' not in frontend_config:
+        raise RuntimeError('Образ frontend не содержит маршруты API и health; установка остановлена.')
     digest = hashlib.sha256(ARCHIVE.read_bytes()).hexdigest()
     if digest != EXPECTED_HASH:
         raise RuntimeError('Локальный архив не прошёл SHA-256.')

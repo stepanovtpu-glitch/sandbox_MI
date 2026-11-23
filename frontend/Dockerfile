@@ -11,7 +11,7 @@ ENV VITE_API_BASE=$VITE_API_BASE
 RUN npm run build
 
 FROM nginx:1.27-alpine
-ARG NGINX_CONF=nginx.conf
+ARG NGINX_CONF=nginx.prod.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY ${NGINX_CONF} /etc/nginx/conf.d/default.conf
 
