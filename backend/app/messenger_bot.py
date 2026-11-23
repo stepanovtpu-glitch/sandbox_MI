@@ -185,8 +185,15 @@ def _handle_text(text: str, token: str, target: dict[str, str], actor: str) -> N
     question = re.sub(r'^\s*/(?:эксперт|expert)\s*', '', normalized, flags=re.IGNORECASE).strip()
     try:
         answer = answer_question(question)
-        sources = '\n'.join(f"• {item['reference']}" for item in answer.sources)
-        _send_text(token, target, answer.text + (f'\n\nИсточники библиотеки МИ:\n{sources}' if sources else ''))
+        if answer.model == 'поиск по МИ без LLM':
+            excerpts = '\n\n'.join(
+                f"• {item['reference']}\n{re.sub(r'\s+', ' ', item.get('excerpt', ''))[:450]}"
+                for item in answer.sources[:2]
+            )
+            _send_text(token, target, answer.text + (f'\n\n{excerpts}' if excerpts else ''))
+        else:
+            sources = '\n'.join(f"• {item['reference']}" for item in answer.sources)
+            _send_text(token, target, answer.text + (f'\n\nИсточники библиотеки МИ:\n{sources}' if sources else ''))
         log_audit_event('metrology_expert_query', 'metrology', None, {'source_count': len(answer.sources), 'model': answer.model}, actor=actor)
     except ValueError as error:
         _send_text(token, target, str(error))

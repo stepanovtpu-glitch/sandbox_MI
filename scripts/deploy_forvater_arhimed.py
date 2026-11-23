@@ -13,8 +13,8 @@ from pathlib import Path
 
 import paramiko
 
-VERSION = '0.2.6'
-EXPECTED_HASH = 'aad7d61447cc00b7889b27121276e0543b7559c5d07a6388fa4d31c33dd3b4e5'
+VERSION = '0.2.7'
+EXPECTED_HASH = 'dd6156cb56c662527dd7fc5191bc34ec348896c5ce6f899f9167e59a2ee51bb2'
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / 'releases' / f'forvater-{VERSION}' / 'forvater-images.tar'
 CREDS = Path('C:/pass/izp-flow-meter.json')
@@ -23,6 +23,8 @@ REMOTE = f'/opt/gasmeter/backup/forvater-images-{VERSION}.tar'
 SOURCE_EXPORT = Path('C:/Users/silve/AppData/Local/Temp/farvater_mail_933afdcdb933448b8ce265c5bbcb47e6/Плановая дата поверки СИ для контроля XLSX.xlsx')
 SOURCE_HASH = '116daaed24df342acf2b88a05ae32ed771fb2ce67c3ccdcc4e9c2e04dd95006b'
 INBOX_CRON = ROOT / 'deploy' / 'gasmeter-metrology-inbox.cron'
+OCR_ARCHIVE = ROOT / 'releases' / 'forvater-0.2.6' / 'ocr-texts.tar.gz'
+OCR_HASH = 'a1577390f78c30e232c27d6060c5909ac7f454f090b2f285712d1ad3017cb544'
 
 
 def connect():
@@ -168,16 +170,49 @@ def configure_inbox(client):
     print('Ежечасный приём полных снимков настроен; прочие задания cron не менялись.')
 
 
+def config_status(client):
+    """Только наличие настроек, без вывода токенов и адресов внутренних служб."""
+    run(client, "sudo -n docker exec gasmeter-backend python -c 'import json,os; names=(\"GASMETER_YM_TOKEN\",\"GASMETER_YM_CHAT_ID\",\"GASMETER_LLM_BASE_URL\",\"GASMETER_LLM_MODEL\"); print(json.dumps({name:bool(os.getenv(name)) for name in names}))'")
+    run(client, 'sudo -n sh -c "cd /opt/gasmeter && docker compose ps --status running --services"')
+    run(client, "sudo -n docker exec gasmeter-backend python -c 'from pathlib import Path; p=Path(\"/app/mi_library/ocr\"); print(\"ocr_texts\",sum(1 for _ in p.glob(\"*.txt\")),sum(1 for _ in (p/\"texts\").glob(\"*.txt\")))'")
+    run(client, "sudo -n docker exec gasmeter-backend python -c 'from app.metrology_expert import answer_question; a=answer_question(\"диапазон давления расходомер\"); print(\"expert_mode\",a.model,\"search_hits\",len(a.sources))'")
+    try:
+        run(client, 'curl -sS -o /dev/null -w "ollama_http=%{http_code}" --connect-timeout 3 --max-time 5 http://10.61.157.1:11434/api/tags')
+    except RuntimeError:
+        print('Корпоративный Ollama: соединение с АРХИМЕДа не установлено.')
+
+
+def upload_ocr(client):
+    """Добавить OCR-тексты в корпоративный том, не затрагивая сканы и существующие файлы."""
+    if hashlib.sha256(OCR_ARCHIVE.read_bytes()).hexdigest() != OCR_HASH:
+        raise RuntimeError('Локальный архив OCR не прошёл SHA-256.')
+    target = '/opt/gasmeter/mi_library/ocr'
+    existing = run(client, f'sudo -n find {target} -type f -name "*.txt" | wc -l', quiet=True)
+    if existing != '0':
+        raise RuntimeError('На сервере уже есть OCR-тексты; автоматическая распаковка остановлена во избежание перезаписи.')
+    staging = f'/tmp/forvater-ocr-{int(time.time())}.tar.gz'
+    sftp = client.open_sftp()
+    try:
+        sftp.put(str(OCR_ARCHIVE), staging)
+    finally:
+        sftp.close()
+    if run(client, f'sudo -n sha256sum {staging}', quiet=True).split()[0] != OCR_HASH:
+        raise RuntimeError('Переданный архив OCR не прошёл SHA-256.')
+    run(client, f'sudo -n install -d -m 750 {target}', quiet=True)
+    run(client, f'sudo -n tar --keep-old-files -xzf {staging} -C {target}', quiet=True)
+    run(client, f'sudo -n find {target} -type f -name "*.txt" | wc -l')
+
+
 def main():
     if sys.platform == 'win32':
         for stream in (sys.stdout, sys.stderr):
             if hasattr(stream, 'reconfigure'):
                 stream.reconfigure(encoding='utf-8')
-    if len(sys.argv) != 2 or sys.argv[1] not in {'preflight', 'upload', 'install', 'activate', 'diagnose', 'verify', 'import-snapshot', 'configure-inbox'}:
-        raise SystemExit('Укажите preflight, upload, install, activate, diagnose, verify, import-snapshot или configure-inbox.')
+    if len(sys.argv) != 2 or sys.argv[1] not in {'preflight', 'upload', 'install', 'activate', 'diagnose', 'verify', 'import-snapshot', 'configure-inbox', 'config-status', 'upload-ocr'}:
+        raise SystemExit('Укажите preflight, upload, install, activate, diagnose, verify, import-snapshot, configure-inbox, config-status или upload-ocr.')
     client = connect()
     try:
-        {'preflight': preflight, 'upload': upload, 'install': install, 'activate': activate, 'diagnose': diagnose, 'verify': verify, 'import-snapshot': import_snapshot, 'configure-inbox': configure_inbox}[sys.argv[1]](client)
+        {'preflight': preflight, 'upload': upload, 'install': install, 'activate': activate, 'diagnose': diagnose, 'verify': verify, 'import-snapshot': import_snapshot, 'configure-inbox': configure_inbox, 'config-status': config_status, 'upload-ocr': upload_ocr}[sys.argv[1]](client)
     finally:
         client.close()
 

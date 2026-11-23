@@ -96,6 +96,9 @@ html[data-theme='light'] {
 .answer-heading { color: var(--accent); font-size: 13px; font-weight: 700; margin-bottom: 12px; }
 .answer-text { line-height: 1.65; white-space: pre-wrap; }
 .expert-sources { display: grid; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.expert-sources details { padding: 7px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.expert-sources summary { cursor: pointer; overflow-wrap: anywhere; color: var(--text); }
+.expert-source-excerpt { margin-top: 8px; padding: 10px 12px; border-radius: 7px; background: var(--surface); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; line-height: 1.5; }
 .spin { animation: expert-spin 1s linear infinite; }
 @keyframes expert-spin { to { transform: rotate(360deg); } }
 @media (max-width: 640px) { .metrology-expert-card { padding: 14px; } .expert-form-footer { align-items: flex-start; flex-direction: column; } .expert-form-footer button { align-self: stretch; justify-content: center; } }

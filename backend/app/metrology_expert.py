@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from app.database import DB_DIR, fetch_all, json_load
 from app.llm_client import LlmClient, LlmNotConfigured, criticize
 
@@ -26,9 +28,11 @@ class ExpertAnswer:
 
 
 def _corpus_dir() -> Path:
-    configured = (Path(os.environ['GASMETER_MI_LIBRARY_DIR'])
-                  if os.environ.get('GASMETER_MI_LIBRARY_DIR') else Path(__file__).resolve().parents[2] / 'mi_library')
-    return configured / 'ocr'
+    if os.environ.get('GASMETER_MI_LIBRARY_DIR'):
+        return Path(os.environ['GASMETER_MI_LIBRARY_DIR']) / 'ocr'
+    source = Path(__file__).resolve()
+    candidates = (source.parents[2] / 'mi_library', source.parents[1] / 'mi_library')
+    return next((path for path in candidates if path.is_dir()), candidates[0]) / 'ocr'
 
 
 def _tokens(text: str) -> set[str]:
@@ -108,7 +112,7 @@ def answer_question(question: str, client: LlmClient | None = None) -> ExpertAns
         return ExpertAnswer('В библиотеке не найдено подтверждающих фрагментов. Уточните номер или название МИ; ответ без источника не формирую.', 'без LLM', [])
     llm = client or LlmClient()
     if not llm.settings.configured:
-        raise LlmNotConfigured('Корпоративная LLM не настроена.')
+        return _search_only_answer(sources, 'Корпоративная LLM не подключена.')
     source_text = '\n\n'.join(f"Источник [{item['reference']}]:\n{item['excerpt']}" for item in sources)
     messages = [
         {'role': 'system', 'content': (
@@ -121,11 +125,22 @@ def answer_question(question: str, client: LlmClient | None = None) -> ExpertAns
         )},
         {'role': 'user', 'content': f'Вопрос: {question}\n\nФрагменты библиотеки:\n{source_text}'},
     ]
-    reply = llm.chat(messages, temperature=0.0, max_tokens=700)
+    try:
+        reply = llm.chat(messages, temperature=0.0, max_tokens=700)
+    except (httpx.HTTPError, RuntimeError, ValueError) as error:
+        return _search_only_answer(sources, f'Модель не ответила ({error.__class__.__name__}).')
     safe_text, _ = criticize(reply.text, source_text)
     if not safe_text:
         safe_text = 'Не удалось сформировать подтверждённый ответ без неподтверждённых чисел. Проверьте МИ по указанным исходным документам.'
     if any(item.get('review_state') != 'confirmed' for item in sources):
         safe_text = 'Внимание: среди источников есть OCR-текст с неподтверждёнными полями. Сверьте вывод по скану МИ.\n\n' + safe_text
     return ExpertAnswer(safe_text, reply.model, [{'reference': item['reference'], 'review_state': item['review_state']} for item in sources])
+
+
+def _search_only_answer(sources: list[dict[str, str]], reason: str) -> ExpertAnswer:
+    return ExpertAnswer(
+        f'{reason} Ниже — найденные фрагменты МИ. Это исходный OCR-текст для просмотра, а не ответ или метрологическое заключение. Сверьте сведения со сканом.',
+        'поиск по МИ без LLM',
+        [{'reference': item['reference'], 'review_state': item['review_state'], 'excerpt': item['excerpt'][:1500]} for item in sources],
+    )
 

@@ -337,7 +337,7 @@ export async function selectUug(payload: UugSelectionRequest): Promise<UugSelect
   return request<UugSelectionResponse>('/api/uug/selection', { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export type MetrologyExpertReply = { text: string; model: string; sources: Array<{ reference: string; review_state: 'confirmed' | 'unverified' | string }> };
+export type MetrologyExpertReply = { text: string; model: string; sources: Array<{ reference: string; review_state: 'confirmed' | 'unverified' | string; excerpt?: string }> };
 export async function askMetrologyExpert(question: string): Promise<MetrologyExpertReply> {
   return request<MetrologyExpertReply>('/api/metrology/expert', { method: 'POST', body: JSON.stringify({ question }) });
 }
