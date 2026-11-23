@@ -21,7 +21,7 @@ from typing import Any, Iterator
 
 DB_DIR = Path(os.environ.get('GASMETER_DB_DIR', Path(__file__).resolve().parents[1] / 'data'))
 DB_PATH = DB_DIR / 'gasmeter.db'
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 def database_url() -> str:
@@ -469,6 +469,25 @@ def _ensure_schema_version(connection: _Connection) -> None:
         ''')
         connection.execute('INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
                            (11, 'Scoped read-only integration clients and exact serial lookup index'))
+    if current_version < 12:
+        connection.executescript('''
+            CREATE TABLE IF NOT EXISTS messenger_bridge_commands (
+                update_id BIGINT PRIMARY KEY,
+                chat_id TEXT NOT NULL,
+                sender_login TEXT NOT NULL,
+                command_text TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at TEXT NOT NULL,
+                completed_at TEXT,
+                last_error TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_messenger_bridge_pending
+                ON messenger_bridge_commands(status, next_attempt_at);
+        ''')
+        connection.execute('INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+                           (12, 'Idempotent bridge queue for the shared Engineering Memory messenger bot'))
     if _current_schema_version(connection) > SCHEMA_VERSION:
         raise RuntimeError('Database schema is newer than this application version')
 

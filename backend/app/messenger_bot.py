@@ -13,7 +13,9 @@ import re
 import shlex
 import time
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -31,6 +33,7 @@ from app.users import get_user
 API_ROOT = 'https://botapi.messenger.yandex.net/bot/v1/messages/'
 POLL_TIMEOUT_S = 25
 MAX_UPDATE_BATCH = 100
+CURRENT_UPDATE_ID: ContextVar[int | None] = ContextVar('current_yandex_update_id', default=None)
 SERIAL_COMMAND = re.compile(r'^\s*(?:/поверка|поверка)\s+(.+?)\s*$', re.IGNORECASE)
 LOCAL_COMMAND = re.compile(r'^\s*(?:/состояние|состояние|/си)\s+(.+?)\s*$', re.IGNORECASE)
 HELP_TEXT = (
@@ -43,11 +46,27 @@ HELP_TEXT = (
 
 
 def _token() -> str:
-    return (os.environ.get('GASMETER_YM_TOKEN') or '').strip()
+    configured = (os.environ.get('GASMETER_YM_TOKEN') or '').strip()
+    if configured:
+        return configured
+    token_file = (os.environ.get('GASMETER_YM_TOKEN_FILE') or '').strip()
+    if token_file:
+        try:
+            return Path(token_file).read_text(encoding='ascii').strip()
+        except OSError:
+            pass
+    return ''
 
 
 def _user_map() -> dict[str, str]:
     raw = os.environ.get('GASMETER_YM_USER_MAP', '').strip()
+    if not raw:
+        mapping_file = (os.environ.get('GASMETER_YM_USER_MAP_FILE') or '').strip()
+        if mapping_file:
+            try:
+                raw = Path(mapping_file).read_text(encoding='utf-8').strip()
+            except OSError:
+                pass
     if not raw:
         return {}
     try:
@@ -72,10 +91,16 @@ def _reply_target(update: dict[str, Any]) -> dict[str, str] | None:
 
 
 def _send_text(token: str, target: dict[str, str], text: str) -> None:
-    body = {**target, 'text': text[:4000], 'payload_id': str(uuid.uuid4())}
+    body_text = text[:4000]
+    update_id = CURRENT_UPDATE_ID.get()
+    request_id = (uuid.uuid5(uuid.NAMESPACE_URL, f'forvater:{update_id}:{sorted(target.items())}:{body_text}')
+                  if update_id is not None else uuid.uuid4())
+    body = {**target, 'text': body_text, 'payload_id': str(request_id)}
     with httpx.Client(timeout=15) as client:
         response = client.post(API_ROOT + 'sendText/', json=body, headers={'Authorization': f'OAuth {token}'})
         response.raise_for_status()
+        if response.json().get('ok') is not True:
+            raise RuntimeError('Яндекс Мессенджер не подтвердил отправку текста.')
 
 
 def _send_file(token: str, target: dict[str, str], name: str, payload: bytes, mime_type: str) -> None:
@@ -88,6 +113,8 @@ def _send_file(token: str, target: dict[str, str], name: str, payload: bytes, mi
             headers={'Authorization': f'OAuth {token}'},
         )
         response.raise_for_status()
+        if response.json().get('ok') is not True:
+            raise RuntimeError('Яндекс Мессенджер не подтвердил отправку файла.')
 
 
 def _registered_user(sender: dict[str, Any]) -> dict[str, Any] | None:
@@ -127,6 +154,9 @@ def _format_arshin(records: list[dict[str, Any]]) -> tuple[str, bytes]:
 
 def _handle_text(text: str, token: str, target: dict[str, str], actor: str) -> None:
     normalized = text.strip()
+    if normalized.casefold() in {'/поверка', '/состояние', '/си', '/эксперт'}:
+        _send_text(token, target, 'Укажите после команды заводской номер или вопрос. Пример: /состояние А-123.')
+        return
     if normalized.casefold() in {'/start', '/help', 'помощь', 'справка'}:
         _send_text(token, target, HELP_TEXT)
         return
@@ -206,7 +236,7 @@ def _handle_text(text: str, token: str, target: dict[str, str], actor: str) -> N
 
 def _last_update_id() -> int:
     row = fetch_one("SELECT value FROM messenger_bot_state WHERE state_key = 'last_update_id'")
-    return int(row['value']) if row and str(row.get('value') or '').isdigit() else 0
+    return int(row['value']) if row and str(row.get('value') or '').isdigit() else -1
 
 
 def _set_last_update_id(value: int) -> None:
@@ -218,22 +248,28 @@ def _set_last_update_id(value: int) -> None:
 
 
 def poll_once(token: str) -> int:
-    offset = _last_update_id() + 1
+    offset = max(0, _last_update_id() + 1)
     try:
         with httpx.Client(timeout=POLL_TIMEOUT_S + 5) as client:
             response = client.get(API_ROOT + 'getUpdates/', params={'offset': offset, 'limit': MAX_UPDATE_BATCH}, headers={'Authorization': f'OAuth {token}'})
             response.raise_for_status()
-            updates = response.json().get('updates', [])
-    except (httpx.HTTPError, ValueError) as error:
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get('ok') is not True or not isinstance(payload.get('updates'), list):
+                raise ValueError('Некорректный ответ getUpdates.')
+            updates = payload['updates']
+            if any(not isinstance(item, dict) or not isinstance(item.get('update_id'), int) or item['update_id'] < 0 for item in updates):
+                raise ValueError('Некорректный идентификатор обновления.')
+    except (httpx.HTTPError, ValueError, TypeError) as error:
         logging.getLogger(__name__).warning('Yandex Messenger polling error: %s', error.__class__.__name__)
         return 0
     count = 0
-    for update in sorted((item for item in updates if isinstance(item, dict)), key=lambda item: int(item.get('update_id') or 0)):
-        update_id = int(update.get('update_id') or 0)
+    for update in sorted(updates, key=lambda item: item['update_id']):
+        update_id = update['update_id']
         if update_id <= _last_update_id():
             continue
         chat = update.get('chat') or {}
         sender = update.get('from') or {}
+        context_token = CURRENT_UPDATE_ID.set(update_id)
         try:
             if chat.get('type') == 'private' and update.get('text') and sender.get('login'):
                 user = _registered_user(sender)
@@ -246,6 +282,8 @@ def poll_once(token: str) -> int:
         except Exception as error:  # noqa: BLE001 — не останавливать весь worker на одном сообщении
             logging.getLogger(__name__).warning('Yandex Messenger update %s failed: %s', update_id, error.__class__.__name__)
             break  # offset не двигаем: сообщение будет повторено
+        finally:
+            CURRENT_UPDATE_ID.reset(context_token)
         _set_last_update_id(update_id)
         count += 1
     return count

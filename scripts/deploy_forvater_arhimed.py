@@ -13,8 +13,8 @@ from pathlib import Path
 
 import paramiko
 
-VERSION = '0.2.14'
-EXPECTED_HASH = 'd54399f6eee10d44863cfac9bb386d983adf461239d5b1c8da28e4cd311bd49a'
+VERSION = '0.2.15'
+EXPECTED_HASH = '9123f450727fcd5bb383f8c2a1af435c58fc0ca4d468b307d2db4eb3f10c18ef'
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / 'releases' / f'forvater-{VERSION}' / 'forvater-images.tar'
 CREDS = Path('C:/pass/izp-flow-meter.json')
@@ -109,6 +109,10 @@ def activate(client):
         raise RuntimeError('После установки не подтверждён health ФОРВАТЕРА. Проверьте журналы и выполните откат по инструкции.')
     run(client, 'sudo -n docker exec gasmeter-backend python -c "from app.database import get_schema_version; print(get_schema_version())"')
     run(client, 'sudo -n sh -c "cd /opt/gasmeter && docker compose ps --status running --services"')
+    bridge = run(client, 'sudo -n test -f /opt/gasmeter/forvater-bridge.compose.yaml && echo present || echo absent', quiet=True)
+    if bridge == 'present':
+        run(client, 'sudo -n sh -c "cd /opt/gasmeter && docker compose -f docker-compose.yaml -f forvater-bridge.compose.yaml up -d --no-deps messenger-bridge"', quiet=True)
+        run(client, 'sudo -n docker ps --filter name=gasmeter-messenger-bridge --format "{{.Status}}"')
 
 
 def diagnose(client):

@@ -77,6 +77,7 @@ from app.llm_client import LlmClient, LlmNotConfigured, explain_selection
 from app.metrology_expert import answer_question
 from app.metrology_import import compare_imports, export_snapshot_csv, find_in_latest_snapshot, list_imports, preview_export, publish_export, snapshot_conflicts, snapshot_rows
 from app.metrology_integration import lookup_metrology, require_integration_client
+from app.messenger_bridge import _bridge_key, enqueue_command
 from app.arshin_monitor import asset_history, check_asset, create_asset, get_asset as get_metrology_asset, list_assets, update_asset
 from app.yandex_messenger import MessengerCourier, notify_project_event
 from app.uug_composition import project_candidates, validate_composition
@@ -85,7 +86,7 @@ from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
-APP_VERSION = '0.2.14'
+APP_VERSION = '0.2.15'
 app = FastAPI(title='ФОРВАТЕР', version=APP_VERSION)
 
 
@@ -103,6 +104,13 @@ class MetrologyAssetCreatePayload(BaseModel):
     location: str | None = None
     source_reference: str | None = None
     check_interval_seconds: int = 86400
+
+
+class MessengerBridgeCommandPayload(BaseModel):
+    update_id: int
+    chat_id: str
+    sender_login: str
+    text: str
 
 
 class MetrologyAssetUpdatePayload(BaseModel):
@@ -782,6 +790,20 @@ def integration_metrology_lookup(serial: str, organization: str | None = None, m
                     {'client_id': client['client_id'], 'match_status': result['match_status'],
                      'total_matches': result['total_matches']}, actor=f"integration:{client['name']}")
     return result
+
+
+@app.post('/api/integration/v1/messenger/command', status_code=202)
+def integration_messenger_command(payload: MessengerBridgeCommandPayload,
+                                  x_forvater_bridge_key: str = FastApiHeader(default='')):
+    """РИТМ — единственный читатель бота; приём подтверждает сохранение команды, не её исполнение."""
+    if not _bridge_key():
+        raise HTTPException(status_code=503, detail='Мост мессенджера не настроен.')
+    try:
+        return enqueue_command(payload.model_dump(), x_forvater_bridge_key)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.get('/api/metrology/snapshot/search')

@@ -1,0 +1,23 @@
+services:
+  messenger-bridge:
+    image: gasmeter-backend:latest
+    container_name: gasmeter-messenger-bridge
+    restart: unless-stopped
+    command: ["python", "-m", "app.messenger_bridge"]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GASMETER_DB_DIR=/app/data
+      - GASMETER_DATABASE_URL=postgresql://gasmeter:${GASMETER_DB_PASSWORD}@postgres:5432/gasmeter
+      - GASMETER_YM_TOKEN_FILE=/app/data/bot_token_engineering_memory
+      - GASMETER_YM_USER_MAP_FILE=/app/data/forvater_user_map.json
+      - GASMETER_LLM_BASE_URL=${GASMETER_LLM_BASE_URL:-}
+      - GASMETER_LLM_PROVIDER=${GASMETER_LLM_PROVIDER:-auto}
+      - GASMETER_LLM_MODEL=${GASMETER_LLM_MODEL:-}
+      - GASMETER_LLM_API_KEY=${GASMETER_LLM_API_KEY:-}
+      - GASMETER_MI_LIBRARY_DIR=/app/mi_library
+    volumes:
+      - /opt/gasmeter/data:/app/data
+      - /opt/gasmeter/mi_library:/app/mi_library:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
