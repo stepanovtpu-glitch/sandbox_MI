@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 
 from app.database import DB_DIR, fetch_all, json_load
+from app.document_storage import _library_raw_dir
 from app.llm_client import LlmClient, LlmNotConfigured, criticize
 
 MAX_QUESTION_CHARS = 2000
@@ -37,6 +38,23 @@ def _corpus_dir() -> Path:
 
 def _tokens(text: str) -> set[str]:
     return {item.casefold() for item in TOKEN_RE.findall(text) if item.casefold() not in STOP_WORDS}
+
+
+def _scan_name_for_ocr_reference(reference: str) -> str | None:
+    text_name = reference.rsplit(' · ', 1)[-1]
+    if Path(text_name).name != text_name or not text_name.lower().endswith('.pdf.txt'):
+        return None
+    metadata = _corpus_dir() / (text_name[:-4] + '.json')
+    try:
+        if not metadata.is_file() or metadata.stat().st_size > 100_000:
+            return None
+        item = json.loads(metadata.read_text(encoding='utf-8'))
+        name = item.get('file_name') if isinstance(item, dict) else None
+        if isinstance(name, str) and Path(name).name == name and name.lower().endswith('.pdf') and (_library_raw_dir() / name).is_file():
+            return name
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def _database_ocr_sources() -> list[tuple[str, str, bool]]:
@@ -96,7 +114,11 @@ def retrieve_sources(question: str, limit: int = 5) -> list[dict[str, str]]:
         excerpt = body[:max(0, MAX_SOURCE_CHARS - used)]
         if not excerpt:
             break
-        output.append({'reference': name, 'excerpt': excerpt, 'relevance': str(score), 'review_state': 'confirmed' if confirmed else 'unverified'})
+        source = {'reference': name, 'excerpt': excerpt, 'relevance': str(score), 'review_state': 'confirmed' if confirmed else 'unverified'}
+        scan = _scan_name_for_ocr_reference(name)
+        if scan:
+            source['scan_file_name'] = scan
+        output.append(source)
         used += len(excerpt)
         if used >= MAX_SOURCE_CHARS:
             break
@@ -134,13 +156,13 @@ def answer_question(question: str, client: LlmClient | None = None) -> ExpertAns
         safe_text = 'Не удалось сформировать подтверждённый ответ без неподтверждённых чисел. Проверьте МИ по указанным исходным документам.'
     if any(item.get('review_state') != 'confirmed' for item in sources):
         safe_text = 'Внимание: среди источников есть OCR-текст с неподтверждёнными полями. Сверьте вывод по скану МИ.\n\n' + safe_text
-    return ExpertAnswer(safe_text, reply.model, [{'reference': item['reference'], 'review_state': item['review_state']} for item in sources])
+    return ExpertAnswer(safe_text, reply.model, [{key: item[key] for key in ('reference', 'review_state', 'scan_file_name') if key in item} for item in sources])
 
 
 def _search_only_answer(sources: list[dict[str, str]], reason: str) -> ExpertAnswer:
     return ExpertAnswer(
         f'{reason} Ниже — найденные фрагменты МИ. Это исходный OCR-текст для просмотра, а не ответ или метрологическое заключение. Сверьте сведения со сканом.',
         'поиск по МИ без LLM',
-        [{'reference': item['reference'], 'review_state': item['review_state'], 'excerpt': item['excerpt'][:1500]} for item in sources],
+        [{key: item[key] for key in ('reference', 'review_state', 'scan_file_name') if key in item} | {'excerpt': item['excerpt'][:1500]} for item in sources],
     )
 

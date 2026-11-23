@@ -1,4 +1,5 @@
 import hashlib
+import os
 from pathlib import Path
 from typing import BinaryIO
 
@@ -7,6 +8,15 @@ from fastapi import UploadFile
 from app.database import DB_DIR, execute, fetch_one, json_dump, json_load
 
 DOCUMENTS_DIR = DB_DIR / 'method_documents'
+
+
+def _library_raw_dir() -> Path:
+    configured = os.environ.get('GASMETER_MI_LIBRARY_DIR')
+    if configured:
+        return Path(configured) / 'raw'
+    source = Path(__file__).resolve()
+    candidates = (source.parents[2] / 'mi_library', source.parents[1] / 'mi_library')
+    return next((path for path in candidates if path.is_dir()), candidates[0]) / 'raw'
 
 
 def _safe_filename(filename: str) -> str:
@@ -75,8 +85,9 @@ def get_method_document(mi_id: str, version_id: str) -> dict | None:
     document = json_load(row['document_json'], None)
     if not document or not document.get('storage_path'):
         return None
-    path = Path(document['storage_path'])
-    if not path.exists():
+    path = Path(document['storage_path']).resolve()
+    allowed_roots = (DOCUMENTS_DIR.resolve(), _library_raw_dir().resolve())
+    if not any(path.is_relative_to(root) for root in allowed_roots) or not path.is_file():
         return None
     return {**document, 'path': path}
 

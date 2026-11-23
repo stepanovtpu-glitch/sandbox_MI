@@ -13,8 +13,8 @@ from pathlib import Path
 
 import paramiko
 
-VERSION = '0.2.7'
-EXPECTED_HASH = 'dd6156cb56c662527dd7fc5191bc34ec348896c5ce6f899f9167e59a2ee51bb2'
+VERSION = '0.2.9'
+EXPECTED_HASH = '634f0ac7177641ec7ff70ceba4bf18a433b0945d9f5b494258cba74746fedec7'
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / 'releases' / f'forvater-{VERSION}' / 'forvater-images.tar'
 CREDS = Path('C:/pass/izp-flow-meter.json')
@@ -25,6 +25,9 @@ SOURCE_HASH = '116daaed24df342acf2b88a05ae32ed771fb2ce67c3ccdcc4e9c2e04dd95006b'
 INBOX_CRON = ROOT / 'deploy' / 'gasmeter-metrology-inbox.cron'
 OCR_ARCHIVE = ROOT / 'releases' / 'forvater-0.2.6' / 'ocr-texts.tar.gz'
 OCR_HASH = 'a1577390f78c30e232c27d6060c5909ac7f454f090b2f285712d1ad3017cb544'
+OCR_METADATA_ARCHIVE = ROOT / 'releases' / 'forvater-0.2.8' / 'ocr-metadata.tar.gz'
+OCR_METADATA_HASH = '108c2a41bed341fe9c8643eb14cde22f4b8cfb800c8959e1ffd3f24c0118beec'
+SCANS_MANIFEST = '/app/mi_library/raw/manifest-a74bd6815bacf271.json'
 
 
 def connect():
@@ -174,8 +177,10 @@ def config_status(client):
     """Только наличие настроек, без вывода токенов и адресов внутренних служб."""
     run(client, "sudo -n docker exec gasmeter-backend python -c 'import json,os; names=(\"GASMETER_YM_TOKEN\",\"GASMETER_YM_CHAT_ID\",\"GASMETER_LLM_BASE_URL\",\"GASMETER_LLM_MODEL\"); print(json.dumps({name:bool(os.getenv(name)) for name in names}))'")
     run(client, 'sudo -n sh -c "cd /opt/gasmeter && docker compose ps --status running --services"')
-    run(client, "sudo -n docker exec gasmeter-backend python -c 'from pathlib import Path; p=Path(\"/app/mi_library/ocr\"); print(\"ocr_texts\",sum(1 for _ in p.glob(\"*.txt\")),sum(1 for _ in (p/\"texts\").glob(\"*.txt\")))'")
-    run(client, "sudo -n docker exec gasmeter-backend python -c 'from app.metrology_expert import answer_question; a=answer_question(\"диапазон давления расходомер\"); print(\"expert_mode\",a.model,\"search_hits\",len(a.sources))'")
+    run(client, "sudo -n docker exec gasmeter-backend python -c 'from pathlib import Path; p=Path(\"/app/mi_library/ocr\"); r=Path(\"/app/mi_library/raw\"); print(\"ocr_texts\",sum(1 for _ in p.glob(\"*.txt\")),\"raw_pdfs\",sum(1 for _ in r.rglob(\"*.pdf\")))'")
+    run(client, "sudo -n docker exec gasmeter-backend python -c 'from app.metrology_expert import answer_question; a=answer_question(\"диапазон давления расходомер\"); print(\"expert_mode\",a.model,\"search_hits\",len(a.sources),\"scan_refs\",sum(bool(s.get(\"scan_file_name\")) for s in a.sources))'")
+    run(client, "sudo -n docker exec gasmeter-backend python -c 'from app.database import fetch_all,json_load; d=[json_load(r[\"document_json\"],{}) or {} for r in fetch_all(\"select document_json from measurement_method_versions\")]; print(\"versions\",len(d),\"scan_links\",sum(bool(x.get(\"storage_path\")) for x in d),\"hashes\",sum(bool(x.get(\"sha256\")) for x in d))'")
+    run(client, "sudo -n docker exec gasmeter-backend python -c 'from app.database import fetch_one; from app.document_storage import verify_method_document; r=fetch_one(\"select mi_id,version_id from measurement_method_versions limit 1\"); print(\"scan_integrity\",verify_method_document(r[\"mi_id\"],r[\"version_id\"])[\"status\"])'")
     try:
         run(client, 'curl -sS -o /dev/null -w "ollama_http=%{http_code}" --connect-timeout 3 --max-time 5 http://10.61.157.1:11434/api/tags')
     except RuntimeError:
@@ -203,16 +208,52 @@ def upload_ocr(client):
     run(client, f'sudo -n find {target} -type f -name "*.txt" | wc -l')
 
 
+def upload_ocr_metadata(client):
+    if hashlib.sha256(OCR_METADATA_ARCHIVE.read_bytes()).hexdigest() != OCR_METADATA_HASH:
+        raise RuntimeError('Архив метаданных OCR не прошёл SHA-256.')
+    target = '/opt/gasmeter/mi_library/ocr'
+    if run(client, f'sudo -n find {target} -type f -name "*.pdf.json" | wc -l', quiet=True) != '0':
+        raise RuntimeError('На сервере уже есть OCR JSON; автоматическая распаковка остановлена.')
+    staging = f'/tmp/forvater-ocr-metadata-{int(time.time())}.tar.gz'
+    sftp = client.open_sftp()
+    try:
+        sftp.put(str(OCR_METADATA_ARCHIVE), staging)
+    finally:
+        sftp.close()
+    if run(client, f'sudo -n sha256sum {staging}', quiet=True).split()[0] != OCR_METADATA_HASH:
+        raise RuntimeError('Переданные OCR JSON не прошли SHA-256.')
+    run(client, f'sudo -n tar --keep-old-files -xzf {staging} -C {target}', quiet=True)
+    run(client, f'sudo -n find {target} -type f -name "*.pdf.json" | wc -l')
+
+
+def link_scans(client, apply: bool):
+    command = f'sudo -n docker exec gasmeter-backend python -m app.scan_linker --manifest {SCANS_MANIFEST}'
+    dry = json.loads(run(client, command))
+    if not apply:
+        return
+    if dry['verified_pdfs'] != 231 or dry['eligible'] < 200:
+        raise RuntimeError('Контрольная сверка сканов не прошла ожидаемый минимум; данные БД не менялись.')
+    run(client, 'sudo -n /opt/gasmeter/backup.sh')
+    result = json.loads(run(client, command + ' --apply'))
+    if result['linked'] != dry['eligible']:
+        raise RuntimeError('Число связанных версий отличается от сухого прогона.')
+
+
 def main():
     if sys.platform == 'win32':
         for stream in (sys.stdout, sys.stderr):
             if hasattr(stream, 'reconfigure'):
                 stream.reconfigure(encoding='utf-8')
-    if len(sys.argv) != 2 or sys.argv[1] not in {'preflight', 'upload', 'install', 'activate', 'diagnose', 'verify', 'import-snapshot', 'configure-inbox', 'config-status', 'upload-ocr'}:
-        raise SystemExit('Укажите preflight, upload, install, activate, diagnose, verify, import-snapshot, configure-inbox, config-status или upload-ocr.')
+    if len(sys.argv) != 2 or sys.argv[1] not in {'preflight', 'upload', 'install', 'activate', 'diagnose', 'verify', 'import-snapshot', 'configure-inbox', 'config-status', 'upload-ocr', 'upload-ocr-metadata', 'link-scans-dry', 'link-scans-apply'}:
+        raise SystemExit('Укажите preflight, upload, install, activate, diagnose, verify, import-snapshot, configure-inbox, config-status, upload-ocr, upload-ocr-metadata, link-scans-dry или link-scans-apply.')
     client = connect()
     try:
-        {'preflight': preflight, 'upload': upload, 'install': install, 'activate': activate, 'diagnose': diagnose, 'verify': verify, 'import-snapshot': import_snapshot, 'configure-inbox': configure_inbox, 'config-status': config_status, 'upload-ocr': upload_ocr}[sys.argv[1]](client)
+        actions = {'preflight': preflight, 'upload': upload, 'install': install, 'activate': activate,
+                   'diagnose': diagnose, 'verify': verify, 'import-snapshot': import_snapshot,
+                   'configure-inbox': configure_inbox, 'config-status': config_status, 'upload-ocr': upload_ocr,
+                   'upload-ocr-metadata': upload_ocr_metadata,
+                   'link-scans-dry': lambda c: link_scans(c, False), 'link-scans-apply': lambda c: link_scans(c, True)}
+        actions[sys.argv[1]](client)
     finally:
         client.close()
 

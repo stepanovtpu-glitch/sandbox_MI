@@ -17,7 +17,7 @@ from app.calculation import calculate
 from app.calculation_history import get_calculation_record, list_calculation_records, save_calculation_record
 from app.calculation_templates import TEMPLATE_TITLES
 from app.database import DB_PATH, SCHEMA_VERSION, database_url, get_schema_version, uses_postgres
-from app.document_storage import get_method_document, save_method_document, verify_method_document
+from app.document_storage import _library_raw_dir, get_method_document, save_method_document, verify_method_document
 from app.instrument_library import bootstrap_instrument_library, list_instruments, recommend_replacements, upsert_instrument
 from app.method_library import (
     add_method_test_case,
@@ -84,7 +84,7 @@ from app.uug_report import generate_uug_task_docx, generate_uug_task_pdf
 from app.uug_selection import select_uug
 from app.test_runner import run_method_test_cases
 
-APP_VERSION = '0.2.7'
+APP_VERSION = '0.2.9'
 app = FastAPI(title='ФОРВАТЕР', version=APP_VERSION)
 
 
@@ -503,6 +503,18 @@ def verify_document(mi_id: str, version_id: str, user: dict[str, object] = Depen
     result = verify_method_document(mi_id, version_id)
     log_audit_event('verify_method_document', 'measurement_method_version', version_id, {'mi_id': mi_id, 'status': result.get('status')}, actor=_actor(user))
     return result
+
+
+@app.get('/api/mi-library/scans/{file_name}')
+def download_library_scan(file_name: str, user: dict[str, object] = Depends(require_permission('document:read'))):
+    root = _library_raw_dir().resolve()
+    if Path(file_name).name != file_name or '\\' in file_name or not file_name.lower().endswith('.pdf'):
+        raise HTTPException(status_code=422, detail='Некорректное имя скана МИ.')
+    path = (root / file_name).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise HTTPException(status_code=404, detail='Скан МИ не найден.')
+    log_audit_event('download_mi_library_scan', 'mi_library_scan', file_name, {}, actor=_actor(user))
+    return FileResponse(path, media_type='application/pdf', filename=file_name)
 
 
 @app.post('/api/methods/{mi_id}/versions/{version_id}/document/ocr', response_model=MeasurementMethodVersion)

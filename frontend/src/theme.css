@@ -99,6 +99,7 @@ html[data-theme='light'] {
 .expert-sources details { padding: 7px 0; border-bottom: 1px solid var(--border); min-width: 0; }
 .expert-sources summary { cursor: pointer; overflow-wrap: anywhere; color: var(--text); }
 .expert-source-excerpt { margin-top: 8px; padding: 10px 12px; border-radius: 7px; background: var(--surface); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; line-height: 1.5; }
+.expert-scan-button { margin-top: 8px; font-size: 12px; }
 .spin { animation: expert-spin 1s linear infinite; }
 @keyframes expert-spin { to { transform: rotate(360deg); } }
 @media (max-width: 640px) { .metrology-expert-card { padding: 14px; } .expert-form-footer { align-items: flex-start; flex-direction: column; } .expert-form-footer button { align-self: stretch; justify-content: center; } }

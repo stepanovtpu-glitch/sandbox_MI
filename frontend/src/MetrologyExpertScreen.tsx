@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { BookOpenText, LoaderCircle, Send } from 'lucide-react';
-import { askMetrologyExpert, type MetrologyExpertReply } from './api';
+import { askMetrologyExpert, downloadAuthenticatedFile, type MetrologyExpertReply } from './api';
 
 export function MetrologyExpertScreen() {
   const [question, setQuestion] = useState('');
@@ -31,7 +31,7 @@ export function MetrologyExpertScreen() {
         <div className="expert-form-footer"><span>{question.length}/2000 · Ответ справочный, расчёт и решение метролога не заменяет.</span><button className="primary-button" disabled={busy || !question.trim()}>{busy ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} Спросить</button></div>
       </form>
       {error && <div className="api-error">{error}</div>}
-      {reply && <div className="expert-answer"><div className="answer-heading">{reply.model === 'поиск по МИ без LLM' ? 'Найдено в библиотеке' : 'Ответ'} · {reply.model}</div><div className="answer-text">{reply.text}</div>{reply.sources.length > 0 && <div className="expert-sources"><strong>Источники</strong>{reply.sources.map((source) => source.excerpt ? <details key={source.reference}><summary>{source.review_state === 'confirmed' ? '✓' : '⚠'} {source.reference}</summary><div className="expert-source-excerpt">{source.excerpt}</div></details> : <span key={source.reference}>{source.review_state === 'confirmed' ? '✓' : '⚠'} {source.reference}</span>)}</div>}</div>}
+      {reply && <div className="expert-answer"><div className="answer-heading">{reply.model === 'поиск по МИ без LLM' ? 'Найдено в библиотеке' : 'Ответ'} · {reply.model}</div><div className="answer-text">{reply.text}</div>{reply.sources.length > 0 && <div className="expert-sources"><strong>Источники</strong>{reply.sources.map((source) => source.excerpt || source.scan_file_name ? <details key={source.reference}><summary>{source.review_state === 'confirmed' ? '✓' : '⚠'} {source.reference}</summary>{source.excerpt && <div className="expert-source-excerpt">{source.excerpt}</div>}{source.scan_file_name && <button className="ghost-button expert-scan-button" type="button" onClick={() => void downloadAuthenticatedFile(`/api/mi-library/scans/${encodeURIComponent(source.scan_file_name!)}`, source.scan_file_name!).catch((reason) => setError(reason instanceof Error ? reason.message : 'Не удалось открыть скан.'))}>Скачать исходный скан</button>}</details> : <span key={source.reference}>{source.review_state === 'confirmed' ? '✓' : '⚠'} {source.reference}</span>)}</div>}</div>}
     </article>
   </section>;
 }
